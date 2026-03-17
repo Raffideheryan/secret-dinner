@@ -1,0 +1,14 @@
+.home__body{
+    display: flex;
+    flex-direction: column;
+    gap: 96px;
+    padding: 56px 24px 96px;
+    background: linear-gradient(180deg, rgba(10, 15, 13, 0.96) 45%, rgba(15, 31, 26, 1) 100%);
+}
+
+@media (max-width: 720px) {
+    .home__body{
+        gap: 64px;
+        padding: 40px 16px 72px;
+    }
+}

@@ -1,0 +1,57 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Base */
+  --black-1: #0a0f0d;
+  --black-2: #000000;
+  --dark-green-black: #0f1f1a;
+  --dark-green-black-transparent: #0f1f1a67;
+
+
+  /* Emerald */
+  --emerald-dark-transparent: #0f3d2e7c;
+  --emerald-dark: #0f3d2e;
+  --emerald-main: #145c45;
+  --emerald-light: #1f7a5c;
+
+  /* Gold */
+  --gold-main: #d4af37;
+  --gold-light: #f5e6b3;
+  --gold-dark: #b8962e;
+  --gold-1: #fff8dc;   /* ultra light highlight */
+  --gold-2: #f5e6b3;   /* light champagne */
+  --gold-3: #e6c96a;   /* soft gold */
+  --gold-4: #d4af37;   /* main gold */
+  --gold-5: #c49b2a;   /* rich gold */
+  --gold-6: #b8962e;   /* darker gold */
+  --gold-7: #8c6b1f;   /* antique gold */
+  --gold-8: #5a4314;   /* deep shadow gold */
+
+  /* Glass */
+  --glass-dark: rgba(10, 20, 15, 0.6);
+  --glass-light: rgba(255, 255, 255, 0.05);
+  --glass-gold: #ffd90033;
+
+  /* Text */
+  --text-main: #ffffff;
+  --text-soft: #cfcfcf;
+  --text-muted: #8a8a8a;
+}
+
+body{
+  background: var(--dark-green-black);
+  color: var(--text-main);
+  font-family: "Segoe UI", sans-serif;
+}
+
+h1{
+  font-size: clamp(70px, 12vw, 200px);
+}
+
+p{
+    letter-spacing: 1.3px;
+}

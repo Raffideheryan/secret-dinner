@@ -1,0 +1,57 @@
+.body__experience{
+    width: min(1160px, 100%);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 25px;
+}
+
+.experience__title{
+    font-size: clamp(2.5rem, 5vw ,4.5rem);
+    color: var(--gold-5);
+    text-align: center;
+}
+
+.experience__description{
+    max-width: 42rem;
+    margin: 0 auto;
+    text-align: center;
+    color: var(--text-soft);
+    font-size: 18px;
+    position: relative;
+    justify-content: center;
+}
+
+.experience__description::after{
+    content: "";
+    position: absolute;
+    display: flex;
+    bottom: -12px;
+    left:25%;
+    width: 50%;
+    height: 2px;
+    border-radius: 999px;
+    background:linear-gradient(90deg,transparent, var(--gold-5), transparent);
+}
+
+.experience__cards{
+    display: grid;
+    grid-template-columns: repeat(4,minmax(0,1fr));
+    gap: 20px;
+    margin-top: 30px;
+}
+
+.experience__card{
+    padding: 30px;
+    border: 1px solid var(--gold-8);
+    border-radius: 15px;
+    box-shadow: inset 0 2px 20px var(--gold-5);
+}
+
+.experience__card-icon{
+    color: var(--gold-5);
+    border: 1px solid var(--gold-7);
+    text-align: center;
+}
