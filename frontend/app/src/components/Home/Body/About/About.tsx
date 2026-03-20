@@ -1,6 +1,5 @@
 import { SectionTitles } from "../constants"
 import "./about.css"
-import "./animations.css"
 import { aboutCards } from "./constants"
 import { aboutSection } from "../constants"
 import { useInView } from "../useInView"

@@ -19,7 +19,10 @@ export default function Navbar({ titles }: { titles: string[] }) {
     return (
         <>
             <nav className= {`navbar ${scrolled ? "navbar--scrolled" : ""}`} >
-                <h2 className="logo">Secret Dinner</h2>
+                <h2 className="logo" aria-label="Secret Dinner">
+                    <img className="logo__image" src="/logo__1_-removebg-preview.png" alt="Secret Dinner logo" />
+                    <span className="logo__text">Secret Dinner</span>
+                </h2>
                 <div className="titles">
                     {titles.map((title) =>{
                         return <p className="title">{title}</p>

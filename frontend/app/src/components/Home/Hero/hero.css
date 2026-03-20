@@ -74,7 +74,7 @@
     border: 1px solid rgba(245, 230, 179, 0.4);
     border-radius: 50%;
     color: var(--gold-1);
-    font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: 1.35rem;
     letter-spacing: 0.18em;
     box-shadow: 0 0 30px rgba(212, 175, 55, 0.16);
@@ -85,7 +85,7 @@
 .hero__title{
     position: relative;
     margin: 0;
-    font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: clamp(72px, 12vw, 190px);
     font-weight: 600;
     letter-spacing: 0.08em;

@@ -73,7 +73,7 @@
 .package{
     margin: 0;
     color: var(--gold-light);
-    font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: clamp(2rem, 3vw, 2.6rem);
     font-weight: 500;
 }

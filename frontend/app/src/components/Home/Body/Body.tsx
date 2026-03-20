@@ -2,6 +2,7 @@ import Experience from "./Experience/Experience"
 import About from "./About/About"
 import Atmosphere from "./Atmosphere/Atmosphere"
 import Membership from "./Membership/Membership"
+import FinalCTA from "./FinalCTA/FinalCTA"
 import { cards } from "./constants"
 import "./body.css"
 
@@ -13,6 +14,7 @@ export default function Body() {
                 <About />
                 <Atmosphere />
                 <Membership />
+                <FinalCTA />
             </section>
         </>
     )

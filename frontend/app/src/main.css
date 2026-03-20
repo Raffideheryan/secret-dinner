@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700;800&display=swap");
+
 * {
   margin: 0;
   padding: 0;
@@ -41,6 +43,9 @@
   --text-soft: #cfcfcf;
   --text-muted: #8a8a8a;
 
+  /* Typography */
+  --font-display: "Playfair Display", "Bodoni MT", "Times New Roman", serif;
+  --font-body: "Manrope", "Segoe UI", sans-serif;
 
   --sections-space: clamp(3rem, 8vw,7rem)
 }
@@ -48,7 +53,43 @@
 body{
   background: var(--dark-green-black);
   color: var(--text-main);
-  font-family: "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6{
+  font-family: var(--font-display);
+}
+
+button, input, textarea, select{
+  font-family: var(--font-body);
+}
+
+html{
+  scrollbar-width: medium;
+  scrollbar-color: var(--gold-5) #080d0b;
+}
+
+*::-webkit-scrollbar{
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track{
+  background: linear-gradient(180deg, #050807 0%, #0b1411 100%);
+}
+
+*::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, var(--gold-3) 0%, var(--gold-6) 100%);
+  border-radius: 999px;
+  border: 2px solid #08100d;
+}
+
+*::-webkit-scrollbar-thumb:hover{
+  background: linear-gradient(180deg, var(--gold-5) 0%, var(--gold-8) 100%);
+}
+
+*::-webkit-scrollbar-corner{
+  background: #050807;
 }
 
 h1{
@@ -56,5 +97,5 @@ h1{
 }
 
 p{
-    letter-spacing: 1.3px;
+    letter-spacing: 0.02em;
 }

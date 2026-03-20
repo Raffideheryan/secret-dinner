@@ -30,18 +30,90 @@
         inset 0 5px 20px rgba(255, 255, 255, 0.03),
         0 24px 48px rgba(0, 0, 0, 0.28);
     text-align: center;
+    overflow: visible;
+    isolation: isolate;
     opacity: 0;
     transform: translateX(72px);
+    transition:
+        opacity 0.55s ease,
+        transform 0.55s cubic-bezier(0.2, 0.75, 0.2, 1),
+        box-shadow 0.35s ease,
+        border-color 0.35s ease,
+        background 0.35s ease;
+}
+
+.about__card > *{
+    position: relative;
+    z-index: 1;
+}
+
+.about__card::before{
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 22px;
+    clip-path: inset(0 round 22px);
+    background:
+        radial-gradient(150% 85% at 50% 0%, color-mix(in srgb, var(--gold-4) 16%, transparent) 0%, transparent 70%);
+    opacity: 0;
+    transform: translateY(16px) scale(1.05);
+    transition: opacity 0.35s ease, transform 0.45s ease;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.about__card::after{
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 21px;
+    clip-path: inset(0 round 21px);
+    background: linear-gradient(
+        120deg,
+        transparent 34%,
+        color-mix(in srgb, var(--gold-2) 12%, transparent) 44%,
+        color-mix(in srgb, #ffffff 50%, transparent) 50%,
+        color-mix(in srgb, var(--gold-2) 14%, transparent) 56%,
+        transparent 66%
+    );
+    background-size: 240% 100%;
+    background-position: 130% 50%;
+    opacity: 0;
+    transition: opacity 0.35s ease, background-position 0.8s ease;
+    pointer-events: none;
+    z-index: 0;
 }
 
 .about__card--visible{
-    animation: appearRight 0.8s ease-out forwards;
-    animation-delay: calc(var(--card-index) * 120ms);
+    opacity: 1;
+    transform: translateX(0);
+    transition-delay: calc(var(--card-index) * 120ms);
+}
+
+.about__card:is(:hover, :focus-within){
+    transform: translateY(-10px) scale(1.01);
+    border-color: color-mix(in srgb, var(--gold-4) 46%, var(--gold-7));
+    background: linear-gradient(180deg, rgba(10, 10, 10, 0.96) 0%, rgba(17, 18, 17, 0.99) 100%);
+    box-shadow:
+        inset 0 6px 24px color-mix(in srgb, var(--gold-2) 8%, transparent),
+        0 18px 36px rgba(0, 0, 0, 0.38),
+        0 0 28px color-mix(in srgb, var(--gold-4) 18%, transparent);
+}
+
+.about__card:is(:hover, :focus-within)::before{
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.about__card:is(:hover, :focus-within)::after{
+    opacity: 0.5;
+    background-position: -30% 50%;
 }
 
 .about__card-step{
     position: absolute;
     top: -28px;
+    z-index: 2;
     display: grid;
     place-items: center;
     width: 56px;
@@ -52,6 +124,7 @@
     font-size: 1.35rem;
     font-weight: 700;
     box-shadow: 0 0 24px var(--gold-7);
+    transition: transform 0.3s ease, box-shadow 0.35s ease;
 }
 
 .about__card-icon{
@@ -64,18 +137,21 @@
     border: 1px solid var(--gold-7);
     background: radial-gradient(circle at top, var(--glass-gold), var(--black-1));
     box-shadow: inset 0 0 22px rgba(212, 175, 55, 0.1);
+    transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
 }
 
 .about__card-icon svg{
     font-size: 2rem;
+    transition: transform 0.35s ease;
 }
 
 .about__card-title{
     margin: 0;
     color: var(--text-main);
-    font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+    font-family: var(--font-display);
     font-size: clamp(2rem, 3vw, 2.8rem);
     font-weight: 500;
+    transition: color 0.3s ease, letter-spacing 0.3s ease;
 }
 
 .about__card-description{
@@ -84,6 +160,50 @@
     color: var(--text-soft);
     font-size: 1rem;
     line-height: 1.55;
+    transition: color 0.3s ease;
+}
+
+.about__card:is(:hover, :focus-within) .about__card-step{
+    transform: translateY(-2px) scale(1.06);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--gold-4) 45%, transparent);
+}
+
+.about__card:is(:hover, :focus-within) .about__card-icon{
+    transform: translateY(-5px) scale(1.07);
+    border-color: color-mix(in srgb, var(--gold-3) 60%, transparent);
+    box-shadow:
+        inset 0 0 24px color-mix(in srgb, var(--gold-4) 22%, transparent),
+        0 10px 26px color-mix(in srgb, var(--gold-4) 18%, transparent);
+}
+
+.about__card:is(:hover, :focus-within) .about__card-icon svg{
+    transform: rotate(-8deg) scale(1.08);
+}
+
+.about__card:is(:hover, :focus-within) .about__card-title{
+    color: var(--gold-light);
+    letter-spacing: 0.01em;
+}
+
+.about__card:is(:hover, :focus-within) .about__card-description{
+    color: color-mix(in srgb, var(--text-main) 86%, var(--text-soft));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .about__card,
+    .about__card::before,
+    .about__card::after,
+    .about__card-step,
+    .about__card-icon,
+    .about__card-icon svg,
+    .about__card-title,
+    .about__card-description{
+        transition: none;
+    }
+
+    .about__card{
+        transform: none;
+    }
 }
 
 @media (max-width: 1100px) {
