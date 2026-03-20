@@ -40,6 +40,9 @@
   --text-main: #ffffff;
   --text-soft: #cfcfcf;
   --text-muted: #8a8a8a;
+
+
+  --sections-space: clamp(3rem, 8vw,7rem)
 }
 
 body{

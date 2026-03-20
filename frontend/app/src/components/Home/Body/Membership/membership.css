@@ -1,0 +1,168 @@
+.body__membership{
+    width: min(1160px, 100%);
+    margin: var(--sections-space) auto 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    opacity: 0;
+    transform: translateY(50px) scale(0.96);
+    transition: 
+        opacity 0.6s ease,
+        transform 0.6s ease;
+}
+
+.body__membership--visible{
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.price__cards{
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 10px; 
+}
+
+.price__card{
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 32px 28px;
+    border: 1px solid color-mix(in srgb, var(--gold-2) 18%, transparent);
+    border-radius: 24px;
+    background: linear-gradient(180deg, --glass-gold 20%, var(--glass-gold) 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.03),
+        0 20px 40px rgba(0, 0, 0, 0.24);
+
+    animation: packagesDance 2s infinite alternate;
+}
+
+.price__card--featured{
+    border: 4px solid var(--gold-4);
+    box-shadow:
+        0 1px 20px var(--gold-5),
+        0 0 0 1px color-mix(in srgb, var(--gold-2) 12%, transparent),
+        0 20px 40px rgba(0, 0, 0, 0.24),
+        0 0 30px color-mix(in srgb, var(--gold-4) 14%, transparent);
+}
+
+.price__card:hover{
+    box-shadow: inset 0px 20px 30px color-mix(in srgb, var(--gold-4) 80%, transparent 20%);
+}
+
+.price__card-badge{
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid color-mix(in srgb, var(--gold-2) 24%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--gold-4) 14%, transparent);
+    color: var(--gold-light);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.package{
+    margin: 0;
+    color: var(--gold-light);
+    font-family: "Didot", "Bodoni MT", "Times New Roman", serif;
+    font-size: clamp(2rem, 3vw, 2.6rem);
+    font-weight: 500;
+}
+
+.price{
+    margin: 0;
+    color: var(--text-main);
+    font-size: clamp(2.25rem, 4vw, 3.6rem);
+    font-weight: 700;
+    line-height: 1;
+}
+
+.price__suffix{
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 400;
+}
+
+.options{
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--text-soft);
+}
+
+.options li{
+    position: relative;
+    padding-left: 20px;
+    line-height: 1.6;
+}
+
+.options li::before{
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.65em;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gold-4);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--gold-4) 32%, transparent);
+}
+
+.package__btn{
+    margin-top: auto;
+    min-height: 54px;
+    padding: 14px 22px;
+    border: 1px solid var(--gold-7);
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--gold-5), var(--gold-3));
+    color: var(--black-1);
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    font-size: 18px;
+
+}
+
+.package__btn:hover{
+    background: linear-gradient(135deg, var(--gold-5), var(--gold-4));
+    transform: scale(0.95);
+}
+
+@media (max-width: 980px) {
+    .price__cards{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .body__membership{
+        gap: 22px;
+    }
+
+    .price__cards{
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .price__card{
+        padding: 26px 20px;
+    }
+
+    .price__card-badge{
+        top: 14px;
+        right: 14px;
+        font-size: 0.68rem;
+    }
+}
