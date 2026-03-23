@@ -65,8 +65,17 @@ button, input, textarea, select{
 }
 
 html{
+  width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
   scrollbar-width: medium;
   scrollbar-color: var(--gold-5) #080d0b;
+}
+
+body{
+  width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 *::-webkit-scrollbar{

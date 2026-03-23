@@ -48,9 +48,49 @@
     transform: translateY(0) scale(1);
 }
 
+#experience,
+#about,
+#membership{
+    scroll-margin-top: 110px;
+}
+
+@supports (content-visibility: auto) {
+    .home__body > :not(:first-child){
+        content-visibility: auto;
+        contain-intrinsic-size: 760px;
+    }
+
+    .home__body > .body__membership{
+        content-visibility: visible;
+        contain: none;
+    }
+}
+
 @media (max-width: 720px) {
     .home__body{
         gap: 64px;
         padding: 40px 16px 72px;
+    }
+}
+
+@media (max-width: 420px) {
+    .home__body{
+        gap: 52px;
+        padding: 34px 12px 60px;
+    }
+
+    .section__title{
+        font-size: clamp(2rem, 10vw, 2.5rem);
+    }
+
+    .section__description{
+        font-size: 0.95rem;
+        line-height: 1.55;
+    }
+
+    #experience,
+    #about,
+    #membership{
+        scroll-margin-top: 140px;
     }
 }

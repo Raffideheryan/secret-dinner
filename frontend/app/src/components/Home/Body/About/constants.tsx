@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import { DescriptionOutlinedIcon } from "../../../Icons";
 
 export type AboutCard = {
     step: string;

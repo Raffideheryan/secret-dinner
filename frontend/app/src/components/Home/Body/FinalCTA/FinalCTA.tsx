@@ -1,8 +1,6 @@
-import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined"
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import TelegramIcon from "@mui/icons-material/Telegram"
 import { useInView } from "../useInView"
 import "./final-cta.css"
+import { ArrowForwardIcon, QrCode2OutlinedIcon, TelegramIcon } from "../../../Icons"
 
 export default function FinalCTA() {
     const { ref, visible } = useInView<HTMLDivElement>({

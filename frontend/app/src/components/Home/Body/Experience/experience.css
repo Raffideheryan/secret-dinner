@@ -17,6 +17,8 @@
 }
 
 .experience__card{
+    position: relative;
+    isolation: isolate;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -26,9 +28,53 @@
     border-radius: 20px;
     box-shadow: inset 0 2px 20px var(--gold-5);
     text-align: center;
-    height: 120%;
+    min-height: 100%;
     opacity: 0;
     transform: translateX(-30px);
+    overflow: hidden;
+    transition:
+        transform 0.35s ease,
+        box-shadow 0.4s ease,
+        border-color 0.35s ease,
+        background 0.35s ease;
+}
+
+.experience__card::before{
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background:
+        radial-gradient(150% 90% at 50% 0%, color-mix(in srgb, var(--gold-3) 16%, transparent) 0%, transparent 68%);
+    opacity: 0;
+    transform: translateY(10px) scale(1.04);
+    transition: opacity 0.35s ease, transform 0.45s ease;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.experience__card::after{
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: calc(20px - 1px);
+    background: linear-gradient(
+        112deg,
+        transparent 37%,
+        color-mix(in srgb, var(--gold-2) 22%, transparent) 50%,
+        transparent 63%
+    );
+    background-size: 230% 100%;
+    background-position: 120% 50%;
+    opacity: 0;
+    transition: opacity 0.35s ease, background-position 0.75s ease;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.experience__card > *{
+    position: relative;
+    z-index: 1;
 }
 
 .experience__card--visible{
@@ -36,10 +82,31 @@
     animation-delay: calc(var(--card-index) * 120ms);
 }
 
-.experience__card:hover{
-    box-shadow: inset 0 2px 30px var(--gold-5);
-    transition: transform 0.3s ease, box-shadow 0.5s ease;
-    
+.experience__card:is(:hover, :focus-within){
+    border-color: color-mix(in srgb, var(--gold-4) 46%, var(--gold-8));
+    background: linear-gradient(180deg, rgba(11, 11, 11, 0.95) 0%, rgba(16, 17, 16, 0.98) 100%);
+    box-shadow:
+        inset 0 3px 34px color-mix(in srgb, var(--gold-4) 18%, transparent),
+        0 14px 30px rgba(0, 0, 0, 0.34),
+        0 0 22px color-mix(in srgb, var(--gold-4) 16%, transparent);
+}
+
+.experience__card:nth-child(odd):is(:hover, :focus-within){
+    transform: translateY(-9px) rotate(-0.7deg);
+}
+
+.experience__card:nth-child(even):is(:hover, :focus-within){
+    transform: translateY(-9px) rotate(0.7deg);
+}
+
+.experience__card:is(:hover, :focus-within)::before{
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.experience__card:is(:hover, :focus-within)::after{
+    opacity: 0.55;
+    background-position: -20% 50%;
 }
 
 .experience__card-icon{
@@ -52,18 +119,54 @@
     color: var(--gold-5);
     border: 1px solid var(--gold-7);
     margin-bottom: 4px;
+    transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.experience__card:is(:hover, :focus-within) .experience__card-icon{
+    transform: translateY(-5px) scale(1.08);
+    border-color: color-mix(in srgb, var(--gold-3) 70%, transparent);
+    box-shadow:
+        inset 0 0 20px color-mix(in srgb, var(--gold-4) 22%, transparent),
+        0 10px 18px color-mix(in srgb, var(--gold-4) 16%, transparent);
 }
 
 .experience__card-title{
     margin: 0;
     color: var(--text-main);
+    transition: color 0.3s ease, letter-spacing 0.3s ease;
+}
+
+.experience__card:is(:hover, :focus-within) .experience__card-title{
+    color: var(--gold-light);
+    letter-spacing: 0.01em;
 }
 
 .experience__card-description{
     margin: 0;
     color: var(--text-soft);
     line-height: 1.6;
+    transition: color 0.3s ease;
+}
 
+.experience__card:is(:hover, :focus-within) .experience__card-description{
+    color: color-mix(in srgb, var(--text-main) 84%, var(--text-soft));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .experience__card,
+    .experience__card::before,
+    .experience__card::after,
+    .experience__card-icon,
+    .experience__card-title,
+    .experience__card-description{
+        transition: none;
+    }
+
+    .experience__card:is(:hover, :focus-within),
+    .experience__card:nth-child(odd):is(:hover, :focus-within),
+    .experience__card:nth-child(even):is(:hover, :focus-within){
+        transform: none;
+    }
 }
 
 @media (max-width: 1100px) {
@@ -96,6 +199,11 @@
     .experience__card{
         padding: 24px 20px;
         border-radius: 18px;
+    }
+
+    .experience__card:nth-child(odd):is(:hover, :focus-within),
+    .experience__card:nth-child(even):is(:hover, :focus-within){
+        transform: translateY(-5px);
     }
 }
 

@@ -6,7 +6,10 @@
             transparent -150%,
             var(--dark-green-black) 100%
         ),
-        url("/hero-bg.jpeg");
+        image-set(
+            url("/hero-bg.webp") type("image/webp"),
+            url("/hero-bg.jpeg") type("image/jpeg")
+        );
         
     ;
     background-size: cover;
@@ -53,6 +56,7 @@
         0 0 24px rgba(212, 175, 55, 0.2);
     opacity: 0.8;
     animation: floatParticle ease-in-out infinite;
+    will-change: transform, opacity;
 }
 
 .hero__content{
@@ -148,45 +152,72 @@
 }
 
 .request__btn{
-    min-height: 56px;
-    padding: 18px 30px;
-
+    min-height: 72px;
+    min-width: 250px;
+    padding: 16px 30px;
     border-radius: 999px;
-    border: 0;
-    background: var(--gold-4);
+    border: 1px solid color-mix(in srgb, var(--gold-4) 72%, transparent);
+    background: linear-gradient(135deg, #dfbf52 0%, #c59f2e 100%);
     color: var(--black-1);
-    font-weight: bold;
-    font-size: clamp(10px, 1.3vw,35px);
+    font-size: clamp(1rem, 1.3vw, 1.15rem);
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     cursor: pointer;
-
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--gold-4) 30%, transparent);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.3s ease, border-color 0.3s ease;
 }
 
 .experience__btn{
-    min-height: 56px;
-    padding: 18px 30px;
+    min-height: 72px;
+    min-width: 250px;
+    padding: 16px 30px;
     border-radius: 999px;
-    border: 1px solid var(--gold-4);
-    background: var(--glass-light);
+    border: 1px solid color-mix(in srgb, var(--gold-5) 62%, transparent);
+    background: rgba(15, 19, 17, 0.72);
     color: var(--text-main);
-    font-size: clamp(10px, 1.3vw,35px);
+    font-size: clamp(1rem, 1.3vw, 1.15rem);
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     cursor: pointer;
-    font-weight: bold;
     backdrop-filter: blur(5px);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.3s ease, border-color 0.3s ease;
 }
 
 .request__btn:hover{
-    transform: scale(1.1);
-    box-shadow: 0 2px 100px var(--gold-4);
-    
+    transform: translateY(-2px);
+    box-shadow: 0 16px 34px color-mix(in srgb, var(--gold-4) 36%, transparent);
 }
 
 .experience__btn:hover{
-    transform: scale(1.1);
-    background: var(--glass-gold);
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--gold-4) 82%, transparent);
+    background: rgba(19, 24, 21, 0.9);
+}
+
+.request__btn:focus-visible,
+.experience__btn:focus-visible{
+    outline: 2px solid color-mix(in srgb, var(--gold-3) 78%, white);
+    outline-offset: 2px;
 }
 
 @media (max-width: 720px) {
     .hero{
+        background:
+            radial-gradient(
+                circle at center,
+                transparent -150%,
+                var(--dark-green-black) 100%
+            ),
+            image-set(
+                url("/hero-bg-mobile.webp") type("image/webp"),
+                url("/hero-bg.jpeg") type("image/jpeg")
+            );
         padding: 112px 16px 32px;
     }
 
@@ -199,6 +230,7 @@
         width: 62px;
         height: 62px;
         font-size: 1rem;
+        backdrop-filter: none;
     }
 
     .hero__title{
@@ -226,6 +258,12 @@
         width: min(100%, 320px);
         padding: 16px 22px;
         font-size: 0.92rem;
+        min-height: 62px;
+        min-width: 0;
+    }
+
+    .experience__btn{
+        backdrop-filter: none;
     }
 }
 
@@ -246,5 +284,16 @@
 
     .hero__buttons{
         margin-top: 6px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero__particle{
+        animation: none;
+    }
+
+    .request__btn,
+    .experience__btn{
+        transition: none;
     }
 }

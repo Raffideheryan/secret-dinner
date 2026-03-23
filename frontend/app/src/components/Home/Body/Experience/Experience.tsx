@@ -12,7 +12,7 @@ export default function Experience({cards}: ExperienceProps) {
     const { ref, visible } = useInView<HTMLDivElement>();
 
     return (
-        <div className="body__experience" ref={ref}>
+        <div className="body__experience" id="experience" ref={ref}>
             <SectionTitles title="The Experience" description="A table reserved for those who move differently."/>
             <div className="experience__cards">
                 {cards.map((card,index) => (

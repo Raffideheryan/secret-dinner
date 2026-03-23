@@ -158,11 +158,16 @@
 
 @media (max-width: 980px) {
     .footer__top{
-        grid-template-columns: 1.35fr 1fr;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .footer__brand{
+        grid-column: 1 / -1;
+        max-width: none;
     }
 
     .footer__column:last-child{
-        grid-column: 2;
+        grid-column: auto;
     }
 }
 
@@ -205,5 +210,34 @@
 
     .footer__bottom{
         padding-top: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    .footer__brand{
+        padding: 14px;
+    }
+
+    .footer__brand-head{
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .footer__logo-mark{
+        width: 112px;
+    }
+
+    .footer__logo-title{
+        font-size: 1.45rem;
+    }
+
+    .footer__social{
+        width: 38px;
+        height: 38px;
+    }
+
+    .footer__bottom{
+        gap: 8px;
     }
 }

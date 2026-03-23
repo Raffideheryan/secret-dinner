@@ -6,10 +6,13 @@ import { useInView } from "../useInView"
 import type { CSSProperties } from "react"
 
 export default function About() {
-    const {ref, visible} = useInView<HTMLDivElement>();
+    const {ref, visible} = useInView<HTMLDivElement>({
+        threshold: 0.08,
+        rootMargin: "0px 0px -5% 0px",
+    });
 
     return(
-        <div className="body__about" ref={ref}>
+        <div className="body__about" id="about" ref={ref}>
             <SectionTitles title={aboutSection.title} description={aboutSection.description}/>
             <div className="about__cards">
                 {aboutCards.map((card, index) => (

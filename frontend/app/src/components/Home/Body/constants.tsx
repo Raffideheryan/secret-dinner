@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import { useInView } from "./useInView";
+import { PeopleAltIcon } from "../../Icons";
 
 export type ExperienceCard = {
     icon: ReactNode,

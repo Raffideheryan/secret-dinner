@@ -2,7 +2,7 @@ import Navbar from "../Navbar/Navbar"
 import {Outlet} from "react-router-dom"
 
 export default function Layout() {
-    const titles = ["Experience","Tiers","How It Works"]
+    const titles = ["Experience", "Prices", "How It Works"]
 
     return (
         <>

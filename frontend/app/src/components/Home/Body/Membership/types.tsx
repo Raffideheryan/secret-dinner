@@ -15,8 +15,8 @@ export function PriceCard({package:packageName,price,buttonText, options, featur
             <h2 className="package">{packageName}</h2>
             <p className="price">{price}<span className="price__suffix"> / event</span></p>
             <ul className="options">
-                {options.map((opt) => (
-                    <li key={opt}>{opt}</li>
+                {options.map((opt, index) => (
+                    <li key={`${opt}-${index}`}>{opt}</li>
                 ))}
             </ul>
 

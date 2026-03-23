@@ -10,7 +10,7 @@ export default function Membership(){
 
     const {ref, visible} = useInView<HTMLDivElement>()
     return(
-        <div className={`body__membership ${visible ? "body__membership--visible" : ""}`} ref={ref}>
+        <div className={`body__membership ${visible ? "body__membership--visible" : ""}`} id="membership" ref={ref}>
             <SectionTitles title={membershipSection.title} description={membershipSection.description}/>
             <div className="price__cards">
                 {packageCards.map((card) => (

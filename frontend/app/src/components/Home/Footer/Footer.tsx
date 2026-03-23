@@ -1,8 +1,5 @@
-import InstagramIcon from "@mui/icons-material/Instagram"
-import LinkedInIcon from "@mui/icons-material/LinkedIn"
-import XIcon from "@mui/icons-material/X"
-import MailOutlineIcon from "@mui/icons-material/MailOutline"
 import "./footer.css"
+import { InstagramIcon, LinkedInIcon, MailOutlineIcon, XIcon } from "../../Icons"
 
 const quickLinks = ["About", "Events", "Membership", "Contact"]
 const legalLinks = ["Privacy Policy", "Terms of Service", "Cookie Policy"]
@@ -14,7 +11,7 @@ export default function Footer() {
                 <div className="footer__top">
                     <div className="footer__brand">
                         <div className="footer__brand-head">
-                            <img className="footer__logo-mark" src="/logo__1_-removebg-preview.png" alt="Secret Dinner logo" />
+                            <img className="footer__logo-mark" src="/logo__1_-removebg-preview.webp" alt="Secret Dinner logo" />
                             <h3 className="footer__logo-title">
                                 <span>Secret</span>
                                 <span>Dinner</span>
