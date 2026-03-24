@@ -156,6 +156,7 @@
     min-width: 250px;
     padding: 16px 30px;
     border-radius: 999px;
+    text-decoration: none;
     border: 1px solid color-mix(in srgb, var(--gold-4) 72%, transparent);
     background: linear-gradient(135deg, #dfbf52 0%, #c59f2e 100%);
     color: var(--black-1);
@@ -175,6 +176,7 @@
     min-width: 250px;
     padding: 16px 30px;
     border-radius: 999px;
+    text-decoration: none;
     border: 1px solid color-mix(in srgb, var(--gold-5) 62%, transparent);
     background: rgba(15, 19, 17, 0.72);
     color: var(--text-main);

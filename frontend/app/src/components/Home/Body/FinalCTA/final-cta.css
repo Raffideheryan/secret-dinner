@@ -125,6 +125,7 @@
 .final-cta__button{
     min-height: 72px;
     border-radius: 999px;
+    text-decoration: none;
     border: 1px solid transparent;
     font-size: clamp(1rem, 1.3vw, 1.15rem);
     font-weight: 700;

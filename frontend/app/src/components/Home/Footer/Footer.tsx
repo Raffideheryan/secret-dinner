@@ -1,10 +1,28 @@
 import "./footer.css"
-import { InstagramIcon, LinkedInIcon, MailOutlineIcon, XIcon } from "../../Icons"
+import { InstagramIcon, MailOutlineIcon, TelegramIcon } from "../../Icons"
 
-const quickLinks = ["About", "Events", "Membership", "Contact"]
+const quickLinks = ["About", "Atmosphere", "Membership", "Contact"]
 const legalLinks = ["Privacy Policy", "Terms of Service", "Cookie Policy"]
+const sectionIdByQuickLink: Record<string, string> = {
+    About: "about",
+    Atmosphere: "atmosphere",
+    Membership: "membership",
+    Contact: "hero",
+}
 
 export default function Footer() {
+
+    const scrollToSection =(sectionID: string) =>{
+        const section = document.getElementById(sectionID);
+        if (!section) {
+            if (sectionID === "hero") {
+                window.scrollTo({top: 0, behavior: "smooth"})
+            };
+            return;
+        }
+        section.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+
     return (
         <footer className="home__footer">
             <div className="footer__inner">
@@ -26,11 +44,8 @@ export default function Footer() {
                             <a className="footer__social" href="#" aria-label="Instagram">
                                 <InstagramIcon />
                             </a>
-                            <a className="footer__social" href="#" aria-label="LinkedIn">
-                                <LinkedInIcon />
-                            </a>
-                            <a className="footer__social" href="#" aria-label="X">
-                                <XIcon />
+                            <a className="footer__social" href="#" aria-label="Telegram">
+                                <TelegramIcon />
                             </a>
                             <a className="footer__social" href="#" aria-label="Email">
                                 <MailOutlineIcon />
@@ -43,7 +58,18 @@ export default function Footer() {
                         <ul className="footer__list">
                             {quickLinks.map((link) => (
                                 <li key={link}>
-                                    <a href="#">{link}</a>
+                                    <a
+                                        href="#"
+                                        onClick={(event) => {
+                                            event.preventDefault()
+                                            const sectionID = sectionIdByQuickLink[link]
+                                            if (sectionID) {
+                                                scrollToSection(sectionID)
+                                            }
+                                        }}
+                                    >
+                                        {link}
+                                    </a>
                                 </li>
                             ))}
                         </ul>

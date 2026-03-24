@@ -23,7 +23,7 @@ export default function Atmosphere() {
     })
 
     return (
-        <div className="body__atmosphere" ref={ref}>
+        <div className="body__atmosphere" id="atmosphere" ref={ref}>
             <SectionTitles title="The Atmosphere" description="A glimpse into evenings where memories and opportunities are made"/>
             <div className={`atmosphere__pictures ${visible ? "atmosphere__pictures--visible" : ""}`}>
                 {atmospherePhotos.map((photo, index) => (

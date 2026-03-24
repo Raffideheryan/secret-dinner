@@ -1,5 +1,6 @@
 import { useInView } from "../useInView"
 import "./final-cta.css"
+import { Link } from "react-router-dom"
 import { ArrowForwardIcon, QrCode2OutlinedIcon, TelegramIcon } from "../../../Icons"
 
 export default function FinalCTA() {
@@ -33,14 +34,12 @@ export default function FinalCTA() {
                 <div className="final-cta__line" />
 
                 <div className="final-cta__actions">
-                    <button className="final-cta__button final-cta__button--primary" type="button">
-                        <span>Join Next Dinner</span>
-                        <ArrowForwardIcon />
-                    </button>
-                    <button className="final-cta__button final-cta__button--ghost" type="button">
+                    <Link className="final-cta__button final-cta__button--primary" to="/join">
+                    <span>Join Next Dinner</span><ArrowForwardIcon /></Link>
+                    <Link className="final-cta__button final-cta__button--ghost" to="https://t.me/secret_dinner_bot">
                         <TelegramIcon />
                         <span>Join on Telegram</span>
-                    </button>
+                    </Link>
                 </div>
 
                 <ul className="final-cta__trust">

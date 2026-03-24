@@ -1,10 +1,12 @@
 import "./navbar.css"
 import "./animations.css"
+import { Link } from "react-router-dom"
 
 import { useEffect, useState, type MouseEvent } from "react"
 
 const sectionIdByTitle: Record<string, string> = {
     "Experience": "experience",
+    "Atmosphere": "atmosphere",
     "Prices": "membership",
     "Tiers": "membership",
     "How It Works": "about",
@@ -63,7 +65,7 @@ export default function Navbar({ titles }: { titles: string[] }) {
                         );
                     })}
                 </div>
-                <button className="join__btn">Join Now</button>
+                <Link className="join__btn" to="/join">Join Now</Link>
             </nav>
         </>
     )
