@@ -173,7 +173,7 @@
 
 @media (max-width: 720px) {
     .home__footer{
-        padding: 0 16px 38px;
+        padding: 0 16px 12px;
     }
 
     .footer__top{
@@ -219,17 +219,21 @@
     }
 
     .footer__brand-head{
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
     }
 
     .footer__logo-mark{
-        width: 112px;
+        width: 104px;
     }
 
     .footer__logo-title{
-        font-size: 1.45rem;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        font-size: 1.2rem;
+        line-height: 1;
     }
 
     .footer__social{
@@ -239,5 +243,9 @@
 
     .footer__bottom{
         gap: 8px;
+    }
+
+    .home__footer{
+        padding-bottom: 8px;
     }
 }

@@ -65,7 +65,7 @@ export default function Navbar({ titles }: { titles: string[] }) {
                         );
                     })}
                 </div>
-                <Link className="join__btn" to="/join">Join Now</Link>
+                <Link className="navbar__join-btn" to="/join">Join Now</Link>
             </nav>
         </>
     )

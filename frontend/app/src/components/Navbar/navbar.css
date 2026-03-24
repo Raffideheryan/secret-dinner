@@ -1,16 +1,16 @@
 .navbar{
     position: fixed;
-    top: 0;
+    top: max(0px, env(safe-area-inset-top));
     left: 0;
     width: 100%;
-    min-height: 80px;
+    min-height: calc(80px + env(safe-area-inset-top));
 
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 20px;
 
-    padding: 0 40px;
+    padding: env(safe-area-inset-top) 40px 0;
     box-sizing: border-box;
 
     background: transparent;
@@ -25,7 +25,7 @@
         transform 0.35s ease,
         padding 0.35s ease;
 
-    z-index: 1000;
+    z-index: 1200;
 }
 
 .navbar--scrolled{
@@ -103,7 +103,7 @@
     color: var(--gold-1);
 }
 
-.join__btn {
+.navbar__join-btn {
     border: 1px solid var(--gold-7);
     padding: 12px 28px;
     border-radius: 999px;
@@ -134,7 +134,7 @@
     position: relative;
     overflow: hidden;
 }
-.join__btn:hover{
+.navbar__join-btn:hover{
     box-shadow: 0 5px 7px var(--gold-3);
 
     transform: translateY(-2px);
@@ -144,7 +144,7 @@
 
 @media (max-width: 900px) {
     .navbar{
-        padding: 16px 24px;
+        padding: calc(env(safe-area-inset-top) + 16px) 24px 0;
     }
 
     .titles{
@@ -152,14 +152,14 @@
         font-size: 0.92rem;
     }
 
-    .join__btn{
+    .navbar__join-btn{
         padding: 10px 18px;
     }
 }
 
 @media (max-width: 1100px) {
     .navbar{
-        padding: 10px 20px;
+        padding: calc(env(safe-area-inset-top) + 10px) 20px 0;
         gap: 14px;
     }
 
@@ -176,7 +176,7 @@
         font-size: clamp(1rem, 1.6vw, 1.4rem);
     }
 
-    .join__btn{
+    .navbar__join-btn{
         padding: 9px 14px;
         font-size: 0.85rem;
     }
@@ -184,22 +184,19 @@
 
 @media (max-width: 640px) {
     .navbar{
-        align-items: flex-start;
-        flex-wrap: wrap;
-        padding: 14px 16px;
+        align-items: center;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        padding: calc(env(safe-area-inset-top) + 14px) 16px 0;
     }
 
     .titles{
-        order: 3;
-        width: 100%;
-        gap: 10px 16px;
-        justify-content: center;
-        font-size: 0.88rem;
+        display: none;
     }
 
-    .join__btn{
-        padding: 10px 16px;
-        font-size: 0.88rem;
+    .navbar__join-btn{
+        padding: 9px 14px;
+        font-size: 0.84rem;
     }
 
     .logo{
@@ -231,8 +228,9 @@
         height: 48px;
     }
 
-    .join__btn{
-        padding: 9px 12px;
+    .navbar__join-btn{
+        padding: 8px 12px;
+        font-size: 0.8rem;
     }
 }
 
@@ -249,8 +247,8 @@
         font-size: 0.88rem;
     }
 
-    .join__btn{
-        padding: 8px 10px;
-        font-size: 0.8rem;
+    .navbar__join-btn{
+        padding: 7px 10px;
+        font-size: 0.76rem;
     }
 }
