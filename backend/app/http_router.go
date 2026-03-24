@@ -34,6 +34,7 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 		return c.JSON(fiber.Map{"ok": true})
 	})
 	api.Post("/user/join", routes.HandleJoin(l.connections.Users))
+	api.Post("/user/join/selection", routes.HandleJoinSelection(l.connections.Users))
 	api.Get("/dinners/info", routes.GetDinners(l.connections.Dinners))
 
 	admin := api.Group("/admin")

@@ -1,17 +1,21 @@
 import "./join.css";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-import type { Dinner } from "./types";
+import type { Dinner, PackageTier } from "./types";
 import BlinkingParticles from "../common/BlinkingParticles";
+import { submitDinnerSelection } from "./ApplicationSubmit";
 
-type PackageTier = "silver" | "gold" | "vip" | "custom";
 const TIERS: PackageTier[] = ["silver", "gold", "vip", "custom"];
 
 export default function JoinDinners() {
+    const navigate = useNavigate();
     const [dinners, setDinners] = useState<Dinner[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
+    const [saveError, setSaveError] = useState<string>("");
+    const [successMessage, setSuccessMessage] = useState<string>("");
+    const [saving, setSaving] = useState(false);
     const [selectedDinnerId, setSelectedDinnerId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<PackageTier | null>(null);
 
@@ -104,18 +108,48 @@ export default function JoinDinners() {
         setSelectedPackage(packageTier);
     };
 
-    const handleSaveSelection = () => {
+    const handleSaveSelection = async () => {
         if (!canContinue || !selectedDinner) return;
+        const chosenPackage = selectedPackage;
+        if (!chosenPackage) return;
+        const userId = sessionStorage.getItem("joinUserId");
+        if (!userId) {
+            setSaveError("Session expired. Please complete step 1 again.");
+            navigate("/join", { replace: true });
+            return;
+        }
+        setSaveError("");
+        setSuccessMessage("");
+        setSaving(true);
 
-        sessionStorage.setItem(
-            "joinDinnerSelection",
-            JSON.stringify({
+        try {
+            await submitDinnerSelection({
+                userId,
                 dinnerId: selectedDinner.id,
-                package: selectedPackage,
-                location: getVenueLabel(selectedDinner.location),
-                date: selectedDinner.dinnerDate,
-            })
-        );
+                chosenPackage,
+            });
+
+            sessionStorage.setItem(
+                "joinDinnerSelection",
+                JSON.stringify({
+                    dinnerId: selectedDinner.id,
+                    package: chosenPackage,
+                    location: getVenueLabel(selectedDinner.location),
+                    date: selectedDinner.dinnerDate,
+                })
+            );
+
+            setSuccessMessage("Success. We will contact you as soon as possible.");
+            window.setTimeout(() => {
+                sessionStorage.removeItem("joinFormCompleted");
+                sessionStorage.removeItem("joinUserId");
+                navigate("/");
+            }, 1800);
+        } catch (e) {
+            setSaveError(e instanceof Error ? e.message : "Failed to save selection.");
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -234,22 +268,19 @@ export default function JoinDinners() {
                             <p>Choose one dinner and one package to continue.</p>
                         )}
                     </div>
+                    {saveError && <p className="join__state join__state--error">{saveError}</p>}
+                    {successMessage && <p className="join__state join__state--success">{successMessage}</p>}
 
                     <div className="join__actions">
                         <Link className="join__btn join__btn--back" to="/join">Back</Link>
-                        <Link
-                            className={`join__btn join__btn--primary ${!canContinue ? "join__btn--disabled" : ""}`}
-                            to="/"
-                            onClick={(event) => {
-                                if (!canContinue) {
-                                    event.preventDefault();
-                                    return;
-                                }
-                                handleSaveSelection();
-                            }}
+                        <button
+                            className={`join__btn join__btn--primary ${(!canContinue || saving) ? "join__btn--disabled" : ""}`}
+                            type="button"
+                            disabled={!canContinue || saving}
+                            onClick={() => void handleSaveSelection()}
                         >
-                            Save & Continue
-                        </Link>
+                            {saving ? "Saving..." : "Save & Continue"}
+                        </button>
                     </div>
                 </div>
             </div>

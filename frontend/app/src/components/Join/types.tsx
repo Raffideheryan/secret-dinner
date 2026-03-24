@@ -16,6 +16,19 @@ export type JoinPayload = {
     allergies: string[];
 }
 
+export type JoinResponse = {
+    success: boolean;
+    userId: string;
+}
+
+export type PackageTier = "silver" | "gold" | "vip" | "custom";
+
+export type JoinSelectionPayload = {
+    userId: string;
+    dinnerId: number;
+    chosenPackage: PackageTier;
+}
+
 export type Dinner = {
     id: number;
     description: string;

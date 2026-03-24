@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { useInView } from "./useInView";
-import { PeopleAltIcon } from "../../Icons";
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import GroupsIcon from '@mui/icons-material/Groups';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ForumIcon from '@mui/icons-material/Forum';
 
 export type ExperienceCard = {
     icon: ReactNode,
@@ -38,24 +41,24 @@ export function SectionTitles({title,description}: Section) {
 }
 
 export const cards:  ExperienceCard[] = [
-    {
-        icon: <PeopleAltIcon />,
-        title:'Private Networking',
-        description: 'Connect with hand-selected entrepreneurs, investors, and industry leaders in intimate settings.',
-    },
-    {
-        icon: <PeopleAltIcon />,
-        title:'Private Networking',
-        description: 'Connect with hand-selected entrepreneurs, investors, and industry leaders in intimate settings.',
-    },
-    {
-        icon: <PeopleAltIcon />,
-        title:'Private Networking',
-        description: 'Connect with hand-selected entrepreneurs, investors, and industry leaders in intimate settings.',
-    },
-    {
-        icon: <PeopleAltIcon />,
-        title:'Private Networking',
-        description: 'Connect with hand-selected entrepreneurs, investors, and industry leaders in intimate settings.',
-    },
-] 
+  {
+    icon: <RestaurantIcon />,
+    title: 'Refined Dining',
+    description: 'Enjoy a premium dinner experience in carefully selected venues with exceptional food and atmosphere.',
+  },
+  {
+    icon: <GroupsIcon />,
+    title: 'Come As You Are',
+    description: 'Join with your partner, friends, or on your own—just like any great night out.',
+  },
+  {
+    icon: <AutoAwesomeIcon />,
+    title: 'Thoughtful Crowd',
+    description: 'Dine among a curated mix of interesting people, without the pressure of formal networking.',
+  },
+  {
+    icon: <ForumIcon />,
+    title: 'Natural Connections',
+    description: 'Conversations happen organically in a relaxed, restaurant-style setting.',
+  }
+]

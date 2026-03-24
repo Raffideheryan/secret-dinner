@@ -14,7 +14,10 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
-          <Route
+          
+        </Route>
+        <Route path="/join" element={<Join />} />
+        <Route
             path="/join/dinners"
             element={
               <JoinFormGuard>
@@ -22,8 +25,6 @@ export default function App() {
               </JoinFormGuard>
             }
           />
-        </Route>
-        <Route path="/join" element={<Join />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route
           path="/admin"

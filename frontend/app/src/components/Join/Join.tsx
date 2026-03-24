@@ -34,7 +34,8 @@ export default function Join() {
             allergies: (form.allergies ?? "").split(",").map((x) => x.trim()).filter(Boolean),
         };
 
-        await submitMainInfo(payload);
+        const response = await submitMainInfo(payload);
+        sessionStorage.setItem("joinUserId", response.userId);
         sessionStorage.setItem("joinFormCompleted", "true");
         navigate("/join/dinners");
     };

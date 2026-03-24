@@ -3,8 +3,9 @@ import { Navigate } from "react-router-dom";
 
 export default function JoinFormGuard({ children }: { children: ReactNode }) {
   const hasCompletedJoinForm = sessionStorage.getItem("joinFormCompleted") === "true";
+  const hasJoinUserID = Boolean(sessionStorage.getItem("joinUserId"));
 
-  if (!hasCompletedJoinForm) {
+  if (!hasCompletedJoinForm || !hasJoinUserID) {
     return <Navigate to="/join" replace />;
   }
 
