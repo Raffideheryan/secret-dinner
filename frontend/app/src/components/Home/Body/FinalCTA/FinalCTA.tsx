@@ -1,7 +1,9 @@
 import { useInView } from "../useInView"
 import "./final-cta.css"
 import { Link } from "react-router-dom"
-import { ArrowForwardIcon, QrCode2OutlinedIcon, TelegramIcon } from "../../../Icons"
+import { ArrowForwardIcon, QrCode2OutlinedIcon } from "../../../Icons"
+import TelegramIcon from "@mui/icons-material/Telegram";
+
 
 export default function FinalCTA() {
     const { ref, visible } = useInView<HTMLDivElement>({
@@ -45,7 +47,7 @@ export default function FinalCTA() {
                 <ul className="final-cta__trust">
                     <li>Verified Members Only</li>
                     <li>Secure Application</li>
-                    <li>48h Response Time</li>
+                    <li>Immediate Support</li>
                 </ul>
             </div>
         </div>

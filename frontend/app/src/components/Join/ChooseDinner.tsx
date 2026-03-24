@@ -5,6 +5,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080
 import type { Dinner, PackageTier } from "./types";
 import BlinkingParticles from "../common/BlinkingParticles";
 import { submitDinnerSelection } from "./ApplicationSubmit";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import TelegramIcon from "@mui/icons-material/Telegram";
+import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 
 const TIERS: PackageTier[] = ["silver", "gold", "vip", "custom"];
 
@@ -14,8 +17,8 @@ export default function JoinDinners() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [saveError, setSaveError] = useState<string>("");
-    const [successMessage, setSuccessMessage] = useState<string>("");
     const [saving, setSaving] = useState(false);
+    const [showSuccessCard, setShowSuccessCard] = useState(false);
     const [selectedDinnerId, setSelectedDinnerId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<PackageTier | null>(null);
 
@@ -119,7 +122,6 @@ export default function JoinDinners() {
             return;
         }
         setSaveError("");
-        setSuccessMessage("");
         setSaving(true);
 
         try {
@@ -139,12 +141,7 @@ export default function JoinDinners() {
                 })
             );
 
-            setSuccessMessage("Success. We will contact you as soon as possible.");
-            window.setTimeout(() => {
-                sessionStorage.removeItem("joinFormCompleted");
-                sessionStorage.removeItem("joinUserId");
-                navigate("/");
-            }, 1800);
+            setShowSuccessCard(true);
         } catch (e) {
             setSaveError(e instanceof Error ? e.message : "Failed to save selection.");
         } finally {
@@ -152,10 +149,54 @@ export default function JoinDinners() {
         }
     };
 
+    const handleReturnHome = () => {
+        sessionStorage.removeItem("joinFormCompleted");
+        sessionStorage.removeItem("joinUserId");
+        navigate("/");
+    };
+
     return (
         <section className="join join--dinners" id="join-dinners">
             <BlinkingParticles overlayClassName="join__overlay" particleClassName="join__particle" />
             <div className="join__content">
+                {showSuccessCard ? (
+                    <div className="join__success-card">
+                        <div className="join__success-icon-wrap">
+                            <AccessTimeIcon />
+                        </div>
+
+                        <h2 className="join__success-title">Application Received</h2>
+                        <p className="join__success-subtitle">You will be notified privately.</p>
+
+                        <div className="join__success-next">
+                            <h3>What happens next?</h3>
+                            <ol>
+                                <li>Our team will review your application as soon as possible</li>
+                                <li>We’ll confirm your reservation by email or phone.</li>
+                                <li>If accepted, you'll get exclusive access to the event details</li>
+                            </ol>
+                        </div>
+
+                        <a
+                            className="join__success-btn join__success-btn--telegram"
+                            href="https://t.me/secret_dinner_bot"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            <TelegramIcon />
+                            Join Telegram For Bonuses
+                        </a>
+
+                        <button
+                            type="button"
+                            className="join__success-btn join__success-btn--home"
+                            onClick={handleReturnHome}
+                        >
+                            <HomeOutlinedIcon />
+                            Return Home
+                        </button>
+                    </div>
+                ) : (
                 <div className="join__dinners-card">
                     <div className="join__logo-wrap">
                         <img className="join__logo" src="/logo__1_-removebg-preview.webp" alt="Secret Dinner logo" />
@@ -269,7 +310,6 @@ export default function JoinDinners() {
                         )}
                     </div>
                     {saveError && <p className="join__state join__state--error">{saveError}</p>}
-                    {successMessage && <p className="join__state join__state--success">{successMessage}</p>}
 
                     <div className="join__actions">
                         <Link className="join__btn join__btn--back" to="/join">Back</Link>
@@ -283,6 +323,7 @@ export default function JoinDinners() {
                         </button>
                     </div>
                 </div>
+                )}
             </div>
         </section>
     );

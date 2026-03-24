@@ -17,10 +17,11 @@ export default function Experience({cards}: ExperienceProps) {
             <div className="experience__cards">
                 {cards.map((card,index) => (
                     <div
-                        className={`experience__card ${visible ? "experience__card--visible" : ""}`}
+                        className={`experience__card experience__card--tone-${(index % 4) + 1} ${visible ? "experience__card--visible" : ""}`}
                         key={index}
                         style={{ "--card-index": index } as CSSProperties}
                     >
+                        <span className="experience__card-index">{String(index + 1).padStart(2, "0")}</span>
                         <div className="experience__card-icon">{card.icon}</div>
                         <h3 className="experience__card-title">{card.title}</h3>
                         <p className="experience__card-description">{card.description}</p>

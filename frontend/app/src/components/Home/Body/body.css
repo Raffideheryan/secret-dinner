@@ -60,6 +60,8 @@
         contain-intrinsic-size: 760px;
     }
 
+    .home__body > .body__about,
+    .home__body > .body__experience,
     .home__body > .body__membership{
         content-visibility: visible;
         contain: none;

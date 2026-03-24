@@ -1,19 +1,22 @@
 .body__experience{
-    width: min(1160px, 100%);
+    width: min(1200px, 100%);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 25px;
+    gap: 28px;
 }
 
 .experience__cards{
     display: grid;
     grid-template-columns: repeat(4,minmax(0,1fr));
-    gap: 20px;
-    margin-top: 30px;
+    gap: 22px;
+    margin-top: 32px;
     width: 100%;
+    padding-inline: 8px;
+    box-sizing: border-box;
+    perspective: 1400px;
 }
 
 .experience__card{
@@ -22,21 +25,28 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
-    padding: 30px;
-    border: 1px solid var(--gold-8);
-    border-radius: 20px;
-    box-shadow: inset 0 2px 20px var(--gold-5);
+    gap: 15px;
+    padding: 32px 26px 28px;
+    border: 1px solid color-mix(in srgb, var(--gold-6) 40%, #293228);
+    border-radius: 24px;
+    background:
+        radial-gradient(120% 85% at 50% -10%, color-mix(in srgb, var(--gold-3) 16%, transparent) 0%, transparent 58%),
+        linear-gradient(155deg, rgba(14, 20, 18, 0.96), rgba(9, 12, 15, 0.94));
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+        inset 0 16px 26px rgba(212, 175, 55, 0.04),
+        0 16px 32px rgba(0, 0, 0, 0.3);
     text-align: center;
     min-height: 100%;
     opacity: 0;
     transform: translateX(-30px);
-    overflow: hidden;
+    overflow: clip;
     transition:
-        transform 0.35s ease,
-        box-shadow 0.4s ease,
+        transform 0.45s ease,
+        box-shadow 0.45s ease,
         border-color 0.35s ease,
-        background 0.35s ease;
+        background 0.35s ease,
+        filter 0.4s ease;
 }
 
 .experience__card::before{
@@ -45,10 +55,10 @@
     inset: 0;
     border-radius: inherit;
     background:
-        radial-gradient(150% 90% at 50% 0%, color-mix(in srgb, var(--gold-3) 16%, transparent) 0%, transparent 68%);
+        radial-gradient(150% 90% at 50% 0%, color-mix(in srgb, var(--gold-3) 24%, transparent) 0%, transparent 68%);
     opacity: 0;
-    transform: translateY(10px) scale(1.04);
-    transition: opacity 0.35s ease, transform 0.45s ease;
+    transform: translateY(10px) scale(1.03);
+    transition: opacity 0.4s ease, transform 0.5s ease;
     pointer-events: none;
     z-index: 0;
 }
@@ -56,18 +66,15 @@
 .experience__card::after{
     content: "";
     position: absolute;
-    inset: 1px;
-    border-radius: calc(20px - 1px);
-    background: linear-gradient(
-        112deg,
-        transparent 37%,
-        color-mix(in srgb, var(--gold-2) 22%, transparent) 50%,
-        transparent 63%
-    );
-    background-size: 230% 100%;
-    background-position: 120% 50%;
+    top: 0;
+    left: 14%;
+    width: 72%;
+    height: 1px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gold-3) 68%, transparent), transparent);
     opacity: 0;
-    transition: opacity 0.35s ease, background-position 0.75s ease;
+    transform: translateY(-8px);
+    transition: opacity 0.35s ease, transform 0.45s ease;
     pointer-events: none;
     z-index: 0;
 }
@@ -83,20 +90,23 @@
 }
 
 .experience__card:is(:hover, :focus-within){
-    border-color: color-mix(in srgb, var(--gold-4) 46%, var(--gold-8));
-    background: linear-gradient(180deg, rgba(11, 11, 11, 0.95) 0%, rgba(16, 17, 16, 0.98) 100%);
+    border-color: color-mix(in srgb, var(--gold-4) 56%, #4f5f47);
+    background:
+        radial-gradient(140% 90% at 50% -10%, color-mix(in srgb, var(--gold-3) 20%, transparent) 0%, transparent 58%),
+        linear-gradient(180deg, rgba(11, 14, 12, 0.95) 0%, rgba(14, 17, 16, 0.99) 100%);
     box-shadow:
-        inset 0 3px 34px color-mix(in srgb, var(--gold-4) 18%, transparent),
-        0 14px 30px rgba(0, 0, 0, 0.34),
-        0 0 22px color-mix(in srgb, var(--gold-4) 16%, transparent);
+        inset 0 24px 34px color-mix(in srgb, var(--gold-4) 10%, transparent),
+        0 22px 42px rgba(0, 0, 0, 0.36),
+        0 0 24px color-mix(in srgb, var(--gold-4) 18%, transparent);
+    filter: saturate(1.08);
 }
 
 .experience__card:nth-child(odd):is(:hover, :focus-within){
-    transform: translateY(-9px) rotate(-0.7deg);
+    transform: translateY(-10px);
 }
 
 .experience__card:nth-child(even):is(:hover, :focus-within){
-    transform: translateY(-9px) rotate(0.7deg);
+    transform: translateY(-10px);
 }
 
 .experience__card:is(:hover, :focus-within)::before{
@@ -105,51 +115,95 @@
 }
 
 .experience__card:is(:hover, :focus-within)::after{
-    opacity: 0.55;
-    background-position: -20% 50%;
+    opacity: 0.7;
+    transform: translateY(0);
 }
 
 .experience__card-icon{
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 10px;
-    border-radius: 30px;
-    background: var(--glass-gold);
-    color: var(--gold-5);
-    border: 1px solid var(--gold-7);
-    margin-bottom: 4px;
+    width: 62px;
+    height: 62px;
+    border-radius: 18px;
+    background:
+        radial-gradient(130% 130% at 20% 10%, color-mix(in srgb, var(--gold-3) 44%, transparent), transparent 60%),
+        linear-gradient(140deg, rgba(60, 49, 24, 0.46), rgba(18, 22, 20, 0.94));
+    color: color-mix(in srgb, var(--gold-2) 80%, var(--gold-5));
+    border: 1px solid color-mix(in srgb, var(--gold-4) 44%, transparent);
+    margin-bottom: 2px;
     transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
 }
 
 .experience__card:is(:hover, :focus-within) .experience__card-icon{
-    transform: translateY(-5px) scale(1.08);
+    transform: translateY(-5px) scale(1.07) rotate(-4deg);
     border-color: color-mix(in srgb, var(--gold-3) 70%, transparent);
     box-shadow:
-        inset 0 0 20px color-mix(in srgb, var(--gold-4) 22%, transparent),
-        0 10px 18px color-mix(in srgb, var(--gold-4) 16%, transparent);
+        inset 0 0 26px color-mix(in srgb, var(--gold-4) 22%, transparent),
+        0 12px 20px color-mix(in srgb, var(--gold-4) 17%, transparent);
 }
 
 .experience__card-title{
     margin: 0;
     color: var(--text-main);
-    transition: color 0.3s ease, letter-spacing 0.3s ease;
+    font-size: 1.26rem;
+    transition: color 0.3s ease, letter-spacing 0.3s ease, transform 0.35s ease;
 }
 
 .experience__card:is(:hover, :focus-within) .experience__card-title{
     color: var(--gold-light);
     letter-spacing: 0.01em;
+    transform: translateY(-1px);
 }
 
 .experience__card-description{
     margin: 0;
     color: var(--text-soft);
-    line-height: 1.6;
+    line-height: 1.58;
+    font-size: 0.98rem;
     transition: color 0.3s ease;
 }
 
 .experience__card:is(:hover, :focus-within) .experience__card-description{
     color: color-mix(in srgb, var(--text-main) 84%, var(--text-soft));
+}
+
+.experience__card-index{
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--gold-4) 45%, transparent);
+    background: rgba(20, 24, 23, 0.72);
+    color: color-mix(in srgb, var(--gold-2) 80%, var(--text-soft));
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    padding: 0.18rem 0.5rem;
+}
+
+.experience__card--tone-1 {
+    background:
+        radial-gradient(120% 85% at 10% 0%, rgba(212, 175, 55, 0.15), transparent 52%),
+        linear-gradient(155deg, rgba(15, 21, 19, 0.98), rgba(8, 11, 14, 0.94));
+}
+
+.experience__card--tone-2 {
+    background:
+        radial-gradient(120% 85% at 100% 0%, rgba(90, 145, 125, 0.18), transparent 52%),
+        linear-gradient(155deg, rgba(13, 19, 18, 0.98), rgba(8, 12, 15, 0.94));
+}
+
+.experience__card--tone-3 {
+    background:
+        radial-gradient(120% 85% at 0% 100%, rgba(212, 175, 55, 0.14), transparent 48%),
+        linear-gradient(155deg, rgba(16, 21, 20, 0.98), rgba(8, 11, 14, 0.94));
+}
+
+.experience__card--tone-4 {
+    background:
+        radial-gradient(120% 85% at 100% 100%, rgba(72, 119, 100, 0.2), transparent 48%),
+        linear-gradient(155deg, rgba(14, 20, 18, 0.98), rgba(8, 12, 15, 0.94));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -224,5 +278,10 @@
     .experience__card{
         gap: 12px;
         padding: 20px 16px;
+    }
+
+    .experience__card-index{
+        top: 10px;
+        right: 10px;
     }
 }

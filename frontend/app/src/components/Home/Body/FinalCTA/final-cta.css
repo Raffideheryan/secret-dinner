@@ -149,9 +149,9 @@
 }
 
 .final-cta__button--ghost{
-    background: rgba(15, 19, 17, 0.72);
+    background: #0088cc;
     color: #ffffff;
-    border-color: color-mix(in srgb, var(--gold-5) 62%, transparent);
+    border-color: color-mix(in srgb, var(--gold-7) 62%, transparent);
 }
 
 .final-cta__button:hover{
