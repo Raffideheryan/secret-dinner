@@ -301,6 +301,8 @@ export default function AdminPanel() {
   const [dinnersLoading, setDinnersLoading] = useState(false);
   const [dinnerFormOpen, setDinnerFormOpen] = useState(false);
   const [dinnerSaving, setDinnerSaving] = useState(false);
+  const [dinnerDeleting, setDinnerDeleting] = useState(false);
+  const [dinnerDeleteTarget, setDinnerDeleteTarget] = useState<AdminDinner | null>(null);
   const [dinnerFormError, setDinnerFormError] = useState("");
   const [dinnerForm, setDinnerForm] = useState<DinnerFormState>(emptyDinnerForm);
   const [settingsForm, setSettingsForm] = useState<SettingsFormState | null>(null);
@@ -436,6 +438,21 @@ export default function AdminPanel() {
     return () => window.clearInterval(timer);
   }, [data?.settings.runtime.panelAutoRefreshSeconds, activeSection, usersSource, usersStatus, searchQuery]);
 
+  useEffect(() => {
+    if (!dinnerDeleteTarget) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !dinnerDeleting) {
+        setDinnerDeleteTarget(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [dinnerDeleteTarget, dinnerDeleting]);
+
   const handleLogout = async () => {
     try {
       await adminLogout();
@@ -536,18 +553,27 @@ export default function AdminPanel() {
     setDinnerFormOpen(true);
   };
 
-  const handleDeleteDinner = async (item: AdminDinner) => {
-    const confirmed = window.confirm(`Delete dinner #${item.id}?`);
-    if (!confirmed) {
+  const handleDeleteDinner = (item: AdminDinner) => {
+    setDinnerFormError("");
+    setDinnerDeleteTarget(item);
+  };
+
+  const confirmDeleteDinner = async () => {
+    if (!dinnerDeleteTarget) {
       return;
     }
+
+    setDinnerDeleting(true);
     try {
-      await deleteAdminDinner(item.id);
+      await deleteAdminDinner(dinnerDeleteTarget.id);
       await Promise.all([loadDinners(), loadPanel(true)]);
-      setInfoMessage(`Dinner #${item.id} deleted`);
+      setInfoMessage(`Dinner #${dinnerDeleteTarget.id} deleted`);
       window.setTimeout(() => setInfoMessage(""), 1500);
+      setDinnerDeleteTarget(null);
     } catch (err) {
       setDinnerFormError(err instanceof Error ? err.message : "failed to delete dinner");
+    } finally {
+      setDinnerDeleting(false);
     }
   };
 
@@ -769,19 +795,6 @@ export default function AdminPanel() {
     })) as SingleTrendBar[];
   }, [landing?.hourlySubmissions]);
 
-  const landingFlowHeatmap = useMemo(() => {
-    const max = Math.max(
-      1,
-      ...landingDailyTrendBars.map((point) => point.primary),
-      ...landingDailyTrendBars.map((point) => point.secondary)
-    );
-    return landingDailyTrendBars.map((point) => ({
-      ...point,
-      primaryIntensity: point.primary / max,
-      secondaryIntensity: point.secondary / max,
-    }));
-  }, [landingDailyTrendBars]);
-
   const landingFlowSummary = useMemo(() => {
     const submissions = landingDailyTrendBars.reduce((sum, point) => sum + point.primary, 0);
     const selections = landingDailyTrendBars.reduce((sum, point) => sum + point.secondary, 0);
@@ -792,13 +805,12 @@ export default function AdminPanel() {
     };
   }, [landingDailyTrendBars]);
 
-  const landingHourlyHeatmap = useMemo(() => {
-    const max = Math.max(1, ...landingHourlyBars.map((point) => point.value));
-    return landingHourlyBars.map((point, index) => ({
-      ...point,
-      index,
-      intensity: point.value / max,
-    }));
+  const landingHourlySparkline = useMemo(() => {
+    const values = landingHourlyBars.map((point) => point.value);
+    return {
+      labels: landingHourlyBars.map((point) => point.label),
+      geometry: buildSparkline(values),
+    };
   }, [landingHourlyBars]);
 
   const landingPeakHour = useMemo(() => {
@@ -1269,48 +1281,32 @@ export default function AdminPanel() {
                     ) : (
                       <>
                         <div className="admin-widget__explain">
-                          <p>Each cell shows daily intensity. Brighter color means more activity on that day.</p>
+                          <p>Each day has two lollipops: gold for submissions, emerald for completed selections.</p>
                         </div>
-                        <div className="admin-flow-heatmap" role="img" aria-label="Landing submissions and selections heatmap by day">
-                          <div className="admin-flow-heatmap__row">
-                            <span className="admin-flow-heatmap__label">Submitted</span>
-                            <div className="admin-flow-heatmap__cells">
-                              {landingFlowHeatmap.map((point) => (
+                        <div
+                          className="admin-lollipop-chart"
+                          role="img"
+                          aria-label="Landing submissions and selections lollipop chart"
+                          style={{ gridTemplateColumns: `repeat(${landingDailyTrendBars.length}, minmax(0, 1fr))` }}
+                        >
+                          {landingDailyTrendBars.map((point) => (
+                            <div key={`flow-${point.label}`} className="admin-lollipop-chart__col">
+                              <div className="admin-lollipop-chart__track">
                                 <span
-                                  key={`flow-sub-${point.label}`}
-                                  className="admin-flow-cell admin-flow-cell--gold admin-tooltip-target"
-                                  style={{ opacity: Math.max(point.primaryIntensity, 0.12) }}
+                                  className="admin-lollipop admin-lollipop--gold admin-tooltip-target"
+                                  style={{ height: `${point.primaryHeight}%` }}
                                   data-tooltip={`${point.label}: ${point.primary} submissions`}
                                   tabIndex={0}
                                 />
-                              ))}
-                            </div>
-                          </div>
-                          <div className="admin-flow-heatmap__row">
-                            <span className="admin-flow-heatmap__label">Selected</span>
-                            <div className="admin-flow-heatmap__cells">
-                              {landingFlowHeatmap.map((point) => (
                                 <span
-                                  key={`flow-sel-${point.label}`}
-                                  className="admin-flow-cell admin-flow-cell--emerald admin-tooltip-target"
-                                  style={{ opacity: Math.max(point.secondaryIntensity, 0.12) }}
+                                  className="admin-lollipop admin-lollipop--emerald admin-tooltip-target"
+                                  style={{ height: `${point.secondaryHeight}%` }}
                                   data-tooltip={`${point.label}: ${point.secondary} selections`}
                                   tabIndex={0}
                                 />
-                              ))}
+                              </div>
+                              <span className="admin-lollipop-chart__label">{point.label}</span>
                             </div>
-                          </div>
-                        </div>
-                        <div className="admin-flow-heatmap__days">
-                          {landingFlowHeatmap.map((point, index) => (
-                            <span
-                              key={`flow-day-${point.label}-${index}`}
-                              className="admin-flow-heatmap__day admin-tooltip-target"
-                              data-tooltip={`${point.label}: ${point.primary} submitted / ${point.secondary} selected`}
-                              tabIndex={0}
-                            >
-                              {index % 2 === 0 ? point.label : "•"}
-                            </span>
                           ))}
                         </div>
                         <div className="admin-speed-grid">
@@ -1341,22 +1337,38 @@ export default function AdminPanel() {
                     ) : (
                       <>
                         <div className="admin-widget__explain">
-                          <p>Heat tiles show submission density by hour. Brighter and warmer tiles mean busier hours.</p>
+                          <p>Columns show hourly submission volume and the line shows the activity trend across the day.</p>
                         </div>
-                        <div className="admin-hours-heatmap" role="img" aria-label="Landing hourly submissions heatmap">
-                          {landingHourlyHeatmap.map((point) => (
-                            <div
-                              key={`hour-${point.label}-${point.index}`}
-                              className={`admin-hours-heatmap__tile admin-tooltip-target ${point.label === landingPeakHour.slice(0, 2) ? "admin-hours-heatmap__tile--peak" : ""}`}
-                              data-tooltip={`${point.label}:00 - ${point.value} submissions`}
+                        <div className="admin-hour-combo" role="img" aria-label="Landing hourly submissions combo chart">
+                          <div
+                            className="admin-hour-combo__bars"
+                            style={{ gridTemplateColumns: `repeat(${landingHourlyBars.length}, minmax(0, 1fr))` }}
+                          >
+                            {landingHourlyBars.map((point, index) => (
+                              <span
+                                key={`hour-col-${point.label}-${index}`}
+                                className={`admin-hour-combo__bar admin-tooltip-target ${point.label === landingPeakHour.slice(0, 2) ? "admin-hour-combo__bar--peak" : ""}`}
+                                data-tooltip={`${point.label}:00 - ${point.value} submissions`}
+                                tabIndex={0}
+                                style={{ height: `${Math.max(point.height, 8)}%` }}
+                              />
+                            ))}
+                          </div>
+                          <svg className="admin-hour-combo__line-layer" viewBox="0 0 560 180" preserveAspectRatio="none" aria-hidden="true">
+                            <path className="admin-wave-chart__area admin-wave-chart__area--emerald" d={landingHourlySparkline.geometry.areaPath} />
+                            <path className="admin-wave-chart__line admin-wave-chart__line--emerald" d={landingHourlySparkline.geometry.linePath} />
+                          </svg>
+                        </div>
+                        <div className="admin-wave-chart__labels">
+                          {landingHourlySparkline.labels.map((label, index) => (
+                            <span
+                              key={`hour-label-${label}-${index}`}
+                              className="admin-wave-chart__label-chip admin-tooltip-target"
+                              data-tooltip={`${label}:00 - ${landingHourlyBars[index]?.value ?? 0} submissions`}
                               tabIndex={0}
-                              style={{
-                                background: `linear-gradient(155deg, rgba(230,201,106,${Math.max(point.intensity * 0.7, 0.14)}), rgba(31,122,92,${Math.max(point.intensity * 0.8, 0.2)}))`,
-                              }}
                             >
-                              <span className="admin-hours-heatmap__hour">{point.label}</span>
-                              <b className="admin-hours-heatmap__count">{point.value}</b>
-                            </div>
+                              {index % 3 === 0 ? label : "•"}
+                            </span>
                           ))}
                         </div>
                         <div className="admin-speed-grid">
@@ -2350,6 +2362,61 @@ export default function AdminPanel() {
                   </article>
                 </section>
               ) : null}
+            </div>
+          ) : null}
+
+          {dinnerDeleteTarget ? (
+            <div
+              className="admin-modal-backdrop"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirm dinner deletion"
+              onClick={(event) => {
+                if (event.target === event.currentTarget && !dinnerDeleting) {
+                  setDinnerDeleteTarget(null);
+                }
+              }}
+            >
+              <article className="admin-modal admin-modal--danger">
+                <button
+                  className="admin-modal__close"
+                  type="button"
+                  onClick={() => setDinnerDeleteTarget(null)}
+                  disabled={dinnerDeleting}
+                  aria-label="Close delete confirmation"
+                >
+                  x
+                </button>
+                <p className="admin-modal__eyebrow">Delete Dinner</p>
+                <h3>Remove dinner #{dinnerDeleteTarget.id}?</h3>
+                <p className="admin-modal__text">
+                  This will permanently delete this dinner from both admin and shared selection flows.
+                </p>
+                <div className="admin-modal__detail">
+                  <b>{dinnerDeleteTarget.description}</b>
+                  <span>
+                    {formatDateLabel(dinnerDeleteTarget.dinnerDate)} · {dinnerDeleteTarget.location}
+                  </span>
+                </div>
+                <div className="admin-modal__actions">
+                  <button
+                    className="admin-toolbar__btn"
+                    type="button"
+                    onClick={() => setDinnerDeleteTarget(null)}
+                    disabled={dinnerDeleting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="admin-toolbar__btn admin-toolbar__btn--danger"
+                    type="button"
+                    onClick={confirmDeleteDinner}
+                    disabled={dinnerDeleting}
+                  >
+                    {dinnerDeleting ? "Deleting..." : "Delete Dinner"}
+                  </button>
+                </div>
+              </article>
             </div>
           ) : null}
         </div>
