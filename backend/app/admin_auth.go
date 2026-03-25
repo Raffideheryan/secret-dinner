@@ -14,11 +14,15 @@ import (
 )
 
 type adminAuthService struct {
-	cfg config.AdminConfig
+	cfg              config.AdminConfig
+	tokenTTLProvider func() int
 }
 
-func newAdminAuthService(cfg config.AdminConfig) *adminAuthService {
-	return &adminAuthService{cfg: cfg}
+func newAdminAuthService(cfg config.AdminConfig, tokenTTLProvider func() int) *adminAuthService {
+	return &adminAuthService{
+		cfg:              cfg,
+		tokenTTLProvider: tokenTTLProvider,
+	}
 }
 
 func (a *adminAuthService) validateCredentials(username, password string) bool {
@@ -29,7 +33,13 @@ func (a *adminAuthService) validateCredentials(username, password string) bool {
 
 func (a *adminAuthService) issueToken() (string, time.Time, error) {
 	now := time.Now().UTC()
-	expiresAt := now.Add(time.Duration(a.cfg.TokenTTLMin) * time.Minute)
+	ttlMin := a.cfg.TokenTTLMin
+	if a.tokenTTLProvider != nil {
+		if dynamicTTL := a.tokenTTLProvider(); dynamicTTL > 0 {
+			ttlMin = dynamicTTL
+		}
+	}
+	expiresAt := now.Add(time.Duration(ttlMin) * time.Minute)
 
 	claims := adminTokenClaims{
 		Sub: a.cfg.Username,

@@ -12,6 +12,7 @@ export type JoinPayload = {
     email: string;
     phone: string;
     guestCount: number;
+    fillDurationMs: number;
     hobbies: string[];
     allergies: string[];
 }

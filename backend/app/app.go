@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"secret-dinner/config"
 	"secret-dinner/internal/db"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
@@ -21,6 +22,7 @@ type landingApp struct {
 	connections db.Connections
 	server      *fiber.App
 	auth        *adminAuthService
+	settings    *runtimeAdminSettings
 }
 
 func NewLandingApp(ctx context.Context, cfg config.Config) (LandingApplication, error) {
@@ -31,12 +33,14 @@ func NewLandingApp(ctx context.Context, cfg config.Config) (LandingApplication, 
 	}
 
 	child, cancel := context.WithCancel(ctx)
+	settings := newRuntimeAdminSettings(cfg)
 	app := &landingApp{
 		ctx:         child,
 		cancel:      cancel,
 		cfg:         cfg,
 		connections: connection,
-		auth:        newAdminAuthService(cfg.Admin),
+		auth:        newAdminAuthService(cfg.Admin, settings.GetAdminTokenTTLMinutes),
+		settings:    settings,
 	}
 	app.server = app.buildHTTPServer()
 
@@ -59,9 +63,27 @@ func (l *landingApp) Shutdown() error {
 			return err
 		}
 	}
+	if l.connections.AdminUsers != nil {
+		if err := l.connections.AdminUsers.Close(); err != nil {
+			log.WithError(err).Error("Error closing admin users connection")
+			return err
+		}
+	}
 	if l.connections.Dinners != nil {
 		if err := l.connections.Dinners.Close(); err != nil {
 			log.WithError(err).Error("Error closing dinners connection")
+			return err
+		}
+	}
+	if l.connections.LandingStats != nil {
+		if err := l.connections.LandingStats.Close(); err != nil {
+			log.WithError(err).Error("Error closing landing stats connection")
+			return err
+		}
+	}
+	if l.connections.TelegramStats != nil {
+		if err := l.connections.TelegramStats.Close(); err != nil {
+			log.WithError(err).Error("Error closing telegram stats connection")
 			return err
 		}
 	}
@@ -83,18 +105,67 @@ func initDB(cfg config.Config) (db.Connections, error) {
 }
 
 func newConnections(cfg config.Config) (db.Connections, error) {
-	connection, err := sql.Open("postgres", cfg.DB.URL)
+	landingUsersConn, err := openPostgresConnection(cfg.DB.URL)
 	if err != nil {
 		return db.Connections{}, err
 	}
 
-	if err := connection.Ping(); err != nil {
-		connection.Close()
+	landingDinnersConn, err := openPostgresConnection(cfg.DB.URL)
+	if err != nil {
+		landingUsersConn.Close()
 		return db.Connections{}, err
 	}
 
-	return db.Connections{
-		Users:   db.NewUsersDB(connection),
-		Dinners: db.NewDinnersDB(connection),
-	}, nil
+	landingStatsConn, err := openPostgresConnection(cfg.DB.URL)
+	if err != nil {
+		landingUsersConn.Close()
+		landingDinnersConn.Close()
+		return db.Connections{}, err
+	}
+
+	connections := db.Connections{
+		Users:        db.NewUsersDB(landingUsersConn),
+		AdminUsers:   db.NewAdminUsersDB(landingUsersConn, nil),
+		Dinners:      db.NewDinnersDB(landingDinnersConn, nil),
+		LandingStats: db.NewLandingStatsDB(landingStatsConn),
+	}
+
+	telegramURL := strings.TrimSpace(cfg.DB.TelegramURL)
+	if telegramURL != "" {
+		telegramDinnersConn, err := openPostgresConnection(telegramURL)
+		if err != nil {
+			landingUsersConn.Close()
+			landingDinnersConn.Close()
+			landingStatsConn.Close()
+			return db.Connections{}, err
+		}
+		connections.Dinners = db.NewDinnersDB(landingDinnersConn, telegramDinnersConn)
+
+		telegramStatsConn, err := openPostgresConnection(telegramURL)
+		if err != nil {
+			landingUsersConn.Close()
+			landingDinnersConn.Close()
+			landingStatsConn.Close()
+			telegramDinnersConn.Close()
+			return db.Connections{}, err
+		}
+		connections.TelegramStats = db.NewTelegramStatsDB(telegramStatsConn)
+		connections.AdminUsers = db.NewAdminUsersDB(landingUsersConn, telegramStatsConn)
+	}
+
+	return connections, nil
+}
+
+func openPostgresConnection(url string) (*sql.DB, error) {
+	connection, err := sql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := connection.Ping(); err != nil {
+		connection.Close()
+		return nil, err
+	}
+
+	return connection, nil
 }

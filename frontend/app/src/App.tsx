@@ -7,6 +7,7 @@ import ProtectedAdminRoute from "./components/Admin/ProtectedAdminRoute";
 import Join from "./components/Join/Join"
 import JoinDinners from "./components/Join/ChooseDinner"
 import JoinFormGuard from "./components/Join/JoinFormGuard";
+import NotFound from "./components/NotFound/NotFound";
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
             </ProtectedAdminRoute>
           }
         />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   );

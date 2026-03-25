@@ -36,7 +36,7 @@ func (u *usersRepo) Insert(users Users) (string, error) {
 func (u *usersRepo) UpdateSelection(userID string, dinnerID int64, chosenPackage string) error {
 	query := `
 		UPDATE users_landing
-		SET dinner_id = $2, chosen_package = $3, updated_at = now()
+		SET dinner_id = $2, chosen_package = $3, selection_status = 'completed', updated_at = now()
 		WHERE id = $1
 	`
 	result, err := u.db.Exec(query, userID, dinnerID, chosenPackage)

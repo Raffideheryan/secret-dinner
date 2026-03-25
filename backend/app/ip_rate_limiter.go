@@ -8,36 +8,39 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type loginRateLimiter struct {
+type ipRateLimiter struct {
 	mu       sync.Mutex
 	attempts map[string]rateLimitState
 	limit    int
 	window   time.Duration
+	message  string
 	limitFn  func() int
 }
 
-func newLoginRateLimiter(limit int, window time.Duration, limitFn func() int) *loginRateLimiter {
-	return &loginRateLimiter{
+func newIPRateLimiter(limit int, window time.Duration, message string, limitFn func() int) *ipRateLimiter {
+	return &ipRateLimiter{
 		attempts: make(map[string]rateLimitState),
 		limit:    limit,
 		window:   window,
+		message:  message,
 		limitFn:  limitFn,
 	}
 }
 
-func (l *loginRateLimiter) middleware() fiber.Handler {
+func (l *ipRateLimiter) middleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if !l.allow(c.IP()) {
 			c.Set("Retry-After", strconv.Itoa(int(l.window.Seconds())))
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "too many login attempts",
+				"error":   true,
+				"message": l.message,
 			})
 		}
 		return c.Next()
 	}
 }
 
-func (l *loginRateLimiter) allow(ip string) bool {
+func (l *ipRateLimiter) allow(ip string) bool {
 	limit := l.limit
 	if l.limitFn != nil {
 		if dynamic := l.limitFn(); dynamic > 0 {
@@ -65,10 +68,4 @@ func (l *loginRateLimiter) allow(ip string) bool {
 	state.count++
 	l.attempts[ip] = state
 	return true
-}
-
-func (l *loginRateLimiter) reset(ip string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	delete(l.attempts, ip)
 }

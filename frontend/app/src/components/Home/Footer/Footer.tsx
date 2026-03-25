@@ -1,5 +1,7 @@
 import "./footer.css"
-import { InstagramIcon, MailOutlineIcon, TelegramIcon } from "../../Icons"
+import { InstagramIcon, MailOutlineIcon } from "../../Icons"
+import TelegramIcon from "@mui/icons-material/Telegram";
+
 
 const quickLinks = ["About", "Atmosphere", "Membership", "Contact"]
 const legalLinks = ["Privacy Policy", "Terms of Service", "Cookie Policy"]
@@ -41,13 +43,13 @@ export default function Footer() {
                         </p>
 
                         <div className="footer__socials">
-                            <a className="footer__social" href="#" aria-label="Instagram">
+                            <a className="footer__social" href="https://www.instagram.com/secret_dinner_yvn" aria-label="Instagram">
                                 <InstagramIcon />
                             </a>
-                            <a className="footer__social" href="#" aria-label="Telegram">
+                            <a className="footer__social" href="https://t.me/secret_dinner_bot" aria-label="Telegram">
                                 <TelegramIcon />
                             </a>
-                            <a className="footer__social" href="#" aria-label="Email">
+                            <a className="footer__social" href="mailto:secretdinnerr@gmail.com" aria-label="Email">
                                 <MailOutlineIcon />
                             </a>
                         </div>

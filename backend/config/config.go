@@ -8,6 +8,7 @@ type Config struct {
 
 type DBConfig struct {
 	URL            string
+	TelegramURL    string
 	MigrationsPath string
 }
 

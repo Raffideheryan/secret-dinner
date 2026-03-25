@@ -53,6 +53,7 @@ func LoadConfig() (Config, error) {
 	cfg := Config{
 		DB: DBConfig{
 			URL:            os.Getenv("DATABASE_URL"),
+			TelegramURL:    os.Getenv("TELEGRAM_DATABASE_URL"),
 			MigrationsPath: os.Getenv("MIGRATIONS_PATH"),
 		},
 		Admin: AdminConfig{

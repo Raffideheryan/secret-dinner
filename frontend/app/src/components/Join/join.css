@@ -139,6 +139,17 @@
     font-weight: 500;
 }
 
+.join__form-alert {
+    margin: 0 0 0.7rem;
+    border: 1px solid rgba(196, 96, 96, 0.58);
+    border-radius: 12px;
+    padding: 0.62rem 0.8rem;
+    color: rgba(255, 214, 214, 0.98);
+    background: linear-gradient(160deg, rgba(85, 30, 30, 0.48), rgba(34, 14, 14, 0.56));
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
 .join__input {
     width: 100%;
     height: 58px;
@@ -151,6 +162,11 @@
     transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
+.join__input--error {
+    border-color: rgba(215, 106, 106, 0.86);
+    box-shadow: 0 0 0 3px rgba(215, 106, 106, 0.2);
+}
+
 .join__input::placeholder {
     color: rgba(173, 176, 182, 0.45);
 }
@@ -159,6 +175,13 @@
     outline: none;
     border-color: rgba(212, 175, 55, 0.76);
     box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+}
+
+.join__field-error {
+    margin-top: 0.3rem;
+    color: rgba(255, 191, 191, 0.96);
+    font-size: 0.86rem;
+    font-weight: 500;
 }
 
 .join__actions {
