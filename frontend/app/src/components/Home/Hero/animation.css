@@ -20,3 +20,93 @@
         opacity: 0.35;
     }
 }
+
+@keyframes heroTitleReveal {
+    0% {
+        transform: translate3d(0, 22px, 0) scale(0.985);
+        filter: blur(8px) drop-shadow(0 6px 20px rgba(0, 0, 0, 0.22));
+    }
+    70% {
+        transform: translate3d(0, -1px, 0) scale(1.005);
+        filter: blur(0) drop-shadow(0 11px 30px rgba(0, 0, 0, 0.34));
+    }
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+        filter: drop-shadow(0 12px 34px rgba(0, 0, 0, 0.38));
+    }
+}
+
+@keyframes heroSecondLineReveal {
+    0% {
+        transform: translate3d(0, 16px, 0);
+    }
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes heroUnderlineReveal {
+    0% {
+        transform: translateX(-50%) scaleX(0.2);
+    }
+    100% {
+        transform: translateX(-50%) scaleX(1);
+    }
+}
+
+@keyframes heroMarkEntrance {
+    0% {
+        transform: translate3d(0, -14px, 0) scale(0.9) rotate(-6deg);
+        box-shadow: 0 0 10px rgba(212, 175, 55, 0.1);
+    }
+    70% {
+        transform: translate3d(0, 1px, 0) scale(1.03) rotate(1deg);
+        box-shadow: 0 0 34px rgba(212, 175, 55, 0.28);
+    }
+    100% {
+        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+        box-shadow: 0 0 30px rgba(212, 175, 55, 0.16);
+    }
+}
+
+@keyframes heroMarkPulse {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+    50% {
+        transform: translate3d(0, -3px, 0);
+    }
+}
+
+@keyframes heroTitleShimmer {
+    0% {
+        background-position: 50% 20%;
+    }
+    50% {
+        background-position: 50% 82%;
+    }
+    100% {
+        background-position: 50% 30%;
+    }
+}
+
+@keyframes heroSubtitleReveal {
+    0% {
+        transform: translate3d(0, 16px, 0);
+        letter-spacing: 0.2em;
+    }
+    100% {
+        transform: translate3d(0, 0, 0);
+        letter-spacing: 0.14em;
+    }
+}
+
+@keyframes heroButtonsReveal {
+    0% {
+        transform: translate3d(0, 16px, 0);
+    }
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+}

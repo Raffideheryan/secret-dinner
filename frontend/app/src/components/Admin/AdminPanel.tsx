@@ -1984,7 +1984,7 @@ export default function AdminPanel() {
 
                     {usersSource === "landing" && currentUsers.length > 0 ? (
                       <div className="admin-table-wrap">
-                        <table className="admin-table">
+                        <table className="admin-table admin-table--stack">
                           <thead>
                             <tr>
                               <th>User</th>
@@ -1999,18 +1999,18 @@ export default function AdminPanel() {
                           <tbody>
                             {landingUsers.map((item) => (
                               <tr key={item.id}>
-                                <td>
+                                <td data-label="User">
                                   <div className="admin-users__cell-title">{item.fullName}</div>
                                   <div className="admin-users__cell-sub">ID: {item.id.slice(0, 8)}...</div>
                                 </td>
-                                <td>
+                                <td data-label="Contact">
                                   <div className="admin-users__cell-title">{item.email}</div>
                                   <div className="admin-users__cell-sub">{item.phone}</div>
                                 </td>
-                                <td>{item.guestCount}</td>
-                                <td>{item.dinnerTitle || "—"}</td>
-                                <td>{item.chosenPackage ?? "—"}</td>
-                                <td>
+                                <td data-label="Guests">{item.guestCount}</td>
+                                <td data-label="Dinner">{item.dinnerTitle || "—"}</td>
+                                <td data-label="Package">{item.chosenPackage ?? "—"}</td>
+                                <td data-label="Selection Status">
                                   <div className="admin-users__status-cell" role="group" aria-label={`Selection status for ${item.fullName}`}>
                                     <div className="admin-users__status-toggle">
                                       {landingSelectionStatusOptions.map((option) => (
@@ -2031,7 +2031,7 @@ export default function AdminPanel() {
                                     {selectionStatusSaving[item.id] ? <span className="admin-users__status-saving">Saving...</span> : null}
                                   </div>
                                 </td>
-                                <td>{formatDateLabel(item.createdAt)}</td>
+                                <td data-label="Created">{formatDateLabel(item.createdAt)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -2041,7 +2041,7 @@ export default function AdminPanel() {
 
                     {usersSource === "telegram" && currentUsers.length > 0 ? (
                       <div className="admin-table-wrap">
-                        <table className="admin-table">
+                        <table className="admin-table admin-table--stack">
                           <thead>
                             <tr>
                               <th>User</th>
@@ -2056,29 +2056,29 @@ export default function AdminPanel() {
                           <tbody>
                             {telegramUsers.map((item) => (
                               <tr key={item.id}>
-                                <td>
+                                <td data-label="User">
                                   <div className="admin-users__cell-title">@{item.username}</div>
                                   <div className="admin-users__cell-sub">ID: {item.id}</div>
                                 </td>
-                                <td>
+                                <td data-label="Profile">
                                   <div className="admin-users__cell-title">
                                     {[item.name, item.surname].filter(Boolean).join(" ").trim() || "—"}
                                   </div>
                                   <div className="admin-users__cell-sub">{item.phone || "No phone"}</div>
                                 </td>
-                                <td>{item.totalPayments.toFixed(2)}</td>
-                                <td>{item.ordersCount}</td>
-                                <td>
+                                <td data-label="Payments">{item.totalPayments.toFixed(2)}</td>
+                                <td data-label="Orders">{item.ordersCount}</td>
+                                <td data-label="Terms">
                                   <span className={`admin-user-badge ${item.termsAccepted ? "admin-user-badge--ok" : "admin-user-badge--warn"}`}>
                                     {item.termsAccepted ? "accepted" : "pending"}
                                   </span>
                                 </td>
-                                <td>
+                                <td data-label="Blocked">
                                   <span className={`admin-user-badge ${item.blockedActive ? "admin-user-badge--danger" : "admin-user-badge--ok"}`}>
                                     {item.blockedActive ? "blocked" : "active"}
                                   </span>
                                 </td>
-                                <td>{formatDateLabel(item.createdAt)}</td>
+                                <td data-label="Created">{formatDateLabel(item.createdAt)}</td>
                               </tr>
                             ))}
                           </tbody>
