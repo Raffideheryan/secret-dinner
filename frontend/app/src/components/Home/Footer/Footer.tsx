@@ -1,18 +1,26 @@
 import "./footer.css"
 import { InstagramIcon, MailOutlineIcon } from "../../Icons"
 import TelegramIcon from "@mui/icons-material/Telegram";
+import { useI18n } from "../../../i18n";
 
-
-const quickLinks = ["About", "Atmosphere", "Membership", "Contact"]
-const legalLinks = ["Privacy Policy", "Terms of Service", "Cookie Policy"]
-const sectionIdByQuickLink: Record<string, string> = {
-    About: "about",
-    Atmosphere: "atmosphere",
-    Membership: "membership",
-    Contact: "hero",
-}
+type QuickLink = { label: string; sectionId: string };
+type LegalLink = { label: string };
 
 export default function Footer() {
+    const { t } = useI18n();
+
+    const quickLinks: QuickLink[] = [
+        { label: t("footer.link.about"), sectionId: "about" },
+        { label: t("footer.link.atmosphere"), sectionId: "atmosphere" },
+        { label: t("footer.link.membership"), sectionId: "membership" },
+        { label: t("footer.link.contact"), sectionId: "hero" },
+    ];
+
+    const legalLinks: LegalLink[] = [
+        { label: t("footer.legal.privacy") },
+        { label: t("footer.legal.terms") },
+        { label: t("footer.legal.cookies") },
+    ];
 
     const scrollToSection =(sectionID: string) =>{
         const section = document.getElementById(sectionID);
@@ -38,8 +46,7 @@ export default function Footer() {
                             </h3>
                         </div>
                         <p className="footer__description">
-                            An exclusive platform connecting elite entrepreneurs, investors, and visionaries through
-                            curated dining experiences.
+                            {t("footer.desc")}
                         </p>
 
                         <div className="footer__socials">
@@ -56,21 +63,18 @@ export default function Footer() {
                     </div>
 
                     <div className="footer__column">
-                        <h4 className="footer__heading">Quick Links</h4>
+                        <h4 className="footer__heading">{t("footer.quickLinks")}</h4>
                         <ul className="footer__list">
                             {quickLinks.map((link) => (
-                                <li key={link}>
+                                <li key={link.sectionId}>
                                     <a
                                         href="#"
                                         onClick={(event) => {
                                             event.preventDefault()
-                                            const sectionID = sectionIdByQuickLink[link]
-                                            if (sectionID) {
-                                                scrollToSection(sectionID)
-                                            }
+                                            scrollToSection(link.sectionId)
                                         }}
                                     >
-                                        {link}
+                                        {link.label}
                                     </a>
                                 </li>
                             ))}
@@ -78,11 +82,11 @@ export default function Footer() {
                     </div>
 
                     <div className="footer__column">
-                        <h4 className="footer__heading">Legal</h4>
+                        <h4 className="footer__heading">{t("footer.legal")}</h4>
                         <ul className="footer__list">
                             {legalLinks.map((link) => (
-                                <li key={link}>
-                                    <a href="#">{link}</a>
+                                <li key={link.label}>
+                                    <a href="#">{link.label}</a>
                                 </li>
                             ))}
                         </ul>
@@ -90,8 +94,8 @@ export default function Footer() {
                 </div>
 
                 <div className="footer__bottom">
-                    <p>© 2026 Secret Dinner. All rights reserved.</p>
-                    <p>Made with exclusivity in mind</p>
+                    <p>{t("footer.bottom.rights")}</p>
+                    <p>{t("footer.bottom.tagline")}</p>
                 </div>
             </div>
         </footer>

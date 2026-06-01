@@ -11,32 +11,33 @@ export type AboutCard = {
     description: string;
 }
 
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
 
-
-export const aboutCards: AboutCard[] = [
-  {
-    step: "1",
-    icon: <SearchIcon />,
-    title: "Explore Dinners",
-    description: "Browse upcoming dinners, venues, and available dates.",
-  },
-  {
-    step: "2",
-    icon: <EventSeatIcon />,
-    title: "Reserve Your Spot",
-    description: "Book your seat individually or with friends in just a few taps.",
-  },
-  {
-    step: "3",
-    icon: <ConfirmationNumberIcon />,
-    title: "Get Confirmation",
-    description: "Receive your reservation details and everything you need before the event.",
-  },
-  {
-    step: "4",
-    icon: <RestaurantIcon />,
-    title: "Enjoy the Experience",
-    description: "Arrive, dine, and enjoy the atmosphere—everything else is taken care of.",
-  }
-
-]
+export function getAboutCards(t: Translator): AboutCard[] {
+  return [
+    {
+      step: "1",
+      icon: <SearchIcon />,
+      title: t("home.about.step1.title"),
+      description: t("home.about.step1.desc"),
+    },
+    {
+      step: "2",
+      icon: <EventSeatIcon />,
+      title: t("home.about.step2.title"),
+      description: t("home.about.step2.desc"),
+    },
+    {
+      step: "3",
+      icon: <ConfirmationNumberIcon />,
+      title: t("home.about.step3.title"),
+      description: t("home.about.step3.desc"),
+    },
+    {
+      step: "4",
+      icon: <RestaurantIcon />,
+      title: t("home.about.step4.title"),
+      description: t("home.about.step4.desc"),
+    },
+  ];
+}

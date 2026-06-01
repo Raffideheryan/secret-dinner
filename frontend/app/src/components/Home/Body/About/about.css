@@ -158,15 +158,24 @@
     font-size: clamp(1.35rem, 2.1vw, 1.95rem);
     line-height: 1.2;
     font-weight: 500;
+    width: 100%;
+    min-height: calc(1.2em * 2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-wrap: pretty;
     transition: color 0.3s ease, letter-spacing 0.3s ease;
 }
 
 .about__card-description{
-    max-width: 18ch;
+    max-width: 28ch;
     margin: 0;
     color: var(--text-soft);
     font-size: 1rem;
     line-height: 1.55;
+    min-height: calc(1.55em * 4);
+    text-wrap: pretty;
+    hyphens: auto;
     transition: color 0.3s ease;
 }
 
@@ -235,5 +244,10 @@
         width: min(100%, 340px);
         min-height: 332px;
         padding: 74px 24px 30px;
+    }
+
+    .about__card-description{
+        max-width: 30ch;
+        min-height: calc(1.55em * 3);
     }
 }

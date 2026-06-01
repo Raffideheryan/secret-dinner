@@ -24,7 +24,7 @@
     isolation: isolate;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 15px;
     padding: 32px 26px 28px;
     border: 1px solid color-mix(in srgb, var(--gold-6) 40%, #293228);
@@ -36,11 +36,11 @@
         inset 0 0 0 1px rgba(255, 255, 255, 0.03),
         inset 0 16px 26px rgba(212, 175, 55, 0.04),
         0 16px 32px rgba(0, 0, 0, 0.3);
-    text-align: center;
+    text-align: left;
     min-height: 100%;
     opacity: 0;
     transform: translateX(-30px);
-    overflow: clip;
+    overflow: hidden;
     transition:
         transform 0.45s ease,
         box-shadow 0.45s ease,
@@ -132,6 +132,7 @@
     color: color-mix(in srgb, var(--gold-2) 80%, var(--gold-5));
     border: 1px solid color-mix(in srgb, var(--gold-4) 44%, transparent);
     margin-bottom: 2px;
+    align-self: center;
     transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
 }
 
@@ -146,7 +147,15 @@
 .experience__card-title{
     margin: 0;
     color: var(--text-main);
-    font-size: 1.26rem;
+    font-size: clamp(1.14rem, 1.6vw, 1.32rem);
+    line-height: 1.18;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    min-height: calc(1.18em * 2);
     transition: color 0.3s ease, letter-spacing 0.3s ease, transform 0.35s ease;
 }
 
@@ -156,16 +165,42 @@
     transform: translateY(-1px);
 }
 
+.experience__card-lead{
+    margin: 2px 0 0;
+    color: color-mix(in srgb, var(--gold-light) 92%, var(--text-soft));
+    font-size: 0.96rem;
+    font-weight: 650;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    width: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    min-height: calc(1.35em * 2);
+    text-wrap: pretty;
+}
+
 .experience__card-description{
     margin: 0;
     color: var(--text-soft);
-    line-height: 1.58;
-    font-size: 0.98rem;
+    line-height: 1.64;
+    font-size: 0.96rem;
+    width: 100%;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 7;
+    overflow: hidden;
+    text-wrap: pretty;
+    hyphens: auto;
     transition: color 0.3s ease;
 }
 
 .experience__card:is(:hover, :focus-within) .experience__card-description{
     color: color-mix(in srgb, var(--text-main) 84%, var(--text-soft));
+}
+
+.experience__card:is(:hover, :focus-within) .experience__card-lead{
+    color: color-mix(in srgb, var(--gold-light) 96%, var(--text-main));
 }
 
 .experience__card-index{
@@ -253,6 +288,14 @@
     .experience__card{
         padding: 24px 20px;
         border-radius: 18px;
+    }
+
+    .experience__card-title{
+        font-size: 1.14rem;
+    }
+
+    .experience__card-description{
+        -webkit-line-clamp: 6;
     }
 
     .experience__card:nth-child(odd):is(:hover, :focus-within),

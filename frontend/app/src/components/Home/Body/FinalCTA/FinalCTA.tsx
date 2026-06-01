@@ -3,9 +3,11 @@ import "./final-cta.css"
 import { Link } from "react-router-dom"
 import { ArrowForwardIcon, QrCode2OutlinedIcon } from "../../../Icons"
 import TelegramIcon from "@mui/icons-material/Telegram";
+import { useI18n } from "../../../../i18n";
 
 
 export default function FinalCTA() {
+    const { t } = useI18n();
     const { ref, visible } = useInView<HTMLDivElement>({
         threshold: 0.12,
         rootMargin: "0px 0px 18% 0px",
@@ -20,34 +22,33 @@ export default function FinalCTA() {
 
                 <p className="final-cta__badge">
                     <QrCode2OutlinedIcon />
-                    <span>Digital entry via QR code</span>
+                    <span>{t("home.final.badge")}</span>
                 </p>
 
                 <h2 className="final-cta__title">
-                    <span className="final-cta__title-main">Limited Seats.</span>
-                    <span className="final-cta__title-accent">Unlimited Opportunities.</span>
+                    <span className="final-cta__title-main">{t("home.final.title.main")}</span>
+                    <span className="final-cta__title-accent">{t("home.final.title.accent")}</span>
                 </h2>
 
                 <p className="final-cta__description">
-                    Join an exclusive circle where every conversation could change your trajectory. Applications are
-                    reviewed weekly.
+                    {t("home.final.desc")}
                 </p>
 
                 <div className="final-cta__line" />
 
                 <div className="final-cta__actions">
                     <Link className="final-cta__button final-cta__button--primary" to="/join">
-                    <span>Join Next Dinner</span><ArrowForwardIcon /></Link>
+                    <span>{t("home.final.joinNextDinner")}</span><ArrowForwardIcon /></Link>
                     <Link className="final-cta__button final-cta__button--ghost" to="https://t.me/secret_dinner_bot">
                         <TelegramIcon />
-                        <span>Join on Telegram</span>
+                        <span>{t("home.final.joinTelegram")}</span>
                     </Link>
                 </div>
 
                 <ul className="final-cta__trust">
-                    <li>Verified Members Only</li>
-                    <li>Secure Application</li>
-                    <li>Immediate Support</li>
+                    <li>{t("home.final.trust.1")}</li>
+                    <li>{t("home.final.trust.2")}</li>
+                    <li>{t("home.final.trust.3")}</li>
                 </ul>
             </div>
         </div>

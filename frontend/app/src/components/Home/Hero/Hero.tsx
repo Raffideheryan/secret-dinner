@@ -3,8 +3,10 @@ import "./animation.css";
 import { Link } from "react-router-dom"
 import { WineBarIcon } from "../../Icons";
 import BlinkingParticles from "../../common/BlinkingParticles";
+import { useI18n } from "../../../i18n";
 
 export default function Hero() {
+  const { t } = useI18n();
   const scrollToExperience = () => {
     const section = document.getElementById("experience")
     section?.scrollIntoView({behavior:"smooth", block: "start"})
@@ -24,12 +26,12 @@ export default function Hero() {
         </h1>
 
         <p className="hero__subtitle">
-          Where connections become opportunities
+          {t("home.hero.subtitle")}
         </p>
 
         <div className="hero__buttons">
-          <Link className="request__btn" to="/join">Request Invitation</Link>
-          <Link className="experience__btn" to="/" onClick={scrollToExperience}>Explore Experience</Link>  
+          <Link className="request__btn" to="/join">{t("home.hero.requestInvitation")}</Link>
+          <Link className="experience__btn" to="/" onClick={scrollToExperience}>{t("home.hero.exploreExperience")}</Link>  
         </div>
       </div>
     </section>

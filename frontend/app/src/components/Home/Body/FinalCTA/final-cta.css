@@ -19,6 +19,11 @@
     flex-direction: column;
     align-items: center;
     overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid color-mix(in srgb, var(--gold-2) 12%, transparent);
+    background:
+        radial-gradient(110% 90% at 50% 10%, rgba(212, 175, 55, 0.08) 0%, transparent 60%),
+        linear-gradient(180deg, rgba(8, 10, 9, 0.75), rgba(12, 16, 14, 0.92));
 
 }
 
@@ -76,19 +81,26 @@
     align-items: center;
     text-align: center;
     line-height: 0.97;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
 }
 
 .final-cta__title-main{
     font-family: var(--font-display);
     font-size: clamp(2.25rem, 7vw, 5rem);
     color: #fffdf7;
+    text-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.35),
+        0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .final-cta__title-accent{
     font-family: var(--font-display);
     font-size: clamp(2.25rem, 7vw, 5rem);
     color: var(--gold-4);
+    text-shadow:
+        0 14px 36px rgba(0, 0, 0, 0.35),
+        0 0 22px color-mix(in srgb, var(--gold-4) 22%, transparent);
 }
 
 .final-cta__description{

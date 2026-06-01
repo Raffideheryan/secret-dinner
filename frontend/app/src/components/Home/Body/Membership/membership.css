@@ -95,15 +95,38 @@
 .price{
     margin: 0;
     color: var(--text-main);
-    font-size: clamp(2.25rem, 4vw, 3.6rem);
-    font-weight: 700;
     line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.price__value{
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    white-space: nowrap;
 }
 
 .price__suffix{
     color: var(--text-muted);
     font-size: 0.95rem;
     font-weight: 400;
+}
+
+.price__prefix{
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.price__amount{
+    font-size: clamp(2.05rem, 3.6vw, 3.15rem);
+    font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .options{
@@ -136,6 +159,9 @@
 
 .package__btn{
     margin-top: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 54px;
     padding: 14px 22px;
     border: 1px solid var(--gold-7);
@@ -144,6 +170,7 @@
     color: var(--black-1);
     font-weight: 700;
     cursor: pointer;
+    text-decoration: none;
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     font-size: 18px;
 
@@ -201,7 +228,7 @@
     }
 
     .price{
-        font-size: 2rem;
+        gap: 10px;
     }
 
     .package__btn{

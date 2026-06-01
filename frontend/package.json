@@ -1,5 +1,13 @@
 {
+  "name": "frontend",
+  "private": true,
   "dependencies": {
     "react-router-dom": "^7.13.1"
+  },
+  "scripts": {
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "lint": "npm --prefix app run lint",
+    "preview": "npm --prefix app run preview"
   }
 }

@@ -70,14 +70,14 @@
 
 @media (max-width: 720px) {
     .home__body{
-        gap: 64px;
+        gap: 44px;
         padding: 40px 16px 72px;
     }
 }
 
 @media (max-width: 420px) {
     .home__body{
-        gap: 52px;
+        gap: 38px;
         padding: 34px 12px 60px;
     }
 

@@ -8,11 +8,13 @@ import { submitDinnerSelection } from "./ApplicationSubmit";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
+import { useI18n } from "../../i18n";
 
 const TIERS: PackageTier[] = ["silver", "gold", "vip", "custom"];
 
 export default function JoinDinners() {
     const navigate = useNavigate();
+    const { t, lang } = useI18n();
     const [dinners, setDinners] = useState<Dinner[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -35,10 +37,10 @@ export default function JoinDinners() {
         try {
             const res = await fetch(`${API_BASE_URL}/api/dinners/info`);
             const data = await res.json();
-            if (!res.ok) throw new Error(data?.message || "Failed to load dinners");
+            if (!res.ok) throw new Error(data?.message || t("join.step2.loadFailed"));
             setDinners(data.dinners ?? []);
         } catch (e) {
-            setError(e instanceof Error ? e.message : "Request failed.");
+            setError(e instanceof Error ? e.message : t("join.step2.requestFailed"));
         } finally {
             setLoading(false);
         }
@@ -48,15 +50,21 @@ export default function JoinDinners() {
         void fetchDinners();
     }, []);
 
+    const locale = lang === "ru" ? "ru-RU" : lang === "hy" ? "hy-AM" : "en-US";
+
     const formatPrice = (value: number | null) => {
-        if (value === null) return "Unavailable";
-        return `$${value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+        if (value === null) return t("join.step2.unavailable");
+        return new Intl.NumberFormat(locale, {
+            style: "currency",
+            currency: "AMD",
+            maximumFractionDigits: 0,
+        }).format(value);
     };
 
     const formatDate = (value: string) =>
         Number.isNaN(new Date(value).getTime())
-            ? "Date to be announced"
-            : new Intl.DateTimeFormat("en-US", {
+            ? t("join.step2.dateTba")
+            : new Intl.DateTimeFormat(locale, {
                 weekday: "short",
                 month: "short",
                 day: "numeric",
@@ -66,22 +74,22 @@ export default function JoinDinners() {
     const getVenueLabel = (rawLocation: string) => {
         const value = rawLocation?.trim().toLowerCase();
         if (!value || value === "unknown" || value === "tba" || value === "to be announced") {
-            return "Location shared after confirmation";
+            return t("join.step2.locationAfterConfirm");
         }
         return rawLocation;
     };
 
     const getAvailabilityLabel = (dinner: Dinner) => {
         if (typeof dinner.places !== "number" || dinner.places <= 0) {
-            return "Seats updated on request";
+            return t("join.step2.seatsOnRequest");
         }
 
         const taken = typeof dinner.alreadyRegistered === "number" ? dinner.alreadyRegistered : 0;
         const left = Math.max(dinner.places - taken, 0);
 
-        if (left === 0) return "Waitlist available";
-        if (left <= 4) return `${left} seats left`;
-        return "Limited seats";
+        if (left === 0) return t("join.step2.waitlist");
+        if (left <= 4) return t("join.step2.seatsLeft", { count: left });
+        return t("join.step2.limitedSeats");
     };
 
     const getPriceForTier = (dinner: Dinner, packageTier: PackageTier) => {
@@ -117,7 +125,7 @@ export default function JoinDinners() {
         if (!chosenPackage) return;
         const userId = sessionStorage.getItem("joinUserId");
         if (!userId) {
-            setSaveError("Session expired. Please complete step 1 again.");
+            setSaveError(t("join.step2.sessionExpired"));
             navigate("/join", { replace: true });
             return;
         }
@@ -143,7 +151,7 @@ export default function JoinDinners() {
 
             setShowSuccessCard(true);
         } catch (e) {
-            setSaveError(e instanceof Error ? e.message : "Failed to save selection.");
+            setSaveError(e instanceof Error ? e.message : t("join.step2.saveFailed"));
         } finally {
             setSaving(false);
         }
@@ -165,15 +173,15 @@ export default function JoinDinners() {
                             <AccessTimeIcon />
                         </div>
 
-                        <h2 className="join__success-title">Application Received</h2>
-                        <p className="join__success-subtitle">You will be notified privately.</p>
+                        <h2 className="join__success-title">{t("join.step2.success.title")}</h2>
+                        <p className="join__success-subtitle">{t("join.step2.success.subtitle")}</p>
 
                         <div className="join__success-next">
-                            <h3>What happens next?</h3>
+                            <h3>{t("join.step2.success.nextTitle")}</h3>
                             <ol>
-                                <li>Our team will review your application as soon as possible</li>
-                                <li>We’ll confirm your reservation by email or phone.</li>
-                                <li>If accepted, you'll get exclusive access to the event details</li>
+                                <li>{t("join.step2.success.next1")}</li>
+                                <li>{t("join.step2.success.next2")}</li>
+                                <li>{t("join.step2.success.next3")}</li>
                             </ol>
                         </div>
 
@@ -184,7 +192,7 @@ export default function JoinDinners() {
                             rel="noreferrer"
                         >
                             <TelegramIcon />
-                            Join Telegram For Bonuses
+                            {t("join.step2.success.telegram")}
                         </a>
 
                         <button
@@ -193,7 +201,7 @@ export default function JoinDinners() {
                             onClick={handleReturnHome}
                         >
                             <HomeOutlinedIcon />
-                            Return Home
+                            {t("join.step2.success.home")}
                         </button>
                     </div>
                 ) : (
@@ -202,27 +210,27 @@ export default function JoinDinners() {
                         <img className="join__logo" src="/logo__1_-removebg-preview.webp" alt="Secret Dinner logo" />
                     </div>
 
-                    <p className="join__step-chip">Step 2 of 2</p>
-                    <h2 className="join__dinners-title">Choose Your Evening</h2>
+                    <p className="join__step-chip">{t("join.step2.stepChip")}</p>
+                    <h2 className="join__dinners-title">{t("join.step2.title")}</h2>
                     <p className="join__dinners-subtitle">
-                        Pick a dinner first, then choose your package tier. Your selection is saved instantly.
+                        {t("join.step2.subtitle")}
                     </p>
                     <p className="join__micro-hint">
-                        Tip: clicking a dinner card preselects the first available package or Custom.
+                        {t("join.step2.tip")}
                     </p>
 
-                    {loading && <p className="join__state">Loading available dinners...</p>}
+                    {loading && <p className="join__state">{t("join.step2.loading")}</p>}
                     {error && (
                         <div className="join__state join__state--error">
                             <p>{error}</p>
                             <button type="button" className="join__retry-btn" onClick={() => void fetchDinners()}>
-                                Retry
+                                {t("join.step2.retry")}
                             </button>
                         </div>
                     )}
 
                     {!loading && !error && dinners.length === 0 && (
-                        <p className="join__state">No dinners available right now.</p>
+                        <p className="join__state">{t("join.step2.none")}</p>
                     )}
 
                     {!loading && !error && dinners.length > 0 && (
@@ -255,7 +263,7 @@ export default function JoinDinners() {
                                         </div>
                                         <p className="join__dinner-availability">{getAvailabilityLabel(dinner)}</p>
                                         <p className="join__dinner-description">{dinner.description}</p>
-                                        {isSelected && <span className="join__picked-badge">Selected Dinner</span>}
+                                        {isSelected && <span className="join__picked-badge">{t("join.step2.selectedDinner")}</span>}
 
                                         <div className="join__package-row">
                                             {TIERS.map((tier) => {
@@ -281,9 +289,9 @@ export default function JoinDinners() {
                                                         }}
                                                         disabled={unavailable}
                                                     >
-                                                        <span className="join__tier-label">{tier.toUpperCase()}</span>
+                                                        <span className="join__tier-label">{t(`join.tier.${tier}`)}</span>
                                                         <span className="join__tier-price">
-                                                            {tier === "custom" ? "Tailored" : formatPrice(price)}
+                                                            {tier === "custom" ? t("join.step2.tailored") : formatPrice(price)}
                                                         </span>
                                                     </button>
                                                 );
@@ -298,28 +306,28 @@ export default function JoinDinners() {
                     <div className="join__selection">
                         {selectedDinner && selectedPackage ? (
                             <p>
-                                Selected: <strong>{getVenueLabel(selectedDinner.location)}</strong> ·{" "}
+                                {t("join.step2.selectionPrefix")} <strong>{getVenueLabel(selectedDinner.location)}</strong> ·{" "}
                                 <strong>{formatDate(selectedDinner.dinnerDate)}</strong> ·{" "}
-                                <strong>{selectedPackage.toUpperCase()}</strong> (
+                                <strong>{t(`join.tier.${selectedPackage}`)}</strong> (
                                 {selectedPackage === "custom"
-                                    ? "Tailored"
+                                    ? t("join.step2.tailored")
                                     : formatPrice(getPriceForTier(selectedDinner, selectedPackage))})
                             </p>
                         ) : (
-                            <p>Choose one dinner and one package to continue.</p>
+                            <p>{t("join.step2.chooseToContinue")}</p>
                         )}
                     </div>
                     {saveError && <p className="join__state join__state--error">{saveError}</p>}
 
                     <div className="join__actions">
-                        <Link className="join__btn join__btn--back" to="/join">Back</Link>
+                        <Link className="join__btn join__btn--back" to="/join">{t("join.step2.back")}</Link>
                         <button
                             className={`join__btn join__btn--primary ${(!canContinue || saving) ? "join__btn--disabled" : ""}`}
                             type="button"
                             disabled={!canContinue || saving}
                             onClick={() => void handleSaveSelection()}
                         >
-                            {saving ? "Saving..." : "Save & Continue"}
+                            {saving ? t("join.step2.saving") : t("join.step2.saveContinue")}
                         </button>
                     </div>
                 </div>

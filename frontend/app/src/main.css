@@ -47,7 +47,7 @@
   --font-display: "Playfair Display", "Bodoni MT", "Times New Roman", serif;
   --font-body: "Manrope", "Segoe UI", sans-serif;
 
-  --sections-space: clamp(3rem, 8vw,7rem)
+  --sections-space: clamp(1.7rem, 4.8vw, 4.1rem)
 }
 
 body{

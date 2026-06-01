@@ -16,14 +16,20 @@ export type Section ={
     description: string;
 } 
 
-export const aboutSection: Section = {
-    title :"How It Works",
-    description: "Four simple steps to enter an exclusive world",
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+export function getAboutSection(t: Translator): Section {
+    return {
+        title: t("home.section.howItWorks.title"),
+        description: t("home.section.howItWorks.desc"),
+    };
 }
 
-export const membershipSection: Section = {
-    title : "Membership Tiers",
-    description: "Choose your level of exclusivity",
+export function getMembershipSection(t: Translator): Section {
+    return {
+        title: t("home.section.membership.title"),
+        description: t("home.section.membership.desc"),
+    };
 }
 
 
@@ -40,25 +46,27 @@ export function SectionTitles({title,description}: Section) {
     )
 }
 
-export const cards:  ExperienceCard[] = [
-  {
-    icon: <RestaurantIcon />,
-    title: 'Refined Dining',
-    description: 'Enjoy a premium dinner experience in carefully selected venues with exceptional food and atmosphere.',
-  },
-  {
-    icon: <GroupsIcon />,
-    title: 'Come As You Are',
-    description: 'Join with your partner, friends, or on your own—just like any great night out.',
-  },
-  {
-    icon: <AutoAwesomeIcon />,
-    title: 'Thoughtful Crowd',
-    description: 'Dine among a curated mix of interesting people, without the pressure of formal networking.',
-  },
-  {
-    icon: <ForumIcon />,
-    title: 'Natural Connections',
-    description: 'Conversations happen organically in a relaxed, restaurant-style setting.',
-  }
-]
+export function getExperienceCards(t: Translator): ExperienceCard[] {
+  return [
+    {
+      icon: <RestaurantIcon />,
+      title: t("home.experience.card1.title"),
+      description: t("home.experience.card1.desc"),
+    },
+    {
+      icon: <GroupsIcon />,
+      title: t("home.experience.card2.title"),
+      description: t("home.experience.card2.desc"),
+    },
+    {
+      icon: <AutoAwesomeIcon />,
+      title: t("home.experience.card3.title"),
+      description: t("home.experience.card3.desc"),
+    },
+    {
+      icon: <ForumIcon />,
+      title: t("home.experience.card4.title"),
+      description: t("home.experience.card4.desc"),
+    },
+  ];
+}
