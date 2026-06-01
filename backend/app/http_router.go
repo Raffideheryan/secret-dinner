@@ -63,6 +63,9 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 	admin.Put("/dinners/:id", l.requireAdmin(), l.updateAdminDinnerHandler())
 	admin.Delete("/dinners/:id", l.requireAdmin(), l.deleteAdminDinnerHandler())
 	admin.Post("/dinners/sync", l.requireAdmin(), l.syncAdminDinnersHandler())
+	admin.Get("/dishes/types", l.requireAdmin(), l.listAdminDishTypesHandler())
+	admin.Get("/dishes", l.requireAdmin(), l.listAdminDishesHandler())
+	admin.Post("/dishes", l.requireAdmin(), l.createAdminDishHandler())
 
 }
 

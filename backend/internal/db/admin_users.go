@@ -206,6 +206,14 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 			u.updated_at,
 			COALESCE(COUNT(ru.id), 0) AS orders_count,
 			MAX(ru.created_at) AS last_registered_at,
+			COALESCE((
+				SELECT pi.table_preference
+				FROM registered_users ru2
+				JOIN package_info pi ON pi.id = ru2.package_info_id
+				WHERE ru2.user_id = u.id
+				ORDER BY ru2.created_at DESC
+				LIMIT 1
+			), '') AS last_table_preference,
 			EXISTS (
 				SELECT 1
 				FROM blocked_users bu
@@ -250,6 +258,7 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 			&item.UpdatedAt,
 			&item.OrdersCount,
 			&lastRegistered,
+			&item.LastTablePreference,
 			&item.BlockedActive,
 		); err != nil {
 			return nil, err

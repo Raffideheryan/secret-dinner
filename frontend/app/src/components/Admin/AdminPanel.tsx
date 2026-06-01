@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   adminLogout,
+  createAdminDish,
   createAdminDinner,
   deleteAdminDinner,
+  getAdminDishesByType,
+  getAdminDishTypes,
   getAdminLandingUsers,
   getAdminTelegramUsers,
   getAdminDinners,
   getAdminPanel,
   syncAdminDinners,
+  type AdminDishItem,
   type AdminDinner,
   type AdminLandingUser,
   type AdminLandingUsersSummary,
@@ -22,7 +26,7 @@ import {
 } from "../../admin/api";
 import "./admin.css";
 
-type AdminSection = "dashboard" | "landing" | "telegram" | "insights" | "users" | "dinners" | "settings";
+type AdminSection = "dashboard" | "landing" | "telegram" | "insights" | "users" | "dinners" | "dishes" | "settings";
 type PackageBar = { label: string; value: number; height: number };
 type MetricItem = { label: string; value: string; hint?: string };
 type DualTrendBar = {
@@ -41,6 +45,83 @@ type SparklineGeometry = {
   linePath: string;
   areaPath: string;
 };
+
+function DishTypeSelect({
+  value,
+  options,
+  placeholder,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  options: string[];
+  placeholder?: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && rootRef.current && !rootRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const label = value || placeholder || "Select type";
+
+  return (
+    <div className="admin-select" ref={rootRef}>
+      <button
+        className="admin-select__btn admin-dinner-input"
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={label}
+      >
+        <span className="admin-select__value">{label}</span>
+        <span className="admin-select__caret" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="admin-select__menu" role="listbox" aria-label="Dish types">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              role="option"
+              aria-selected={opt === value}
+              className={opt === value ? "admin-select__item admin-select__item--active" : "admin-select__item"}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+              title={opt}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 type DinnerFormState = {
   id?: number;
   description: string;
@@ -67,6 +148,13 @@ type SettingsFormState = {
   allowAdminUserStatusEdits: boolean;
 };
 type UsersSource = "landing" | "telegram";
+type DishFormState = {
+  dishType: string;
+  nameEng: string;
+  nameRus: string;
+  nameArm: string;
+  price: string;
+};
 
 const sectionLabels: Record<AdminSection, string> = {
   dashboard: "Dashboard",
@@ -75,6 +163,7 @@ const sectionLabels: Record<AdminSection, string> = {
   insights: "Insights",
   users: "Users",
   dinners: "Dinners",
+  dishes: "Dishes",
   settings: "Settings",
 };
 
@@ -85,6 +174,7 @@ const sectionHints: Record<AdminSection, string> = {
   insights: "Deep analytical charts for timing, demand, and risk patterns.",
   users: "User-level monitoring and status operations.",
   dinners: "Dinner catalog management across both landing and Telegram.",
+  dishes: "Custom menu dishes (used in Telegram custom menu).",
   settings: "Runtime controls, rate limits, and operational switches.",
 };
 
@@ -97,6 +187,13 @@ const emptyDinnerForm: DinnerFormState = {
   goldPrice: "",
   vipPrice: "",
   expired: false,
+};
+const emptyDishForm: DishFormState = {
+  dishType: "",
+  nameEng: "",
+  nameRus: "",
+  nameArm: "",
+  price: "",
 };
 const USERS_PAGE_SIZE = 30;
 
@@ -215,6 +312,17 @@ function formatDateLabel(value?: string) {
   }).format(parsed);
 }
 
+function formatTablePreference(value?: string) {
+  switch ((value ?? "").trim().toLowerCase()) {
+    case "shared":
+      return "Shared";
+    case "private":
+      return "Separate";
+    default:
+      return "—";
+  }
+}
+
 function toDateInputValue(value?: string) {
   if (!value) {
     return "";
@@ -305,6 +413,13 @@ export default function AdminPanel() {
   const [dinnerDeleteTarget, setDinnerDeleteTarget] = useState<AdminDinner | null>(null);
   const [dinnerFormError, setDinnerFormError] = useState("");
   const [dinnerForm, setDinnerForm] = useState<DinnerFormState>(emptyDinnerForm);
+  const [dishTypes, setDishTypes] = useState<string[]>([]);
+  const [dishType, setDishType] = useState<string>("");
+  const [dishes, setDishes] = useState<AdminDishItem[]>([]);
+  const [dishesLoading, setDishesLoading] = useState(false);
+  const [dishesError, setDishesError] = useState("");
+  const [dishSaving, setDishSaving] = useState(false);
+  const [dishForm, setDishForm] = useState<DishFormState>(emptyDishForm);
   const [settingsForm, setSettingsForm] = useState<SettingsFormState | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -408,6 +523,57 @@ export default function AdminPanel() {
     }
   }, [activeSection]);
 
+  const loadDishTypes = async () => {
+    setDishesError("");
+    setDishesLoading(true);
+    try {
+      const types = await getAdminDishTypes();
+      setDishTypes(types);
+      if (!dishType && types.length > 0) {
+        setDishType(types[0] ?? "");
+        setDishForm((prev) => ({ ...prev, dishType: types[0] ?? "" }));
+      }
+    } catch (err) {
+      setDishesError(err instanceof Error ? err.message : "failed to load dish types");
+    } finally {
+      setDishesLoading(false);
+    }
+  };
+
+  const loadDishes = async (type: string) => {
+    if (!type) {
+      setDishes([]);
+      return;
+    }
+    setDishesError("");
+    setDishesLoading(true);
+    try {
+      const items = await getAdminDishesByType(type);
+      setDishes(items);
+    } catch (err) {
+      setDishesError(err instanceof Error ? err.message : "failed to load dishes");
+    } finally {
+      setDishesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection !== "dishes") {
+      return;
+    }
+    void loadDishTypes();
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "dishes") {
+      return;
+    }
+    if (!dishType) {
+      return;
+    }
+    void loadDishes(dishType);
+  }, [activeSection, dishType]);
+
   useEffect(() => {
     if (activeSection !== "users") {
       return;
@@ -471,6 +637,13 @@ export default function AdminPanel() {
       await loadUsers(false);
       return;
     }
+    if (activeSection === "dishes") {
+      await loadDishTypes();
+      if (dishType) {
+        await loadDishes(dishType);
+      }
+      return;
+    }
     await loadPanel(true);
   };
 
@@ -528,6 +701,33 @@ export default function AdminPanel() {
     } catch {
       setInfoMessage("Could not copy");
       window.setTimeout(() => setInfoMessage(""), 1500);
+    }
+  };
+
+  const handleCreateDish = async () => {
+    setDishesError("");
+    setDishSaving(true);
+    try {
+      const price = Number(dishForm.price);
+      const created = await createAdminDish({
+        dishType: dishForm.dishType,
+        nameEng: dishForm.nameEng.trim(),
+        nameRus: dishForm.nameRus.trim(),
+        nameArm: dishForm.nameArm.trim(),
+        price,
+      });
+      setInfoMessage("Dish created");
+      window.setTimeout(() => setInfoMessage(""), 1500);
+      if (created.dishType === dishType) {
+        setDishes((prev) => [created, ...prev]);
+      } else if (dishType) {
+        await loadDishes(dishType);
+      }
+      setDishForm((prev) => ({ ...emptyDishForm, dishType: prev.dishType || dishType }));
+    } catch (err) {
+      setDishesError(err instanceof Error ? err.message : "failed to create dish");
+    } finally {
+      setDishSaving(false);
     }
   };
 
@@ -969,6 +1169,17 @@ export default function AdminPanel() {
     });
   }, [dinners, searchQuery]);
 
+  const dishCards = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q === "") {
+      return dishes;
+    }
+    return dishes.filter((item) => {
+      const haystack = `${item.id} ${item.dishType} ${item.nameEng} ${item.nameRus} ${item.nameArm}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [dishes, searchQuery]);
+
   const currentUsers = usersSource === "landing" ? landingUsers : telegramUsers;
   const usersSummaryCards: MetricItem[] =
     usersSource === "landing"
@@ -1071,6 +1282,12 @@ export default function AdminPanel() {
       { label: "Total registrations", value: `${dinnerRegistrationsTotal}` },
       { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "true" : "false" },
     ]),
+    dishes: filterItems([
+      { label: "Dish types", value: `${dishTypes.length}` },
+      { label: "Selected type", value: dishType || "—" },
+      { label: "Dishes loaded", value: `${dishes.length}` },
+      { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "true" : "false" },
+    ]),
     settings: filterItems([
       { label: "Admin user", value: meta.username ?? "—" },
       { label: "Frontend origin", value: settings.frontendOrigin || "—" },
@@ -1145,10 +1362,10 @@ export default function AdminPanel() {
               className="admin-toolbar__btn"
               type="button"
               onClick={handleRefresh}
-              disabled={loading || refreshing || dinnersLoading}
+              disabled={loading || refreshing || dinnersLoading || dishesLoading}
               title="Reload the currently active section data."
             >
-              {refreshing || dinnersLoading ? "Refreshing..." : "Refresh"}
+              {refreshing || dinnersLoading || dishesLoading ? "Refreshing..." : "Refresh"}
             </button>
             <button
               className="admin-toolbar__btn"
@@ -2040,19 +2257,20 @@ export default function AdminPanel() {
                     ) : null}
 
                     {usersSource === "telegram" && currentUsers.length > 0 ? (
-                      <div className="admin-table-wrap">
-                        <table className="admin-table admin-table--stack">
-                          <thead>
-                            <tr>
-                              <th>User</th>
-                              <th>Profile</th>
-                              <th>Payments</th>
-                              <th>Orders</th>
-                              <th>Terms</th>
-                              <th>Blocked</th>
-                              <th>Created</th>
-                            </tr>
-                          </thead>
+	                      <div className="admin-table-wrap">
+	                        <table className="admin-table admin-table--stack">
+	                          <thead>
+	                            <tr>
+	                              <th>User</th>
+	                              <th>Profile</th>
+	                              <th>Payments</th>
+	                              <th>Orders</th>
+	                              <th>Table</th>
+	                              <th>Terms</th>
+	                              <th>Blocked</th>
+	                              <th>Created</th>
+	                            </tr>
+	                          </thead>
                           <tbody>
                             {telegramUsers.map((item) => (
                               <tr key={item.id}>
@@ -2065,14 +2283,15 @@ export default function AdminPanel() {
                                     {[item.name, item.surname].filter(Boolean).join(" ").trim() || "—"}
                                   </div>
                                   <div className="admin-users__cell-sub">{item.phone || "No phone"}</div>
-                                </td>
-                                <td data-label="Payments">{item.totalPayments.toFixed(2)}</td>
-                                <td data-label="Orders">{item.ordersCount}</td>
-                                <td data-label="Terms">
-                                  <span className={`admin-user-badge ${item.termsAccepted ? "admin-user-badge--ok" : "admin-user-badge--warn"}`}>
-                                    {item.termsAccepted ? "accepted" : "pending"}
-                                  </span>
-                                </td>
+	                                </td>
+	                                <td data-label="Payments">{item.totalPayments.toFixed(2)}</td>
+	                                <td data-label="Orders">{item.ordersCount}</td>
+	                                <td data-label="Table">{formatTablePreference(item.lastTablePreference)}</td>
+	                                <td data-label="Terms">
+	                                  <span className={`admin-user-badge ${item.termsAccepted ? "admin-user-badge--ok" : "admin-user-badge--warn"}`}>
+	                                    {item.termsAccepted ? "accepted" : "pending"}
+	                                  </span>
+	                                </td>
                                 <td data-label="Blocked">
                                   <span className={`admin-user-badge ${item.blockedActive ? "admin-user-badge--danger" : "admin-user-badge--ok"}`}>
                                     {item.blockedActive ? "blocked" : "active"}
@@ -2091,6 +2310,123 @@ export default function AdminPanel() {
                         {usersLoading ? "Loading..." : usersHasMore ? "Load more" : "No more users"}
                       </button>
                     </div>
+                  </article>
+                </section>
+              ) : null}
+
+              {activeSection === "dishes" ? (
+                <section className="admin-info-grid admin-info-grid--single">
+                  <article className="admin-widget admin-widget--fit admin-info-card">
+                    <div className="admin-widget__header">
+                      <h2>Custom Menu Dishes</h2>
+                      <span>Add dishes for Telegram custom menu</span>
+                    </div>
+
+                    {!data?.settings.telegramDatabaseConfigured ? (
+                      <p className="admin-dashboard__state">Set `TELEGRAM_DATABASE_URL` in backend to manage dishes.</p>
+                    ) : null}
+
+                        {data?.settings.telegramDatabaseConfigured ? (
+                      <>
+                        <div className="admin-dinner-form">
+                          <DishTypeSelect
+                            value={dishType}
+                            options={dishTypes}
+                            placeholder={dishTypes.length === 0 ? "Loading dish types..." : "Choose dish type"}
+                            disabled={dishTypes.length === 0}
+                            onChange={(next) => {
+                              setDishType(next);
+                              setDishForm((prev) => ({ ...prev, dishType: next }));
+                            }}
+                          />
+                        </div>
+
+                        {dishesError ? <p className="admin-auth__error">{dishesError}</p> : null}
+
+                        <div className="admin-table-wrap">
+                          <table className="admin-table admin-table--stack">
+                            <thead>
+                              <tr>
+                                <th>ID</th>
+                                <th>English</th>
+                                <th>Russian</th>
+                                <th>Armenian</th>
+                                <th>Price (AMD)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dishesLoading ? (
+                                <tr>
+                                  <td colSpan={5}>Loading...</td>
+                                </tr>
+                              ) : null}
+                              {!dishesLoading && dishCards.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5}>No dishes found for this type.</td>
+                                </tr>
+                              ) : null}
+                              {!dishesLoading
+                                ? dishCards.map((item) => (
+                                    <tr key={item.id}>
+                                      <td data-label="ID">#{item.id}</td>
+                                      <td data-label="English">{item.nameEng}</td>
+                                      <td data-label="Russian">{item.nameRus}</td>
+                                      <td data-label="Armenian">{item.nameArm}</td>
+                                      <td data-label="Price">{item.price.toFixed(2)}</td>
+                                    </tr>
+                                  ))
+                                : null}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="admin-widget__header" style={{ marginTop: 18 }}>
+                          <h2>Add new dish</h2>
+                          <span>Visible in Telegram bot</span>
+                        </div>
+                        <div className="admin-dinner-form">
+                          <DishTypeSelect
+                            value={dishForm.dishType}
+                            options={dishTypes}
+                            placeholder="Dish type"
+                            disabled={dishTypes.length === 0}
+                            onChange={(next) => setDishForm((prev) => ({ ...prev, dishType: next }))}
+                          />
+                          <input
+                            className="admin-dinner-input"
+                            placeholder="Name (English)"
+                            value={dishForm.nameEng}
+                            onChange={(event) => setDishForm((prev) => ({ ...prev, nameEng: event.target.value }))}
+                          />
+                          <input
+                            className="admin-dinner-input"
+                            placeholder="Name (Russian)"
+                            value={dishForm.nameRus}
+                            onChange={(event) => setDishForm((prev) => ({ ...prev, nameRus: event.target.value }))}
+                          />
+                          <input
+                            className="admin-dinner-input"
+                            placeholder="Name (Armenian)"
+                            value={dishForm.nameArm}
+                            onChange={(event) => setDishForm((prev) => ({ ...prev, nameArm: event.target.value }))}
+                          />
+                          <input
+                            className="admin-dinner-input"
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            placeholder="Price (AMD)"
+                            value={dishForm.price}
+                            onChange={(event) => setDishForm((prev) => ({ ...prev, price: event.target.value }))}
+                          />
+                          <div className="admin-dinner-actions">
+                            <button className="admin-toolbar__btn" type="button" onClick={handleCreateDish} disabled={dishSaving}>
+                              {dishSaving ? "Saving..." : "Create dish"}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
                   </article>
                 </section>
               ) : null}

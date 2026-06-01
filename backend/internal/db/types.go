@@ -14,6 +14,7 @@ type Connections struct {
 	Dinners       DinnersDB
 	LandingStats  LandingStatsDB
 	TelegramStats TelegramStatsDB
+	CustomMenu    CustomMenuDB
 }
 
 type PackageBreakdown struct {
@@ -181,21 +182,22 @@ type LandingUsersSummary struct {
 }
 
 type TelegramUserRecord struct {
-	ID               int64      `json:"id"`
-	Username         string     `json:"username"`
-	Name             string     `json:"name"`
-	Surname          string     `json:"surname"`
-	Phone            string     `json:"phone"`
-	Language         string     `json:"language"`
-	TermsAccepted    bool       `json:"termsAccepted"`
-	TotalPayments    float64    `json:"totalPayments"`
-	AttendanceCount  int        `json:"attendanceCount"`
-	FriendsInvited   int        `json:"friendsInvited"`
-	OrdersCount      int64      `json:"ordersCount"`
-	BlockedActive    bool       `json:"blockedActive"`
-	LastRegisteredAt *time.Time `json:"lastRegisteredAt,omitempty"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
+	ID                  int64      `json:"id"`
+	Username            string     `json:"username"`
+	Name                string     `json:"name"`
+	Surname             string     `json:"surname"`
+	Phone               string     `json:"phone"`
+	Language            string     `json:"language"`
+	TermsAccepted       bool       `json:"termsAccepted"`
+	TotalPayments       float64    `json:"totalPayments"`
+	AttendanceCount     int        `json:"attendanceCount"`
+	FriendsInvited      int        `json:"friendsInvited"`
+	OrdersCount         int64      `json:"ordersCount"`
+	BlockedActive       bool       `json:"blockedActive"`
+	LastRegisteredAt    *time.Time `json:"lastRegisteredAt,omitempty"`
+	LastTablePreference string     `json:"lastTablePreference"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
 }
 
 type TelegramUsersSummary struct {

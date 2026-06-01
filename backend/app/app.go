@@ -87,6 +87,12 @@ func (l *landingApp) Shutdown() error {
 			return err
 		}
 	}
+	if l.connections.CustomMenu != nil {
+		if err := l.connections.CustomMenu.Close(); err != nil {
+			log.WithError(err).Error("Error closing custom menu connection")
+			return err
+		}
+	}
 	log.Info("Connections closed.")
 	return nil
 }
@@ -151,6 +157,17 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 		}
 		connections.TelegramStats = db.NewTelegramStatsDB(telegramStatsConn)
 		connections.AdminUsers = db.NewAdminUsersDB(landingUsersConn, telegramStatsConn)
+
+		customMenuConn, err := openPostgresConnection(telegramURL)
+		if err != nil {
+			landingUsersConn.Close()
+			landingDinnersConn.Close()
+			landingStatsConn.Close()
+			telegramDinnersConn.Close()
+			telegramStatsConn.Close()
+			return db.Connections{}, err
+		}
+		connections.CustomMenu = db.NewCustomMenuDB(customMenuConn)
 	}
 
 	return connections, nil

@@ -70,6 +70,7 @@ export type AdminTelegramUser = {
   ordersCount: number;
   blockedActive: boolean;
   lastRegisteredAt?: string;
+  lastTablePreference: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -238,6 +239,19 @@ export type AdminPanelResponse = {
       allowAdminUserStatusEdits: boolean;
     };
   };
+};
+
+export type AdminDishType = string;
+
+export type AdminDishItem = {
+  id: number;
+  nameArm: string;
+  nameRus: string;
+  nameEng: string;
+  price: number;
+  dishType: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AdminSettingsPayload = {
@@ -484,4 +498,58 @@ export async function updateAdminSettings(payload: AdminSettingsPayload): Promis
 
   const data = (await response.json()) as { settings: AdminPanelResponse["settings"] };
   return data.settings;
+}
+
+export async function getAdminDishTypes(): Promise<AdminDishType[]> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/dishes/types`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { types?: AdminDishType[] };
+  return data.types ?? [];
+}
+
+export async function getAdminDishesByType(dishType: string): Promise<AdminDishItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/dishes?type=${encodeURIComponent(dishType)}`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { items?: AdminDishItem[] };
+  return data.items ?? [];
+}
+
+export type AdminDishCreatePayload = {
+  nameArm: string;
+  nameRus: string;
+  nameEng: string;
+  price: number;
+  dishType: string;
+};
+
+export async function createAdminDish(payload: AdminDishCreatePayload): Promise<AdminDishItem> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/dishes`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { item: AdminDishItem };
+  return data.item;
 }
