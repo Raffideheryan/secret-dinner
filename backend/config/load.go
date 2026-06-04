@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"os"
 	"strconv"
 
@@ -16,7 +17,7 @@ import (
 var log = logrus.WithField("package", "config")
 
 func LoadConfig() (Config, error) {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.WithError(err).Error("Error while loading configs.")
 		return Config{}, err
 	}
@@ -42,7 +43,11 @@ func LoadConfig() (Config, error) {
 
 	listenAddr := os.Getenv("BACKEND_LISTEN_ADDR")
 	if listenAddr == "" {
-		listenAddr = ":8080"
+		if port := os.Getenv("PORT"); port != "" {
+			listenAddr = ":" + port
+		} else {
+			listenAddr = ":8080"
+		}
 	}
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
