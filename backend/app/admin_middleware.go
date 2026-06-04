@@ -48,7 +48,7 @@ func (l *landingApp) setAdminSessionCookie(c *fiber.Ctx, token string, expiresAt
 		Value:    token,
 		HTTPOnly: true,
 		Secure:   l.cfg.Admin.CookieSecure,
-		SameSite: "strict",
+		SameSite: adminCookieSameSite(l.cfg.Admin.CookieSecure),
 		Path:     "/",
 		Expires:  expiresAt,
 	})
@@ -60,9 +60,16 @@ func (l *landingApp) clearAdminSessionCookie(c *fiber.Ctx) {
 		Value:    "",
 		HTTPOnly: true,
 		Secure:   l.cfg.Admin.CookieSecure,
-		SameSite: "strict",
+		SameSite: adminCookieSameSite(l.cfg.Admin.CookieSecure),
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 	})
+}
+
+func adminCookieSameSite(secureCookie bool) string {
+	if secureCookie {
+		return "none"
+	}
+	return "lax"
 }

@@ -13,6 +13,17 @@ async function parseError(response: Response): Promise<string> {
   }
 }
 
+function adminUrl(path: string): string {
+  return `${API_BASE_URL}/api/admin${path}`;
+}
+
+function adminFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(adminUrl(path), {
+    ...init,
+    credentials: "include",
+  });
+}
+
 export type AdminMeResponse = {
   ok: boolean;
   username: string;
@@ -270,9 +281,8 @@ export type AdminSettingsPayload = {
 };
 
 export async function adminLogin(username: string, password: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
+  const response = await adminFetch("/login", {
     method: "POST",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -285,9 +295,8 @@ export async function adminLogin(username: string, password: string): Promise<vo
 }
 
 export async function adminLogout(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/logout`, {
+  const response = await adminFetch("/logout", {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -296,9 +305,8 @@ export async function adminLogout(): Promise<void> {
 }
 
 export async function adminMe(): Promise<AdminMeResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/me`, {
+  const response = await adminFetch("/me", {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -309,9 +317,8 @@ export async function adminMe(): Promise<AdminMeResponse> {
 }
 
 export async function getAdminPanel(): Promise<AdminPanelResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/panel`, {
+  const response = await adminFetch("/panel", {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -333,9 +340,8 @@ export type AdminDinnerUpsertPayload = {
 };
 
 export async function getAdminDinners(): Promise<AdminDinner[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dinners`, {
+  const response = await adminFetch("/dinners", {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -347,9 +353,8 @@ export async function getAdminDinners(): Promise<AdminDinner[]> {
 }
 
 export async function createAdminDinner(payload: AdminDinnerUpsertPayload): Promise<AdminDinner> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dinners`, {
+  const response = await adminFetch("/dinners", {
     method: "POST",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -365,9 +370,8 @@ export async function createAdminDinner(payload: AdminDinnerUpsertPayload): Prom
 }
 
 export async function updateAdminDinner(id: number, payload: AdminDinnerUpsertPayload): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dinners/${id}`, {
+  const response = await adminFetch(`/dinners/${id}`, {
     method: "PUT",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -380,9 +384,8 @@ export async function updateAdminDinner(id: number, payload: AdminDinnerUpsertPa
 }
 
 export async function deleteAdminDinner(id: number): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dinners/${id}`, {
+  const response = await adminFetch(`/dinners/${id}`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -391,9 +394,8 @@ export async function deleteAdminDinner(id: number): Promise<void> {
 }
 
 export async function syncAdminDinners(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dinners/sync`, {
+  const response = await adminFetch("/dinners/sync", {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -421,9 +423,8 @@ function buildQueryString(params: UserListQuery): string {
 export async function getAdminLandingUsers(
   params: UserListQuery = {}
 ): Promise<{ users: AdminLandingUser[]; summary: AdminLandingUsersSummary }> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/users/landing${buildQueryString(params)}`, {
+  const response = await adminFetch(`/users/landing${buildQueryString(params)}`, {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -444,9 +445,8 @@ export async function getAdminLandingUsers(
 export async function getAdminTelegramUsers(
   params: UserListQuery = {}
 ): Promise<{ users: AdminTelegramUser[]; summary: AdminTelegramUsersSummary }> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/users/telegram${buildQueryString(params)}`, {
+  const response = await adminFetch(`/users/telegram${buildQueryString(params)}`, {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -468,9 +468,8 @@ export async function updateAdminLandingUserStatus(
   userId: string,
   status: "open" | "completed"
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/users/landing/${encodeURIComponent(userId)}/status`, {
+  const response = await adminFetch(`/users/landing/${encodeURIComponent(userId)}/status`, {
     method: "PUT",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -483,9 +482,8 @@ export async function updateAdminLandingUserStatus(
 }
 
 export async function updateAdminSettings(payload: AdminSettingsPayload): Promise<AdminPanelResponse["settings"]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+  const response = await adminFetch("/settings", {
     method: "PUT",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -501,9 +499,8 @@ export async function updateAdminSettings(payload: AdminSettingsPayload): Promis
 }
 
 export async function getAdminDishTypes(): Promise<AdminDishType[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dishes/types`, {
+  const response = await adminFetch("/dishes/types", {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -515,9 +512,8 @@ export async function getAdminDishTypes(): Promise<AdminDishType[]> {
 }
 
 export async function getAdminDishesByType(dishType: string): Promise<AdminDishItem[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dishes?type=${encodeURIComponent(dishType)}`, {
+  const response = await adminFetch(`/dishes?type=${encodeURIComponent(dishType)}`, {
     method: "GET",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -537,9 +533,8 @@ export type AdminDishCreatePayload = {
 };
 
 export async function createAdminDish(payload: AdminDishCreatePayload): Promise<AdminDishItem> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/dishes`, {
+  const response = await adminFetch("/dishes", {
     method: "POST",
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
