@@ -4,7 +4,7 @@ import TelegramIcon from "@mui/icons-material/Telegram";
 import { useI18n } from "../../../i18n";
 
 type QuickLink = { label: string; sectionId: string };
-type LegalLink = { label: string };
+type LegalLink = { label: string; href: string };
 
 export default function Footer() {
     const { t } = useI18n();
@@ -17,9 +17,9 @@ export default function Footer() {
     ];
 
     const legalLinks: LegalLink[] = [
-        { label: t("footer.legal.privacy") },
-        { label: t("footer.legal.terms") },
-        { label: t("footer.legal.cookies") },
+        { label: t("footer.legal.privacy"), href: "/legal" },
+        { label: t("footer.legal.terms"), href: "/legal" },
+        { label: t("footer.legal.cookies"), href: "/legal" },
     ];
 
     const scrollToSection =(sectionID: string) =>{
@@ -86,7 +86,7 @@ export default function Footer() {
                         <ul className="footer__list">
                             {legalLinks.map((link) => (
                                 <li key={link.label}>
-                                    <a href="#">{link.label}</a>
+                                    <a href={link.href}>{link.label}</a>
                                 </li>
                             ))}
                         </ul>

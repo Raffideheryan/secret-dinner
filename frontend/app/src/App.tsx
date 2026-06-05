@@ -8,6 +8,7 @@ import Join from "./components/Join/Join"
 import JoinDinners from "./components/Join/ChooseDinner"
 import JoinFormGuard from "./components/Join/JoinFormGuard";
 import NotFound from "./components/NotFound/NotFound";
+import LegalPage from "./components/Legal/LegalPage";
 
 export default function App() {
   return (
@@ -15,7 +16,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
-          
+          <Route path="/legal" element={<LegalPage />} />
         </Route>
         <Route path="/join" element={<Join />} />
         <Route
