@@ -34,7 +34,10 @@ function splitLead(text: string): { lead: string; body: string } {
 }
 
 export default function Experience({cards}: ExperienceProps) {
-    const { ref, visible } = useInView<HTMLDivElement>();
+    const { ref, visible } = useInView<HTMLDivElement>({
+        threshold: 0.08,
+        rootMargin: "0px 0px -6% 0px",
+    });
     const { t } = useI18n();
 
     return (
