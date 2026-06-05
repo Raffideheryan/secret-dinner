@@ -1,6 +1,6 @@
 import "./navbar.css"
 import "./animations.css"
-import { Link } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import { useI18n, type Language } from "../../i18n";
@@ -18,6 +18,8 @@ export default function Navbar({ items }: { items: NavItem[] }) {
     const [langOpen, setLangOpen] = useState(false);
     const langMenuRef = useRef<HTMLDivElement | null>(null);
     const { lang, setLang, t } = useI18n();
+    const location = useLocation();
+    const navigate = useNavigate();
 
     const currentLangLabel = useMemo(() => {
         const entry = languages.find((l) => l.code === lang);
@@ -37,10 +39,18 @@ export default function Navbar({ items }: { items: NavItem[] }) {
 
     const handleLogoClick = (event: MouseEvent<HTMLAnchorElement>) => {
         event.preventDefault();
-        scrollToSection("hero");
+        if (location.pathname === "/") {
+            scrollToSection("hero");
+            return;
+        }
+        navigate("/");
     };
 
     const handleTitleClick = (title: string) => {
+        if (location.pathname !== "/") {
+            navigate(`/#${title}`);
+            return;
+        }
         scrollToSection(title);
     };
 
