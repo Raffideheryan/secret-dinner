@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { adminLogin } from "../../admin/api";
+import { AdminButton } from "./AdminUI";
 import "./admin.css";
 
 export default function AdminLogin() {
@@ -28,8 +29,9 @@ export default function AdminLogin() {
   return (
     <section className="admin-auth">
       <form className="admin-auth__card" onSubmit={handleSubmit}>
+        <p className="admin-auth__eyebrow">Secret Dinner Control Room</p>
         <h1 className="admin-auth__title">Admin Login</h1>
-        <p className="admin-auth__subtitle">Sign in to access the admin panel.</p>
+        <p className="admin-auth__subtitle">Sign in to monitor demand, bookings, diners, and operations.</p>
 
         <label className="admin-auth__label" htmlFor="admin-username">
           Username
@@ -59,9 +61,9 @@ export default function AdminLogin() {
 
         {error ? <p className="admin-auth__error">{error}</p> : null}
 
-        <button className="admin-auth__submit" type="submit" disabled={loading}>
+        <AdminButton className="admin-auth__submit" variant="primary" type="submit" disabled={loading}>
           {loading ? "Signing in..." : "Sign in"}
-        </button>
+        </AdminButton>
       </form>
     </section>
   );

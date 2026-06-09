@@ -151,4 +151,3 @@ func (r *customMenuRepo) CreateItem(input CreateCustomMenuItemInput) (CustomMenu
 	}
 	return item, nil
 }
-

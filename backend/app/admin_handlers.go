@@ -1,7 +1,9 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
+	"secret-dinner/internal/db"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -198,11 +200,25 @@ func (l *landingApp) updateSettingsHandler() fiber.Handler {
 		l.settings.Apply(update)
 
 		log.WithField("settings", fmt.Sprintf("%+v", l.settings.Snapshot())).Info("Admin settings updated")
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType: "settings_updated",
+			EntityType: "runtime_settings",
+			EntityID:   "singleton",
+			NewValue:   mustMarshalSettingsJSON(l.buildSettingsPayload()),
+		})
 		return c.JSON(fiber.Map{
 			"ok":       true,
 			"settings": l.buildSettingsPayload(),
 		})
 	}
+}
+
+func mustMarshalSettingsJSON(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 func (l *landingApp) buildSettingsPayload() fiber.Map {

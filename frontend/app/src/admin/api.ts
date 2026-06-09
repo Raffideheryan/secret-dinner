@@ -75,12 +75,20 @@ export type AdminTelegramUser = {
   phone: string;
   language: string;
   termsAccepted: boolean;
+  legalVersion: string;
+  acceptedLanguage: string;
+  acceptedAt?: string;
   totalPayments: number;
   attendanceCount: number;
   friendsInvited: number;
+  referralCode: string;
+  referralUsedCode: string;
+  points: number;
+  discount: number;
   ordersCount: number;
   blockedActive: boolean;
   lastRegisteredAt?: string;
+  lastApplicationStatus: string;
   lastTablePreference: string;
   createdAt: string;
   updatedAt: string;
@@ -91,6 +99,71 @@ export type AdminTelegramUsersSummary = {
   termsAccepted: number;
   payingUsers: number;
   blockedActive: number;
+};
+
+export type AdminTelegramApplicationStatus =
+  | "draft"
+  | "pending_application"
+  | "contacted"
+  | "approved"
+  | "rejected"
+  | "waiting_payment"
+  | "paid"
+  | "cancelled"
+  | "no_show";
+
+export type AdminTelegramApplication = {
+  packageInfoId: number;
+  publicCode: string;
+  userId: number;
+  username: string;
+  name: string;
+  surname: string;
+  phone: string;
+  language: string;
+  dinnerId: number;
+  dinnerTitle: string;
+  dinnerDate?: string;
+  packageCode: string;
+  packageLabel: string;
+  storedMenu: string;
+  guestCount: number;
+  price: number;
+  status: AdminTelegramApplicationStatus;
+  adminNote: string;
+  tablePreference: string;
+  termsAccepted: boolean;
+  legalVersion: string;
+  referralCode: string;
+  referralUsedCode: string;
+  points: number;
+  discount: number;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminTelegramApplicationsSummary = {
+  total: number;
+  pendingApplication: number;
+  approved: number;
+  waitingPayment: number;
+  paid: number;
+  cancelled: number;
+  rejected: number;
+  noShow: number;
+};
+
+export type AdminAuditLog = {
+  id: number;
+  adminUsername: string;
+  actionType: string;
+  entityType: string;
+  entityId: string;
+  previousValue: string;
+  newValue: string;
+  reason: string;
+  createdAt: string;
 };
 
 export type AdminPanelResponse = {
@@ -280,6 +353,12 @@ export type AdminSettingsPayload = {
   allowAdminUserStatusEdits?: boolean;
 };
 
+export type AdminTelegramApplicationUpdatePayload = {
+  status: AdminTelegramApplicationStatus;
+  note: string;
+  reason?: string;
+};
+
 export async function adminLogin(username: string, password: string): Promise<void> {
   const response = await adminFetch("/login", {
     method: "POST",
@@ -350,6 +429,78 @@ export async function getAdminDinners(): Promise<AdminDinner[]> {
 
   const data = (await response.json()) as { dinners?: AdminDinner[] };
   return data.dinners ?? [];
+}
+
+export async function getAdminTelegramApplications(params: {
+  search?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ applications: AdminTelegramApplication[]; summary: AdminTelegramApplicationsSummary }> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+
+  const response = await adminFetch(`/applications/telegram?${query.toString()}`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as {
+    applications?: AdminTelegramApplication[];
+    summary?: AdminTelegramApplicationsSummary;
+  };
+  return {
+    applications: data.applications ?? [],
+    summary: data.summary ?? {
+      total: 0,
+      pendingApplication: 0,
+      approved: 0,
+      waitingPayment: 0,
+      paid: 0,
+      cancelled: 0,
+      rejected: 0,
+      noShow: 0,
+    },
+  };
+}
+
+export async function updateAdminTelegramApplication(
+  id: number,
+  payload: AdminTelegramApplicationUpdatePayload
+): Promise<AdminTelegramApplication> {
+  const response = await adminFetch(`/applications/telegram/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { application: AdminTelegramApplication };
+  return data.application;
+}
+
+export async function getAdminAuditLogs(limit = 20): Promise<AdminAuditLog[]> {
+  const response = await adminFetch(`/audit-logs?limit=${limit}`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { logs?: AdminAuditLog[] };
+  return data.logs ?? [];
 }
 
 export async function createAdminDinner(payload: AdminDinnerUpsertPayload): Promise<AdminDinner> {

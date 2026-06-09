@@ -11,6 +11,8 @@ var log = logrus.WithField("package", "db")
 type Connections struct {
 	Users         UsersDB
 	AdminUsers    AdminUsersDB
+	AdminBookings AdminBookingsDB
+	AdminAudit    AdminAuditDB
 	Dinners       DinnersDB
 	LandingStats  LandingStatsDB
 	TelegramStats TelegramStatsDB
@@ -182,22 +184,30 @@ type LandingUsersSummary struct {
 }
 
 type TelegramUserRecord struct {
-	ID                  int64      `json:"id"`
-	Username            string     `json:"username"`
-	Name                string     `json:"name"`
-	Surname             string     `json:"surname"`
-	Phone               string     `json:"phone"`
-	Language            string     `json:"language"`
-	TermsAccepted       bool       `json:"termsAccepted"`
-	TotalPayments       float64    `json:"totalPayments"`
-	AttendanceCount     int        `json:"attendanceCount"`
-	FriendsInvited      int        `json:"friendsInvited"`
-	OrdersCount         int64      `json:"ordersCount"`
-	BlockedActive       bool       `json:"blockedActive"`
-	LastRegisteredAt    *time.Time `json:"lastRegisteredAt,omitempty"`
-	LastTablePreference string     `json:"lastTablePreference"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
+	ID                    int64      `json:"id"`
+	Username              string     `json:"username"`
+	Name                  string     `json:"name"`
+	Surname               string     `json:"surname"`
+	Phone                 string     `json:"phone"`
+	Language              string     `json:"language"`
+	TermsAccepted         bool       `json:"termsAccepted"`
+	LegalVersion          string     `json:"legalVersion"`
+	AcceptedLanguage      string     `json:"acceptedLanguage"`
+	AcceptedAt            *time.Time `json:"acceptedAt,omitempty"`
+	TotalPayments         float64    `json:"totalPayments"`
+	AttendanceCount       int        `json:"attendanceCount"`
+	FriendsInvited        int        `json:"friendsInvited"`
+	ReferralCode          string     `json:"referralCode"`
+	ReferralUsedCode      string     `json:"referralUsedCode"`
+	Points                int        `json:"points"`
+	Discount              int        `json:"discount"`
+	OrdersCount           int64      `json:"ordersCount"`
+	BlockedActive         bool       `json:"blockedActive"`
+	LastRegisteredAt      *time.Time `json:"lastRegisteredAt,omitempty"`
+	LastApplicationStatus string     `json:"lastApplicationStatus"`
+	LastTablePreference   string     `json:"lastTablePreference"`
+	CreatedAt             time.Time  `json:"createdAt"`
+	UpdatedAt             time.Time  `json:"updatedAt"`
 }
 
 type TelegramUsersSummary struct {
@@ -213,5 +223,83 @@ type AdminUsersDB interface {
 	UpdateLandingUserStatus(userID string, status string) error
 	ListTelegramUsers(params UserListParams) ([]TelegramUserRecord, error)
 	TelegramUsersSummary() (TelegramUsersSummary, error)
+	Close() error
+}
+
+type TelegramApplicationRecord struct {
+	PackageInfoID       int64      `json:"packageInfoId"`
+	PublicCode          string     `json:"publicCode"`
+	UserID              int64      `json:"userId"`
+	Username            string     `json:"username"`
+	Name                string     `json:"name"`
+	Surname             string     `json:"surname"`
+	Phone               string     `json:"phone"`
+	Language            string     `json:"language"`
+	DinnerID            int64      `json:"dinnerId"`
+	DinnerTitle         string     `json:"dinnerTitle"`
+	DinnerDate          *time.Time `json:"dinnerDate,omitempty"`
+	PackageCode         string     `json:"packageCode"`
+	PackageLabel        string     `json:"packageLabel"`
+	StoredMenu          string     `json:"storedMenu"`
+	GuestCount          int        `json:"guestCount"`
+	Price               float64    `json:"price"`
+	Status              string     `json:"status"`
+	AdminNote           string     `json:"adminNote"`
+	TablePreference     string     `json:"tablePreference"`
+	TermsAccepted       bool       `json:"termsAccepted"`
+	LegalVersion        string     `json:"legalVersion"`
+	ReferralCode        string     `json:"referralCode"`
+	ReferralUsedCode    string     `json:"referralUsedCode"`
+	Points              int        `json:"points"`
+	Discount            int        `json:"discount"`
+	Source              string     `json:"source"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	LastStatusChangedAt *time.Time `json:"lastStatusChangedAt,omitempty"`
+}
+
+type TelegramApplicationsSummary struct {
+	Total              int64 `json:"total"`
+	PendingApplication int64 `json:"pendingApplication"`
+	Approved           int64 `json:"approved"`
+	WaitingPayment     int64 `json:"waitingPayment"`
+	Paid               int64 `json:"paid"`
+	Cancelled          int64 `json:"cancelled"`
+	Rejected           int64 `json:"rejected"`
+	NoShow             int64 `json:"noShow"`
+}
+
+type AdminBookingsDB interface {
+	ListTelegramApplications(params UserListParams) ([]TelegramApplicationRecord, error)
+	TelegramApplicationsSummary() (TelegramApplicationsSummary, error)
+	UpdateTelegramApplication(packageInfoID int64, status string, note string) (TelegramApplicationRecord, TelegramApplicationRecord, error)
+	Close() error
+}
+
+type AdminAuditLogRecord struct {
+	ID            int64     `json:"id"`
+	AdminUsername string    `json:"adminUsername"`
+	ActionType    string    `json:"actionType"`
+	EntityType    string    `json:"entityType"`
+	EntityID      string    `json:"entityId"`
+	PreviousValue string    `json:"previousValue"`
+	NewValue      string    `json:"newValue"`
+	Reason        string    `json:"reason"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type AdminAuditLogEntry struct {
+	AdminUsername string
+	ActionType    string
+	EntityType    string
+	EntityID      string
+	PreviousValue string
+	NewValue      string
+	Reason        string
+}
+
+type AdminAuditDB interface {
+	InsertAdminAuditLog(entry AdminAuditLogEntry) error
+	ListAdminAuditLogs(limit int) ([]AdminAuditLogRecord, error)
 	Close() error
 }

@@ -59,6 +59,13 @@ func (l *landingApp) createAdminDinnerHandler() fiber.Handler {
 			})
 		}
 
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType: "dinner_created",
+			EntityType: "dinner",
+			EntityID:   strconv.FormatInt(dinner.ID, 10),
+			NewValue:   mustMarshalAuditJSON(dinner),
+		})
+
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 			"ok":     true,
 			"dinner": dinner,
@@ -103,6 +110,13 @@ func (l *landingApp) updateAdminDinnerHandler() fiber.Handler {
 			log.WithError(err).Warn("failed to sync dinner registrations after update")
 		}
 
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType: "dinner_updated",
+			EntityType: "dinner",
+			EntityID:   strconv.FormatInt(id, 10),
+			NewValue:   mustMarshalAuditJSON(req),
+		})
+
 		return c.JSON(fiber.Map{"ok": true})
 	}
 }
@@ -133,6 +147,12 @@ func (l *landingApp) deleteAdminDinnerHandler() fiber.Handler {
 			})
 		}
 
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType: "dinner_deleted",
+			EntityType: "dinner",
+			EntityID:   strconv.FormatInt(id, 10),
+		})
+
 		return c.JSON(fiber.Map{"ok": true})
 	}
 }
@@ -150,6 +170,11 @@ func (l *landingApp) syncAdminDinnersHandler() fiber.Handler {
 				"error": "failed to sync dinners",
 			})
 		}
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType: "dinners_synced",
+			EntityType: "dinner",
+			EntityID:   "all",
+		})
 		return c.JSON(fiber.Map{"ok": true})
 	}
 }

@@ -7,28 +7,53 @@ import {
   deleteAdminDinner,
   getAdminDishesByType,
   getAdminDishTypes,
+  getAdminAuditLogs,
   getAdminLandingUsers,
+  getAdminTelegramApplications,
   getAdminTelegramUsers,
   getAdminDinners,
   getAdminPanel,
   syncAdminDinners,
+  type AdminAuditLog as AdminAuditLogEntry,
   type AdminDishItem,
   type AdminDinner,
   type AdminLandingUser,
   type AdminLandingUsersSummary,
   type AdminSettingsPayload,
   type AdminPanelResponse,
+  type AdminTelegramApplication,
+  type AdminTelegramApplicationsSummary,
   type AdminTelegramUser,
   type AdminTelegramUsersSummary,
   updateAdminLandingUserStatus,
+  updateAdminTelegramApplication,
   updateAdminSettings,
   updateAdminDinner,
 } from "../../admin/api";
+import {
+  AdminAuditLog as AdminAuditLogCard,
+  AdminBadge,
+  AdminButton,
+  AdminChartCard,
+  AdminEmptyState,
+  AdminFilterBar,
+  AdminKpiCard,
+  AdminPageHeader,
+  AdminTable,
+} from "./AdminUI";
 import "./admin.css";
 
-type AdminSection = "dashboard" | "landing" | "telegram" | "insights" | "users" | "dinners" | "dishes" | "settings";
+type AdminSection = "overview" | "guests" | "bookings" | "dinners" | "revenue" | "analytics" | "telegram" | "menu" | "operations" | "settings" | "audit";
 type PackageBar = { label: string; value: number; height: number };
-type MetricItem = { label: string; value: string; hint?: string };
+type MetricItem = {
+  label: string;
+  value: string;
+  hint?: string;
+  description?: string;
+  trend?: string;
+  tone?: "default" | "gold" | "emerald" | "danger";
+  icon?: string;
+};
 type DualTrendBar = {
   label: string;
   primary: number;
@@ -157,25 +182,45 @@ type DishFormState = {
 };
 
 const sectionLabels: Record<AdminSection, string> = {
-  dashboard: "Dashboard",
-  landing: "Landing",
-  telegram: "Telegram",
-  insights: "Insights",
-  users: "Users",
+  overview: "Overview",
+  guests: "Guests",
+  bookings: "Bookings",
   dinners: "Dinners",
-  dishes: "Dishes",
+  revenue: "Revenue",
+  analytics: "Analytics",
+  telegram: "Telegram",
+  menu: "Menu",
+  operations: "Operations",
   settings: "Settings",
+  audit: "Audit Logs",
 };
 
 const sectionHints: Record<AdminSection, string> = {
-  dashboard: "High-level overview of landing and Telegram performance.",
-  landing: "Landing funnel, conversion, and application behavior trends.",
+  overview: "Revenue, bookings, capacity, and operational health at a glance.",
+  guests: "Guest-level monitoring, loyalty, legal, and relationship context.",
+  bookings: "Telegram applications, booking statuses, package mix, and admin overrides.",
+  dinners: "Dinner inventory, capacity, pricing, and fill management.",
+  revenue: "Paid performance, ticket economics, package revenue, and dinner yield.",
+  analytics: "Conversion, capacity, demand, and behavioral insights across channels.",
   telegram: "Telegram service health, users, and revenue activity.",
-  insights: "Deep analytical charts for timing, demand, and risk patterns.",
-  users: "User-level monitoring and status operations.",
-  dinners: "Dinner catalog management across both landing and Telegram.",
-  dishes: "Custom menu dishes (used in Telegram custom menu).",
-  settings: "Runtime controls, rate limits, and operational switches.",
+  menu: "Custom package and menu catalog used by Telegram operations.",
+  operations: "Runtime controls and operational switches for the admin control room.",
+  settings: "Infrastructure-facing runtime details and environment configuration.",
+  audit: "Admin overrides and internal change history.",
+};
+
+const sectionEyebrows: Record<AdminSection, string> = {
+  overview: "Executive Overview",
+  guests: "Guest Intelligence",
+  bookings: "Reservations",
+  dinners: "Inventory",
+  revenue: "Commercial",
+  analytics: "Performance",
+  telegram: "Concierge Channel",
+  menu: "Custom Menu",
+  operations: "Operations",
+  settings: "Configuration",
+  audit: "Governance",
 };
 
 const emptyDinnerForm: DinnerFormState = {
@@ -312,6 +357,90 @@ function formatDateLabel(value?: string) {
   }).format(parsed);
 }
 
+function formatCurrency(value?: number | null) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value ?? 0);
+}
+
+function formatCompactNumber(value?: number | null) {
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value ?? 0);
+}
+
+function getPackageTone(label?: string): "default" | "gold" | "emerald" {
+  switch ((label ?? "").toLowerCase()) {
+    case "vip":
+    case "gold":
+      return "gold";
+    case "silver":
+    case "custom":
+      return "default";
+    default:
+      return "emerald";
+  }
+}
+
+function formatApplicationStatus(status?: string) {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "pending_application":
+      return "Pending";
+    case "contacted":
+      return "Contacted";
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    case "waiting_payment":
+      return "Waiting payment";
+    case "paid":
+      return "Paid";
+    case "cancelled":
+      return "Cancelled";
+    case "no_show":
+      return "No show";
+    case "draft":
+      return "Draft";
+    default:
+      return status || "—";
+  }
+}
+
+function getApplicationStatusTone(status?: string): "default" | "gold" | "emerald" | "danger" {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "paid":
+    case "approved":
+      return "emerald";
+    case "pending_application":
+    case "contacted":
+    case "waiting_payment":
+      return "gold";
+    case "rejected":
+    case "cancelled":
+    case "no_show":
+      return "danger";
+    default:
+      return "default";
+  }
+}
+
+function formatSourceLabel(value?: string) {
+  switch ((value ?? "").trim().toLowerCase()) {
+    case "telegram_bot":
+      return "Telegram bot";
+    case "landing_page":
+      return "Landing page";
+    case "manual_admin_entry":
+      return "Manual admin";
+    default:
+      return value || "—";
+  }
+}
+
 function formatTablePreference(value?: string) {
   switch ((value ?? "").trim().toLowerCase()) {
     case "shared":
@@ -401,7 +530,7 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [activeSection, setActiveSection] = useState<AdminSection>("dashboard");
+  const [activeSection, setActiveSection] = useState<AdminSection>("overview");
   const [searchQuery, setSearchQuery] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
 
@@ -431,7 +560,20 @@ export default function AdminPanel() {
   const [usersHasMore, setUsersHasMore] = useState(false);
   const [landingUsers, setLandingUsers] = useState<AdminLandingUser[]>([]);
   const [telegramUsers, setTelegramUsers] = useState<AdminTelegramUser[]>([]);
+  const [telegramApplications, setTelegramApplications] = useState<AdminTelegramApplication[]>([]);
+  const [telegramApplicationsSummary, setTelegramApplicationsSummary] = useState<AdminTelegramApplicationsSummary>({
+    total: 0,
+    pendingApplication: 0,
+    approved: 0,
+    waitingPayment: 0,
+    paid: 0,
+    cancelled: 0,
+    rejected: 0,
+    noShow: 0,
+  });
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLogEntry[]>([]);
   const [selectionStatusSaving, setSelectionStatusSaving] = useState<Record<string, boolean>>({});
+  const [applicationSaving, setApplicationSaving] = useState<Record<number, boolean>>({});
   const [landingUsersSummary, setLandingUsersSummary] = useState<AdminLandingUsersSummary>({ total: 0, completed: 0, open: 0 });
   const [telegramUsersSummary, setTelegramUsersSummary] = useState<AdminTelegramUsersSummary>({
     total: 0,
@@ -513,6 +655,36 @@ export default function AdminPanel() {
     }
   };
 
+  const loadTelegramApplications = async () => {
+    setUsersLoading(true);
+    setUsersError("");
+    try {
+      const response = await getAdminTelegramApplications({
+        search: searchQuery.trim(),
+        status: usersStatus === "all" ? "" : usersStatus,
+        limit: Math.max(5, Math.min(200, data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE)),
+        offset: 0,
+      });
+      setTelegramApplications(response.applications);
+      setTelegramApplicationsSummary(response.summary);
+      const logs = await getAdminAuditLogs(12);
+      setAuditLogs(logs);
+    } catch (err) {
+      setUsersError(err instanceof Error ? err.message : "failed to load telegram applications");
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const loadAuditLogs = async () => {
+    try {
+      const logs = await getAdminAuditLogs(24);
+      setAuditLogs(logs);
+    } catch (err) {
+      setUsersError(err instanceof Error ? err.message : "failed to load admin audit logs");
+    }
+  };
+
   useEffect(() => {
     void loadPanel();
   }, []);
@@ -558,14 +730,14 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
-    if (activeSection !== "dishes") {
+    if (activeSection !== "menu") {
       return;
     }
     void loadDishTypes();
   }, [activeSection]);
 
   useEffect(() => {
-    if (activeSection !== "dishes") {
+    if (activeSection !== "menu") {
       return;
     }
     if (!dishType) {
@@ -575,12 +747,26 @@ export default function AdminPanel() {
   }, [activeSection, dishType]);
 
   useEffect(() => {
-    if (activeSection !== "users") {
+    if (activeSection !== "guests") {
       return;
     }
     setUsersOffset(0);
     void loadUsers(false);
   }, [activeSection, usersSource, usersStatus, searchQuery]);
+
+  useEffect(() => {
+    if (activeSection !== "bookings") {
+      return;
+    }
+    void loadTelegramApplications();
+  }, [activeSection, usersStatus, searchQuery]);
+
+  useEffect(() => {
+    if (activeSection !== "audit" && activeSection !== "operations") {
+      return;
+    }
+    void loadAuditLogs();
+  }, [activeSection]);
 
   useEffect(() => {
     const intervalSec = data?.settings?.runtime?.panelAutoRefreshSeconds ?? 0;
@@ -593,9 +779,17 @@ export default function AdminPanel() {
         void loadDinners();
         return;
       }
-      if (activeSection === "users") {
+      if (activeSection === "guests") {
         setUsersOffset(0);
         void loadUsers(false);
+        return;
+      }
+      if (activeSection === "bookings") {
+        void loadTelegramApplications();
+        return;
+      }
+      if (activeSection === "audit" || activeSection === "operations") {
+        void loadAuditLogs();
         return;
       }
       void loadPanel(true);
@@ -632,12 +826,20 @@ export default function AdminPanel() {
       await loadDinners();
       return;
     }
-    if (activeSection === "users") {
+    if (activeSection === "guests") {
       setUsersOffset(0);
       await loadUsers(false);
       return;
     }
-    if (activeSection === "dishes") {
+    if (activeSection === "bookings") {
+      await loadTelegramApplications();
+      return;
+    }
+    if (activeSection === "audit" || activeSection === "operations") {
+      await loadAuditLogs();
+      return;
+    }
+    if (activeSection === "menu") {
       await loadDishTypes();
       if (dishType) {
         await loadDishes(dishType);
@@ -668,6 +870,36 @@ export default function AdminPanel() {
       setSelectionStatusSaving((prev) => {
         const next = { ...prev };
         delete next[userID];
+        return next;
+      });
+    }
+  };
+
+  const handleUpdateTelegramApplication = async (
+    application: AdminTelegramApplication,
+    status: AdminTelegramApplication["status"]
+  ) => {
+    setApplicationSaving((prev) => ({ ...prev, [application.packageInfoId]: true }));
+    setUsersError("");
+    try {
+      const updated = await updateAdminTelegramApplication(application.packageInfoId, {
+        status,
+        note: application.adminNote,
+        reason: `Status override from admin panel: ${application.status} -> ${status}`,
+      });
+      setTelegramApplications((prev) =>
+        prev.map((item) => (item.packageInfoId === updated.packageInfoId ? updated : item))
+      );
+      setInfoMessage(`Application ${updated.publicCode || `#${updated.packageInfoId}`} updated`);
+      window.setTimeout(() => setInfoMessage(""), 1800);
+      const logs = await getAdminAuditLogs(12);
+      setAuditLogs(logs);
+    } catch (err) {
+      setUsersError(err instanceof Error ? err.message : "failed to update telegram application");
+    } finally {
+      setApplicationSaving((prev) => {
+        const next = { ...prev };
+        delete next[application.packageInfoId];
         return next;
       });
     }
@@ -1181,6 +1413,16 @@ export default function AdminPanel() {
   }, [dishes, searchQuery]);
 
   const currentUsers = usersSource === "landing" ? landingUsers : telegramUsers;
+  const bookingStatusOptions = [
+    { value: "all", label: "All" },
+    { value: "pending_application", label: "Pending" },
+    { value: "approved", label: "Approved" },
+    { value: "waiting_payment", label: "Waiting payment" },
+    { value: "paid", label: "Paid" },
+    { value: "cancelled", label: "Cancelled" },
+    { value: "rejected", label: "Rejected" },
+    { value: "no_show", label: "No show" },
+  ];
   const usersSummaryCards: MetricItem[] =
     usersSource === "landing"
       ? [
@@ -1218,94 +1460,91 @@ export default function AdminPanel() {
 
   const dinnerRegistrationsTotal = dinners.reduce((sum, item) => sum + item.alreadyRegistered, 0);
   const activeDinnersCount = dinners.filter((item) => !item.expired).length;
-  const topDomain = landing?.topEmailDomains?.[0]?.label ?? "—";
   const weekendSubmissions = (landing?.weekdaySubmissions ?? [])
     .filter((item) => item.label === "Sat" || item.label === "Sun")
     .reduce((sum, item) => sum + item.count, 0);
   const weekdaySubmissionsTotal = (landing?.weekdaySubmissions ?? []).reduce((sum, item) => sum + item.count, 0);
   const weekendShare = weekdaySubmissionsTotal > 0 ? (weekendSubmissions / weekdaySubmissionsTotal) * 100 : 0;
   const topRevenuePackage = packageRevenueRows[0]?.label ?? "—";
-  const overbookedCount = dinnerFillBandRows.find((item) => item.label === "Overbooked")?.count ?? 0;
-  const topFillBand = dinnerFillBandRows[0]?.label ?? "—";
+  const pageTitle = sectionLabels[activeSection];
+  const pageSubtitle = sectionHints[activeSection];
+  const lastUpdated = formatDateLabel(meta.generatedAt);
 
   const sectionMetrics: Record<AdminSection, MetricItem[]> = {
-    dashboard: filterItems([
-      { label: "Landing applications", value: `${totalUsers}` },
-      { label: "Selection completion", value: `${completionPercent}%` },
-      { label: "Landing conversion", value: `${(landing?.conversionPercent ?? 0).toFixed(1)}%` },
-      { label: "Active landing dinners", value: `${landing?.activeDinners ?? 0}` },
-      { label: "Telegram users", value: `${telegramStats?.totalUsers ?? 0}` },
-      { label: "Telegram revenue", value: `${telegramStats?.revenueTotal.toFixed(2) ?? "0.00"}` },
-      { label: "Orders last 24h", value: `${telegramStats?.orders24h ?? 0}` },
+    overview: filterItems([
+      { label: "Total applications", value: formatCompactNumber(totalUsers), description: `${landing?.recent24h ?? 0} today`, trend: `${(landing?.conversionPercent ?? 0).toFixed(1)}% converted`, tone: "gold", icon: "01" },
+      { label: "Conversion rate", value: `${completionPercent}%`, description: `${completedSelections} completed bookings`, trend: `${pendingSelections} pending`, tone: completionPercent >= 60 ? "emerald" : "gold", icon: "02" },
+      { label: "Revenue", value: formatCurrency(telegramStats?.revenueTotal ?? landing?.potentialRevenue ?? 0), description: "Telegram paid + landing potential", trend: `${telegramStats?.orders24h ?? 0} orders in 24h`, tone: "gold", icon: "03" },
+      { label: "Average ticket price", value: formatCurrency(telegramStats?.avgOrderValue ?? 0), description: "Average paid order value", trend: `${telegramStats?.usersWithPayments ?? 0} paying guests`, tone: "default", icon: "04" },
+      { label: "Upcoming dinners", value: `${activeDinnersCount || landing?.activeDinners || 0}`, description: `Capacity focus across ${dinners.length || landing?.activeDinners || 0} dinners`, trend: `${dinnerRegistrationsTotal} booked seats`, tone: "emerald", icon: "05" },
+      { label: "Waitlist / open", value: `${pendingSelections}`, description: "Open selections awaiting completion", trend: `${landing?.recentSelections24h ?? 0} closed in 24h`, tone: pendingSelections > completedSelections ? "danger" : "gold", icon: "06" },
     ]),
-    landing: filterItems([
-      { label: "Total users", value: `${landing?.totalUsers ?? 0}` },
-      { label: "Completed selections", value: `${landing?.completedSelections ?? 0}` },
-      { label: "Pending selections", value: `${landing?.pendingSelections ?? 0}` },
-      { label: "Distinct dinner picks", value: `${landing?.selectedDinners ?? 0}` },
-      { label: "Average guests per form", value: `${(landing?.avgGuestsPerUser ?? 0).toFixed(2)}` },
-      { label: "Average time to select", value: `${(landing?.avgSelectionHours ?? 0).toFixed(1)} h` },
-      { label: "Selections last 24h", value: `${landing?.recentSelections24h ?? 0}` },
-      { label: "Flow conversion %", value: `${(landing?.conversionPercent ?? 0).toFixed(1)}%` },
-      { label: "Potential revenue", value: `${(landing?.potentialRevenue ?? 0).toFixed(2)}` },
-      { label: "Latest application", value: formatDateLabel(landing?.latestApplicationAt) },
+    analytics: filterItems([
+      { label: "Registrations", value: formatCompactNumber(landing?.totalUsers ?? 0), description: `${landing?.recent24h ?? 0} new today`, trend: `${(landing?.conversionPercent ?? 0).toFixed(1)}% flow conversion`, tone: "gold", icon: "L1" },
+      { label: "Completed bookings", value: `${landing?.completedSelections ?? 0}`, description: "Users finished package and dinner selection", trend: `${landing?.recentSelections24h ?? 0} in last 24h`, tone: "emerald", icon: "L2" },
+      { label: "Pending applications", value: `${landing?.pendingSelections ?? 0}`, description: "Still need a final selection", trend: `${(landing?.selectionP50Hours ?? 0).toFixed(1)}h median close time`, tone: "gold", icon: "L3" },
+      { label: "Demand vs capacity", value: `${landing?.selectedDinners ?? 0}`, description: "Distinct dinners currently chosen", trend: `${landing?.activeDinners ?? 0} active dinners`, tone: "default", icon: "L4" },
+      { label: "Guest count summary", value: `${landing?.totalGuests ?? 0}`, description: `${(landing?.avgGuestsPerUser ?? 0).toFixed(2)} guests per application`, trend: `${weekendShare.toFixed(1)}% weekend share`, tone: "default", icon: "L5" },
+      { label: "Potential revenue", value: formatCurrency(landing?.potentialRevenue ?? 0), description: "Projected from current package picks", trend: formatDateLabel(landing?.latestApplicationAt), tone: "gold", icon: "L6" },
     ]),
     telegram: filterItems([
-      { label: "Total users", value: `${telegramStats?.totalUsers ?? 0}` },
-      { label: "Terms accepted", value: `${telegramStats?.acceptedTermsUsers ?? 0}` },
-      { label: "Terms acceptance %", value: `${(telegramStats?.termsAcceptancePct ?? 0).toFixed(1)}%` },
-      { label: "Users with phone", value: `${telegramStats?.usersWithPhone ?? 0}` },
-      { label: "Phone coverage %", value: `${(telegramStats?.phoneCoveragePct ?? 0).toFixed(1)}%` },
-      { label: "Referral coverage %", value: `${(telegramStats?.referralCoveragePct ?? 0).toFixed(1)}%` },
-      { label: "Blocked rate %", value: `${(telegramStats?.blockedRatePct ?? 0).toFixed(1)}%` },
-      { label: "Revenue 24h", value: `${(telegramStats?.revenue24h ?? 0).toFixed(2)}` },
-      { label: "Orders 24h", value: `${telegramStats?.orders24h ?? 0}` },
-      { label: "Users with payments", value: `${telegramStats?.usersWithPayments ?? 0}` },
-      { label: "Average order value", value: `${(telegramStats?.avgOrderValue ?? 0).toFixed(2)}` },
-      { label: "Blocked active", value: `${telegramStats?.blockedActive ?? 0}` },
-      { label: "Next dinner", value: formatDateLabel(telegramStats?.nextDinnerDate) },
+      { label: "Telegram users", value: formatCompactNumber(telegramStats?.totalUsers ?? 0), description: `${telegramStats?.acceptedTermsUsers ?? 0} accepted terms`, trend: `${(telegramStats?.termsAcceptancePct ?? 0).toFixed(1)}% acceptance`, tone: "gold", icon: "T1" },
+      { label: "Revenue 24h", value: formatCurrency(telegramStats?.revenue24h ?? 0), description: `${telegramStats?.orders24h ?? 0} orders in 24h`, trend: formatCurrency(telegramStats?.avgOrderValue ?? 0), tone: "emerald", icon: "T2" },
+      { label: "VIP / Gold / Silver", value: `${telegramStats?.packageBreakdown.vip ?? 0}/${telegramStats?.packageBreakdown.gold ?? 0}/${telegramStats?.packageBreakdown.silver ?? 0}`, description: "Paid package split", trend: `${telegramStats?.packageBreakdown.custom ?? 0} custom`, tone: "gold", icon: "T3" },
+      { label: "Phone coverage", value: `${(telegramStats?.phoneCoveragePct ?? 0).toFixed(1)}%`, description: `${telegramStats?.usersWithPhone ?? 0} reachable users`, trend: `${(telegramStats?.referralCoveragePct ?? 0).toFixed(1)}% referral coverage`, tone: "default", icon: "T4" },
+      { label: "Blocked active", value: `${telegramStats?.blockedActive ?? 0}`, description: "Users currently blocked or throttled", trend: `${(telegramStats?.blockedRatePct ?? 0).toFixed(1)}% block rate`, tone: (telegramStats?.blockedActive ?? 0) > 0 ? "danger" : "emerald", icon: "T5" },
+      { label: "Next dinner", value: formatDateLabel(telegramStats?.nextDinnerDate), description: `Last dinner ${formatDateLabel(telegramStats?.lastDinnerDate)}`, trend: `${telegramStats?.activeDinners ?? 0} active`, tone: "default", icon: "T6" },
     ]),
-    insights: filterItems([
-      { label: "Selection P50", value: `${(landing?.selectionP50Hours ?? 0).toFixed(1)} h` },
-      { label: "Selection P90", value: `${(landing?.selectionP90Hours ?? 0).toFixed(1)} h` },
-      { label: "Top email domain", value: topDomain },
-      { label: "Weekend share", value: `${weekendShare.toFixed(1)}%` },
-      { label: "Hourly telegram orders", value: `${telegramHourlyRegistrationsBars.reduce((sum, item) => sum + item.value, 0)}` },
-      { label: "Top package revenue", value: topRevenuePackage },
-      { label: "Overbooked dinners", value: `${overbookedCount}` },
-      { label: "Top fill band", value: topFillBand },
+    revenue: filterItems([
+      { label: "Revenue today", value: formatCurrency(telegramStats?.revenue24h ?? 0), description: `${telegramStats?.orders24h ?? 0} paid orders in 24h`, tone: "gold", icon: "R1" },
+      { label: "Revenue 7 days", value: formatCurrency((telegramStats?.dailyOrders ?? []).slice(-7).reduce((sum, item) => sum + item.revenue, 0)), description: "Trailing 7-day paid revenue", tone: "emerald", icon: "R2" },
+      { label: "Revenue 30 days", value: formatCurrency(telegramStats?.revenueTotal ?? 0), description: "All persisted paid revenue currently available", tone: "gold", icon: "R3" },
+      { label: "Average ticket", value: formatCurrency(telegramStats?.avgOrderValue ?? 0), description: "Average paid order value", tone: "default", icon: "R4" },
+      { label: "Revenue per seat", value: formatCurrency(dinnerRegistrationsTotal > 0 ? (telegramStats?.revenueTotal ?? 0) / dinnerRegistrationsTotal : 0), description: "Revenue divided by total booked seats", tone: "default", icon: "R5" },
+      { label: "Top package revenue", value: topRevenuePackage, description: "Current best grossing package family", tone: "gold", icon: "R6" },
     ]),
-    users: filterItems(usersSummaryCards),
+    guests: filterItems(usersSummaryCards),
+    bookings: filterItems([
+      { label: "Applications total", value: `${telegramApplicationsSummary.total}`, description: "All telegram booking records", trend: `${telegramApplicationsSummary.pendingApplication} pending`, tone: "gold", icon: "B1" },
+      { label: "Paid bookings", value: `${telegramApplicationsSummary.paid}`, description: "Confirmed paid reservations", trend: `${telegramApplicationsSummary.waitingPayment} waiting payment`, tone: "emerald", icon: "B2" },
+      { label: "Approved", value: `${telegramApplicationsSummary.approved}`, description: "Accepted but not yet paid or completed", trend: `${telegramApplicationsSummary.rejected} rejected`, tone: "default", icon: "B3" },
+      { label: "Cancelled / no-show", value: `${telegramApplicationsSummary.cancelled + telegramApplicationsSummary.noShow}`, description: "Operational churn and attendance loss", trend: `${telegramApplicationsSummary.noShow} no-show`, tone: "danger", icon: "B4" },
+      { label: "VIP share", value: `${telegramApplications.filter((item) => item.packageCode === "vip").length}`, description: "Applications with VIP as top package", trend: `${telegramApplications.filter((item) => item.packageCode === "gold").length} Gold`, tone: "gold", icon: "B5" },
+      { label: "Guest count", value: `${telegramApplications.reduce((sum, item) => sum + item.guestCount, 0)}`, description: "Combined guests across visible applications", trend: `${telegramApplications.filter((item) => item.referralUsedCode).length} referral-sourced`, tone: "default", icon: "B6" },
+    ]),
+    audit: filterItems([
+      { label: "Audit entries", value: `${auditLogs.length}`, description: "Recent admin actions loaded into the panel", tone: "gold", icon: "A1" },
+      { label: "Risky actions", value: `${auditLogs.filter((item) => item.actionType.includes("deleted") || item.actionType.includes("updated")).length}`, description: "Mutations needing review", tone: "danger", icon: "A2" },
+      { label: "Latest activity", value: auditLogs[0] ? formatDateLabel(auditLogs[0].createdAt) : "—", description: "Most recent admin change timestamp", tone: "default", icon: "A3" },
+      { label: "Operations feed", value: `${auditLogs.filter((item) => item.entityType === "telegram_application").length}`, description: "Booking-related admin events", tone: "emerald", icon: "A4" },
+    ]),
+    operations: filterItems([
+      { label: "Maintenance mode", value: settings.runtime.maintenanceMode ? "Enabled" : "Disabled", description: "Blocks join and selection traffic", tone: settings.runtime.maintenanceMode ? "danger" : "emerald", icon: "O1" },
+      { label: "Join applications", value: settings.runtime.allowJoinApplications ? "Enabled" : "Disabled", description: "Landing step one submissions", tone: settings.runtime.allowJoinApplications ? "emerald" : "danger", icon: "O2" },
+      { label: "Join selections", value: settings.runtime.allowJoinSelections ? "Enabled" : "Disabled", description: "Landing step two dinner selection", tone: settings.runtime.allowJoinSelections ? "emerald" : "danger", icon: "O3" },
+      { label: "Auto-refresh", value: `${settings.runtime.panelAutoRefreshSeconds ?? 0}s`, description: `${settings.runtime.adminUsersPageSize ?? USERS_PAGE_SIZE} rows per admin page`, tone: "default", icon: "O4" },
+    ]),
     dinners: filterItems([
-      { label: "Total dinners", value: `${dinners.length}` },
-      { label: "Active dinners", value: `${activeDinnersCount}` },
-      { label: "Total registrations", value: `${dinnerRegistrationsTotal}` },
-      { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "true" : "false" },
+      { label: "Upcoming dinners", value: `${activeDinnersCount}`, description: `${dinners.length} total dinners`, trend: `${dinnerRegistrationsTotal} seats booked`, tone: "gold", icon: "D1" },
+      { label: "Completed bookings", value: `${dinnerRegistrationsTotal}`, description: "Registrations synced from sources", trend: settings.telegramDatabaseConfigured ? "Telegram DB connected" : "Telegram DB missing", tone: settings.telegramDatabaseConfigured ? "emerald" : "danger", icon: "D2" },
+      { label: "Average fill", value: `${dinners.length > 0 ? Math.round((dinnerRegistrationsTotal / Math.max(dinners.reduce((sum, item) => sum + item.places, 0), 1)) * 100) : 0}%`, description: "Booked seats vs published capacity", trend: `${dinners.filter((item) => item.expired).length} expired`, tone: "default", icon: "D3" },
+      { label: "VIP inventory", value: `${dinners.filter((item) => (item.vipPrice ?? 0) > 0).length}`, description: "Dinners offering VIP pricing", trend: `${dinners.filter((item) => (item.goldPrice ?? 0) > 0).length} with Gold`, tone: "gold", icon: "D4" },
     ]),
-    dishes: filterItems([
-      { label: "Dish types", value: `${dishTypes.length}` },
-      { label: "Selected type", value: dishType || "—" },
-      { label: "Dishes loaded", value: `${dishes.length}` },
-      { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "true" : "false" },
+    menu: filterItems([
+      { label: "Dish types", value: `${dishTypes.length}`, description: "Available menu categories", tone: "gold", icon: "M1" },
+      { label: "Selected type", value: dishType || "—", description: "Current editing category", tone: "default", icon: "M2" },
+      { label: "Dishes loaded", value: `${dishes.length}`, description: "Visible within current category", tone: "emerald", icon: "M3" },
+      { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "Yes" : "No", description: "Required for menu operations", tone: settings.telegramDatabaseConfigured ? "emerald" : "danger", icon: "M4" },
     ]),
     settings: filterItems([
-      { label: "Admin user", value: meta.username ?? "—" },
-      { label: "Frontend origin", value: settings.frontendOrigin || "—" },
-      { label: "Listen address", value: settings.listenAddr || "—" },
-      { label: "Cookie secure", value: settings.adminCookieSecure ? "true" : "false" },
-      { label: "Admin token TTL", value: `${settings.adminTokenTTLMinutes ?? 0} min` },
-      { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "true" : "false" },
-      { label: "Maintenance mode", value: settings.runtime.maintenanceMode ? "enabled" : "disabled" },
-      { label: "Join applications", value: settings.runtime.allowJoinApplications ? "enabled" : "disabled" },
-      { label: "Join selections", value: settings.runtime.allowJoinSelections ? "enabled" : "disabled" },
-      { label: "Min fill duration", value: `${settings.runtime.minJoinFormFillDurationMs ?? 0} ms` },
-      { label: "Login rate limit", value: `${settings.rateLimits.adminLoginPerMinute ?? 0}/min` },
-      { label: "Join form limit", value: `${settings.rateLimits.joinFormPer20MinByIP ?? 0}/20m` },
-      { label: "Join selection limit", value: `${settings.rateLimits.joinSelectionPer20MinByIP ?? 0}/20m` },
-      { label: "Panel auto-refresh", value: `${settings.runtime.panelAutoRefreshSeconds ?? 0}s` },
-      { label: "Users page size", value: `${settings.runtime.adminUsersPageSize ?? USERS_PAGE_SIZE}` },
-      { label: "Dinner mutations", value: settings.runtime.allowAdminDinnerMutations ? "enabled" : "disabled" },
-      { label: "User status edits", value: settings.runtime.allowAdminUserStatusEdits ? "enabled" : "disabled" },
+      { label: "Admin user", value: meta.username ?? "—", description: "Current authenticated session", tone: "gold", icon: "S1" },
+      { label: "Frontend origin", value: settings.frontendOrigin || "—", description: "CORS allowlist target", tone: "default", icon: "S2" },
+      { label: "Cookie secure", value: settings.adminCookieSecure ? "Enabled" : "Disabled", description: `${settings.adminTokenTTLMinutes ?? 0} min token TTL`, tone: settings.adminCookieSecure ? "emerald" : "danger", icon: "S3" },
+      { label: "Maintenance mode", value: settings.runtime.maintenanceMode ? "Enabled" : "Disabled", description: "Blocks join and selection traffic", tone: settings.runtime.maintenanceMode ? "danger" : "emerald", icon: "S4" },
+      { label: "Join applications", value: settings.runtime.allowJoinApplications ? "Enabled" : "Disabled", description: "Step one submissions", tone: settings.runtime.allowJoinApplications ? "emerald" : "danger", icon: "S5" },
+      { label: "Join selections", value: settings.runtime.allowJoinSelections ? "Enabled" : "Disabled", description: "Step two package picking", tone: settings.runtime.allowJoinSelections ? "emerald" : "danger", icon: "S6" },
+      { label: "Panel auto-refresh", value: `${settings.runtime.panelAutoRefreshSeconds ?? 0}s`, description: `${settings.runtime.adminUsersPageSize ?? USERS_PAGE_SIZE} users per page`, tone: "default", icon: "S7" },
+      { label: "Telegram DB configured", value: settings.telegramDatabaseConfigured ? "Configured" : "Missing", description: settings.listenAddr || "Backend listen address unavailable", tone: settings.telegramDatabaseConfigured ? "emerald" : "danger", icon: "S8" },
     ]),
   };
 
@@ -1315,7 +1554,10 @@ export default function AdminPanel() {
         <aside className="admin-sidebar">
           <div className="admin-sidebar__brand">
             <span className="admin-sidebar__dot" />
-            Secret Dinner
+            <div>
+              <strong>Secret Dinner</strong>
+              <span className="admin-sidebar__brand-sub">Private Dining OS</span>
+            </div>
           </div>
 
           <nav className="admin-sidebar__nav" aria-label="Admin navigation">
@@ -1327,77 +1569,93 @@ export default function AdminPanel() {
                 onClick={() => setActiveSection(section)}
                 title={sectionHints[section]}
               >
-                {sectionLabels[section]}
+                <span className="admin-sidebar__item-label">{sectionLabels[section]}</span>
+                <span className="admin-sidebar__item-hint">{sectionEyebrows[section]}</span>
               </button>
             ))}
           </nav>
 
-          <button className="admin-panel__logout admin-sidebar__logout" onClick={handleLogout} type="button">
+          <div className="admin-sidebar__footer">
+            <AdminBadge tone="gold">{meta.username || "admin"}</AdminBadge>
+            <p className="admin-sidebar__footer-text">Last sync {lastUpdated}</p>
+          </div>
+          <AdminButton className="admin-sidebar__logout" variant="ghost" onClick={handleLogout} type="button">
             Logout
-          </button>
+          </AdminButton>
         </aside>
 
         <div className="admin-main">
-          <header className="admin-topbar">
-            <p className="admin-topbar__title">{sectionLabels[activeSection]}</p>
-            <div className="admin-topbar__search">
-              <span aria-hidden="true">⌕</span>
-              <input
-                type="text"
-                placeholder={`Search ${sectionLabels[activeSection]}`}
-                aria-label="Search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                title="Search inside currently opened section."
-              />
-            </div>
-            <p className="admin-topbar__date">{dashboardDate}</p>
-            <button className="admin-panel__logout admin-topbar__logout" onClick={handleLogout} type="button">
-              Logout
-            </button>
-          </header>
+          <AdminPageHeader
+            eyebrow={sectionEyebrows[activeSection]}
+            title={pageTitle}
+            subtitle={pageSubtitle}
+            meta={
+              <>
+                <AdminBadge tone="default">{dashboardDate}</AdminBadge>
+                <AdminBadge tone="gold">Updated {lastUpdated}</AdminBadge>
+              </>
+            }
+            actions={
+              <>
+                <div className="admin-topbar__search">
+                  <span aria-hidden="true">⌕</span>
+                  <input
+                    type="text"
+                    placeholder={`Search ${sectionLabels[activeSection]}`}
+                    aria-label="Search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    title="Search inside currently opened section."
+                  />
+                </div>
+              </>
+            }
+          />
 
           <div className="admin-toolbar">
-            <button
+            <AdminButton
               className="admin-toolbar__btn"
+              variant="secondary"
               type="button"
               onClick={handleRefresh}
               disabled={loading || refreshing || dinnersLoading || dishesLoading}
               title="Reload the currently active section data."
             >
               {refreshing || dinnersLoading || dishesLoading ? "Refreshing..." : "Refresh"}
-            </button>
-            <button
+            </AdminButton>
+            <AdminButton
               className="admin-toolbar__btn"
+              variant="primary"
               type="button"
               onClick={handleExport}
               disabled={!data}
               title="Download full current panel snapshot as JSON."
             >
               Export Snapshot
-            </button>
+            </AdminButton>
             {activeSection === "settings" ? (
-              <button
+              <AdminButton
                 className="admin-toolbar__btn"
+                variant="secondary"
                 type="button"
                 onClick={handleCopyFrontendOrigin}
                 disabled={!data}
                 title="Copy currently configured CORS frontend origin."
               >
                 Copy Frontend Origin
-              </button>
+              </AdminButton>
             ) : null}
             {activeSection === "dinners" ? (
               <>
-                <button className="admin-toolbar__btn" type="button" onClick={handleStartCreateDinner} title="Create a new dinner visible in both systems.">
+                <AdminButton className="admin-toolbar__btn" variant="primary" type="button" onClick={handleStartCreateDinner} title="Create a new dinner visible in both systems.">
                   New Dinner
-                </button>
-                <button className="admin-toolbar__btn" type="button" onClick={handleSyncDinners} title="Recalculate dinner registration counts from source data.">
+                </AdminButton>
+                <AdminButton className="admin-toolbar__btn" variant="secondary" type="button" onClick={handleSyncDinners} title="Recalculate dinner registration counts from source data.">
                   Sync Registrations
-                </button>
+                </AdminButton>
               </>
             ) : null}
-            <span className="admin-toolbar__meta">Generated: {formatDateLabel(meta.generatedAt)}</span>
+            <span className="admin-toolbar__meta">Generated: {lastUpdated}</span>
             {infoMessage ? <span className="admin-toolbar__meta admin-toolbar__meta--info">{infoMessage}</span> : null}
           </div>
 
@@ -1410,35 +1668,23 @@ export default function AdminPanel() {
                 {sectionMetrics[activeSection].map((item) => {
                   const hint = item.hint ?? metricHints[item.label];
                   return (
-                    <article
+                    <AdminKpiCard
                       key={item.label}
-                      className="admin-kpi admin-kpi--violet"
-                      data-has-tooltip={hint ? "true" : "false"}
-                      data-tooltip={hint ?? ""}
-                      title={hint ?? undefined}
-                      tabIndex={hint ? 0 : -1}
-                    >
-                      <div className="admin-kpi__label-row">
-                        <p className="admin-kpi__label">{item.label}</p>
-                        {hint ? (
-                          <span className="admin-kpi__help" aria-hidden="true">
-                            ?
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="admin-kpi__value admin-kpi__value--text">{item.value}</p>
-                    </article>
+                      label={item.label}
+                      value={item.value}
+                      description={item.description}
+                      trend={item.trend}
+                      tone={item.tone}
+                      icon={item.icon}
+                      hint={hint}
+                    />
                   );
                 })}
               </section>
 
-              {activeSection === "dashboard" || activeSection === "landing" ? (
+              {activeSection === "overview" || activeSection === "analytics" ? (
                 <section className="admin-widgets">
-                  <article className="admin-widget admin-widget--bars">
-                    <div className="admin-widget__header">
-                      <h2>Landing Package Choices</h2>
-                      <span>Current selections</span>
-                    </div>
+                  <AdminChartCard className="admin-widget admin-widget--bars" title="Package Demand" subtitle="Current landing package split">
                     <div
                       className="admin-bars"
                       role="img"
@@ -1461,40 +1707,49 @@ export default function AdminPanel() {
                         </div>
                       ))}
                     </div>
-                  </article>
+                  </AdminChartCard>
 
-                  <article className="admin-widget admin-widget--status">
-                    <div className="admin-widget__header">
-                      <h2>Landing Completion</h2>
-                      <span>User progression</span>
-                    </div>
-                    <div className="admin-donut" style={completionDonutStyle} aria-hidden="true">
-                      <div className="admin-donut__inner">
-                        <strong>{completionPercent}%</strong>
-                        <span>Completed</span>
+                  <AdminChartCard className="admin-widget admin-widget--status" title="Conversion Funnel" subtitle="Completion vs open demand">
+                    {completionPercent >= 100 || totalUsers <= 2 ? (
+                      <div className="admin-completion-card">
+                        <div className="admin-completion-card__value">{completionPercent}%</div>
+                        <p className="admin-completion-card__copy">Applications converted into completed dinner selections.</p>
+                        <div className="admin-completion-card__meta">
+                          <AdminBadge tone="emerald">{completedSelections} completed</AdminBadge>
+                          <AdminBadge tone="gold">{pendingSelections} pending</AdminBadge>
+                        </div>
                       </div>
-                    </div>
-                    <ul className="admin-legend">
-                      <li>
-                        <span className="admin-legend__dot admin-legend__dot--sales" />Completed <b>{completedSelections}</b>
-                      </li>
-                      <li>
-                        <span className="admin-legend__dot admin-legend__dot--product" />Pending <b>{pendingSelections}</b>
-                      </li>
-                    </ul>
-                  </article>
+                    ) : (
+                      <>
+                        <div className="admin-donut" style={completionDonutStyle} aria-hidden="true">
+                          <div className="admin-donut__inner">
+                            <strong>{completionPercent}%</strong>
+                            <span>Completed</span>
+                          </div>
+                        </div>
+                        <ul className="admin-legend">
+                          <li>
+                            <span className="admin-legend__dot admin-legend__dot--sales" />Completed <b>{completedSelections}</b>
+                          </li>
+                          <li>
+                            <span className="admin-legend__dot admin-legend__dot--product" />Pending <b>{pendingSelections}</b>
+                          </li>
+                        </ul>
+                      </>
+                    )}
+                  </AdminChartCard>
                 </section>
               ) : null}
 
-              {activeSection === "dashboard" || activeSection === "landing" ? (
+              {activeSection === "overview" || activeSection === "analytics" ? (
                 <section className="admin-analytics-grid">
-                  <article className="admin-widget admin-widget--fit">
-                    <div className="admin-widget__header">
-                      <h2>Landing User Flow Trend</h2>
-                      <span>Submissions vs completed selections (14d)</span>
-                    </div>
+                  <AdminChartCard className="admin-widget admin-widget--fit" title="Demand vs Conversion" subtitle="Daily applications and completed selections">
                     {landingDailyTrendBars.length === 0 ? (
-                      <p className="admin-dashboard__state">No flow data yet.</p>
+                      <AdminEmptyState
+                        compact
+                        title="No flow data yet"
+                        description="Daily application and conversion trends will appear here once guests start moving through the landing funnel."
+                      />
                     ) : (
                       <>
                         <div className="admin-widget__explain">
@@ -1542,7 +1797,7 @@ export default function AdminPanel() {
                         </div>
                       </>
                     )}
-                  </article>
+                  </AdminChartCard>
 
                   <article className="admin-widget">
                     <div className="admin-widget__header">
@@ -1614,7 +1869,7 @@ export default function AdminPanel() {
                     {(landing?.topDinners?.length ?? 0) === 0 ? (
                       <p className="admin-dashboard__state">No dinner registration data yet.</p>
                     ) : (
-                      <div className="admin-table-wrap">
+                      <AdminTable className="admin-table-wrap">
                         <table className="admin-table">
                           <thead>
                             <tr>
@@ -1637,13 +1892,13 @@ export default function AdminPanel() {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </AdminTable>
                     )}
                   </article>
                 </section>
               ) : null}
 
-              {activeSection === "dashboard" || activeSection === "telegram" ? (
+              {activeSection === "overview" || activeSection === "telegram" || activeSection === "revenue" ? (
                 <section className="admin-widgets">
                   <article className="admin-widget admin-widget--bars">
                     <div className="admin-widget__header">
@@ -1709,7 +1964,7 @@ export default function AdminPanel() {
                 </section>
               ) : null}
 
-              {activeSection === "dashboard" || activeSection === "telegram" ? (
+              {activeSection === "overview" || activeSection === "telegram" || activeSection === "revenue" ? (
                 <section className="admin-analytics-grid">
                   <article className="admin-widget admin-widget--fit">
                     <div className="admin-widget__header">
@@ -1827,7 +2082,7 @@ export default function AdminPanel() {
                 </section>
               ) : null}
 
-              {activeSection === "insights" ? (
+              {activeSection === "analytics" ? (
                 <section className="admin-insights-grid">
                   <article className="admin-widget admin-widget--full">
                     <div className="admin-widget__header">
@@ -2139,10 +2394,10 @@ export default function AdminPanel() {
                 </section>
               ) : null}
 
-              {activeSection === "users" ? (
+              {activeSection === "guests" ? (
                 <section className="admin-users-layout">
                   <article className="admin-widget admin-widget--fit">
-                    <div className="admin-users__controls">
+                    <AdminFilterBar className="admin-users__controls">
                       <div className="admin-users__switch" role="tablist" aria-label="Users source">
                         <button
                           className={`admin-users__switch-btn ${usersSource === "landing" ? "admin-users__switch-btn--active" : ""}`}
@@ -2181,7 +2436,7 @@ export default function AdminPanel() {
                           ))}
                         </div>
                       </div>
-                    </div>
+                    </AdminFilterBar>
                     {usersError ? <p className="admin-auth__error">{usersError}</p> : null}
                   </article>
 
@@ -2200,7 +2455,7 @@ export default function AdminPanel() {
                     ) : null}
 
                     {usersSource === "landing" && currentUsers.length > 0 ? (
-                      <div className="admin-table-wrap">
+                      <AdminTable className="admin-table-wrap">
                         <table className="admin-table admin-table--stack">
                           <thead>
                             <tr>
@@ -2226,7 +2481,13 @@ export default function AdminPanel() {
                                 </td>
                                 <td data-label="Guests">{item.guestCount}</td>
                                 <td data-label="Dinner">{item.dinnerTitle || "—"}</td>
-                                <td data-label="Package">{item.chosenPackage ?? "—"}</td>
+                                <td data-label="Package">
+                                  {item.chosenPackage ? (
+                                    <AdminBadge tone={getPackageTone(item.chosenPackage)}>{item.chosenPackage}</AdminBadge>
+                                  ) : (
+                                    <AdminBadge>Unselected</AdminBadge>
+                                  )}
+                                </td>
                                 <td data-label="Selection Status">
                                   <div className="admin-users__status-cell" role="group" aria-label={`Selection status for ${item.fullName}`}>
                                     <div className="admin-users__status-toggle">
@@ -2253,20 +2514,21 @@ export default function AdminPanel() {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </AdminTable>
                     ) : null}
 
                     {usersSource === "telegram" && currentUsers.length > 0 ? (
-	                      <div className="admin-table-wrap">
+	                      <AdminTable className="admin-table-wrap">
 	                        <table className="admin-table admin-table--stack">
 	                          <thead>
 	                            <tr>
 	                              <th>User</th>
 	                              <th>Profile</th>
+	                              <th>Loyalty</th>
 	                              <th>Payments</th>
 	                              <th>Orders</th>
 	                              <th>Table</th>
-	                              <th>Terms</th>
+	                              <th>Legal</th>
 	                              <th>Blocked</th>
 	                              <th>Created</th>
 	                            </tr>
@@ -2284,25 +2546,31 @@ export default function AdminPanel() {
                                   </div>
                                   <div className="admin-users__cell-sub">{item.phone || "No phone"}</div>
 	                                </td>
-	                                <td data-label="Payments">{item.totalPayments.toFixed(2)}</td>
+                                  <td data-label="Loyalty">
+                                    <div className="admin-users__cell-title">{item.points} pts</div>
+                                    <div className="admin-users__cell-sub">Discount {item.discount}%</div>
+                                  </td>
+	                                <td data-label="Payments">{formatCurrency(item.totalPayments)}</td>
 	                                <td data-label="Orders">{item.ordersCount}</td>
 	                                <td data-label="Table">{formatTablePreference(item.lastTablePreference)}</td>
-	                                <td data-label="Terms">
-	                                  <span className={`admin-user-badge ${item.termsAccepted ? "admin-user-badge--ok" : "admin-user-badge--warn"}`}>
+	                                <td data-label="Legal">
+	                                  <AdminBadge tone={item.termsAccepted ? "emerald" : "gold"}>
 	                                    {item.termsAccepted ? "accepted" : "pending"}
-	                                  </span>
+	                                  </AdminBadge>
+                                    <div className="admin-users__cell-sub">{item.legalVersion || "No legal version"}</div>
+                                    <div className="admin-users__cell-sub">{item.referralUsedCode ? `Used ${item.referralUsedCode}` : "No referral used"}</div>
 	                                </td>
                                 <td data-label="Blocked">
-                                  <span className={`admin-user-badge ${item.blockedActive ? "admin-user-badge--danger" : "admin-user-badge--ok"}`}>
+                                  <AdminBadge tone={item.blockedActive ? "danger" : "emerald"}>
                                     {item.blockedActive ? "blocked" : "active"}
-                                  </span>
+                                  </AdminBadge>
                                 </td>
                                 <td data-label="Created">{formatDateLabel(item.createdAt)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                      </div>
+	                      </AdminTable>
                     ) : null}
 
                     <div className="admin-users__footer">
@@ -2314,7 +2582,147 @@ export default function AdminPanel() {
                 </section>
               ) : null}
 
-              {activeSection === "dishes" ? (
+              {activeSection === "bookings" ? (
+                <section className="admin-users-layout">
+                  <article className="admin-widget admin-widget--fit">
+                    <AdminFilterBar className="admin-users__controls">
+                      <div className="admin-users__filter-group" role="group" aria-label="Telegram booking status filter">
+                        <span className="admin-users__filter-group-label">Booking status</span>
+                        <div className="admin-users__filter-buttons">
+                          {bookingStatusOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`admin-users__filter-btn ${usersStatus === option.value ? "admin-users__filter-btn--active" : ""}`}
+                              onClick={() => setUsersStatus(option.value)}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </AdminFilterBar>
+                    {usersError ? <p className="admin-auth__error">{usersError}</p> : null}
+                  </article>
+
+                  <article className="admin-widget admin-widget--full">
+                    <div className="admin-widget__header">
+                      <h2>Telegram Applications & Bookings</h2>
+                      <span>{telegramApplications.length} loaded</span>
+                    </div>
+                    {usersLoading && telegramApplications.length === 0 ? <p className="admin-dashboard__state">Loading telegram applications...</p> : null}
+                    {!usersLoading && telegramApplications.length === 0 ? (
+                      <AdminEmptyState
+                        compact
+                        title="No telegram applications for this filter"
+                        description="Telegram booking records will appear here with real bot statuses, package selections, legal consent, points, and referral usage."
+                      />
+                    ) : null}
+                    {telegramApplications.length > 0 ? (
+                      <AdminTable className="admin-table-wrap">
+                        <table className="admin-table admin-table--stack">
+                          <thead>
+                            <tr>
+                              <th>Guest</th>
+                              <th>Booking</th>
+                              <th>Package</th>
+                              <th>Status</th>
+                              <th>Business</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {telegramApplications.map((item) => (
+                              <tr key={item.packageInfoId}>
+                                <td data-label="Guest">
+                                  <div className="admin-users__cell-title">{[item.name, item.surname].filter(Boolean).join(" ").trim() || `@${item.username}`}</div>
+                                  <div className="admin-users__cell-sub">@{item.username || "no-username"} · {item.phone || "No phone"}</div>
+                                  <div className="admin-users__cell-sub">Points {item.points} · Discount {item.discount}%</div>
+                                </td>
+                                <td data-label="Booking">
+                                  <div className="admin-users__cell-title">{item.publicCode || `#${item.packageInfoId}`}</div>
+                                  <div className="admin-users__cell-sub">{item.dinnerTitle}</div>
+                                  <div className="admin-users__cell-sub">{formatDateLabel(item.dinnerDate)} · {formatSourceLabel(item.source)}</div>
+                                </td>
+                                <td data-label="Package">
+                                  <AdminBadge tone={getPackageTone(item.packageCode)}>{item.packageLabel}</AdminBadge>
+                                  <div className="admin-users__cell-sub">{item.guestCount} guests · {formatCurrency(item.price)}</div>
+                                  <div className="admin-users__cell-sub">Table {formatTablePreference(item.tablePreference)}</div>
+                                </td>
+                                <td data-label="Status">
+                                  <AdminBadge tone={getApplicationStatusTone(item.status)}>{formatApplicationStatus(item.status)}</AdminBadge>
+                                  <div className="admin-users__cell-sub">Terms {item.termsAccepted ? "accepted" : "pending"}</div>
+                                  <div className="admin-users__cell-sub">{item.legalVersion || "No legal version saved"}</div>
+                                </td>
+                                <td data-label="Business">
+                                  <div className="admin-users__cell-title">{item.referralUsedCode ? `Referral ${item.referralUsedCode}` : "Direct / no referral"}</div>
+                                  <div className="admin-users__cell-sub">Own code {item.referralCode || "—"}</div>
+                                  <div className="admin-users__cell-sub">{item.adminNote || "No admin note"}</div>
+                                </td>
+                                <td data-label="Actions">
+                                  <div className="admin-users__status-toggle">
+                                    {(["pending_application", "approved", "waiting_payment", "paid", "cancelled"] as const).map((status) => (
+                                      <button
+                                        key={status}
+                                        type="button"
+                                        className={`admin-users__status-btn ${item.status === status ? "admin-users__status-btn--active" : ""}`}
+                                        disabled={Boolean(applicationSaving[item.packageInfoId]) || item.status === status}
+                                        onClick={() => void handleUpdateTelegramApplication(item, status)}
+                                      >
+                                        {formatApplicationStatus(status)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {applicationSaving[item.packageInfoId] ? <span className="admin-users__status-saving">Saving override...</span> : null}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </AdminTable>
+                    ) : null}
+                  </article>
+
+                  <AdminAuditLogCard
+                    title="Recent Admin Audit"
+                    subtitle="Internal metadata, separate from bot flow"
+                    className="admin-widget admin-widget--fit"
+                  >
+                    {auditLogs.length === 0 ? (
+                      <AdminEmptyState
+                        compact
+                        title="No recent admin audit entries"
+                        description="Manual overrides and operational changes will appear here once admins start updating synced records."
+                      />
+                    ) : (
+                      <div className="admin-table-shell">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Admin</th>
+                              <th>Action</th>
+                              <th>Entity</th>
+                              <th>When</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {auditLogs.map((logItem) => (
+                              <tr key={logItem.id}>
+                                <td data-label="Admin">{logItem.adminUsername || "admin"}</td>
+                                <td data-label="Action">{logItem.actionType}</td>
+                                <td data-label="Entity">{logItem.entityType}:{logItem.entityId}</td>
+                                <td data-label="When">{formatDateLabel(logItem.createdAt)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </AdminAuditLogCard>
+                </section>
+              ) : null}
+
+              {activeSection === "menu" ? (
                 <section className="admin-info-grid admin-info-grid--single">
                   <article className="admin-widget admin-widget--fit admin-info-card">
                     <div className="admin-widget__header">
@@ -2550,12 +2958,12 @@ export default function AdminPanel() {
                 </section>
               ) : null}
 
-              {activeSection === "settings" ? (
+              {activeSection === "operations" || activeSection === "settings" ? (
                 <section className="admin-info-grid">
                   <article className="admin-widget admin-info-card">
                     <div className="admin-widget__header">
-                      <h2>Editable Runtime Controls</h2>
-                      <span>Apply instantly without restart</span>
+                      <h2>{activeSection === "operations" ? "Operations Controls" : "Editable Runtime Controls"}</h2>
+                      <span>{activeSection === "operations" ? "Revenue, capacity, and booking operations depend on these runtime switches." : "Apply instantly without restart"}</span>
                     </div>
                     {settingsForm ? (
                       <div className="admin-dinner-form">
@@ -2642,8 +3050,8 @@ export default function AdminPanel() {
 
                   <article className="admin-widget admin-info-card">
                     <div className="admin-widget__header">
-                      <h2>Runtime Snapshot</h2>
-                      <span>Current active values</span>
+                      <h2>{activeSection === "operations" ? "Operational Snapshot" : "Runtime Snapshot"}</h2>
+                      <span>{activeSection === "operations" ? "Current environment and safety state" : "Current active values"}</span>
                     </div>
                     <ul className="admin-metric-list">
                       <li>
@@ -2696,6 +3104,48 @@ export default function AdminPanel() {
                       </li>
                     </ul>
                   </article>
+                </section>
+              ) : null}
+
+              {activeSection === "audit" ? (
+                <section className="admin-info-grid admin-info-grid--single">
+                  <AdminAuditLogCard
+                    title="Audit Log"
+                    subtitle="Every important admin action should be reviewable and attributable."
+                    className="admin-widget admin-widget--fit"
+                  >
+                    {auditLogs.length === 0 ? (
+                      <AdminEmptyState
+                        title="No audit activity yet"
+                        description="As admins update bookings, dinners, and runtime controls, the operational audit trail will appear here."
+                      />
+                    ) : (
+                      <AdminTable>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Timestamp</th>
+                              <th>Admin</th>
+                              <th>Action</th>
+                              <th>Entity</th>
+                              <th>Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {auditLogs.map((item) => (
+                              <tr key={item.id}>
+                                <td data-label="Timestamp">{formatDateLabel(item.createdAt)}</td>
+                                <td data-label="Admin">{item.adminUsername || "admin"}</td>
+                                <td data-label="Action">{item.actionType}</td>
+                                <td data-label="Entity">{item.entityType}:{item.entityId}</td>
+                                <td data-label="Reason">{item.reason || "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </AdminTable>
+                    )}
+                  </AdminAuditLogCard>
                 </section>
               ) : null}
             </div>

@@ -26,6 +26,12 @@ type updateAdminSettingsRequest struct {
 	AllowAdminUserStatusEdits *bool  `json:"allowAdminUserStatusEdits"`
 }
 
+type updateTelegramApplicationRequest struct {
+	Status string `json:"status"`
+	Note   string `json:"note"`
+	Reason string `json:"reason"`
+}
+
 type rateLimitState struct {
 	count   int
 	resetAt int64

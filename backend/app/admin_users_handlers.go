@@ -2,6 +2,7 @@ package app
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"secret-dinner/internal/db"
 	"strings"
@@ -156,12 +157,28 @@ func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 			})
 		}
 
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType:    "landing_user_status_updated",
+			EntityType:    "landing_user",
+			EntityID:      userID,
+			PreviousValue: string(mustJSONMap(map[string]string{"selectionStatus": "unknown"})),
+			NewValue:      string(mustJSONMap(map[string]string{"selectionStatus": status})),
+		})
+
 		return c.JSON(fiber.Map{
 			"ok":     true,
 			"userId": userID,
 			"status": status,
 		})
 	}
+}
+
+func mustJSONMap(value map[string]string) []byte {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return []byte("{}")
+	}
+	return data
 }
 
 func buildUserListParams(c *fiber.Ctx) userListParams {

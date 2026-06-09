@@ -120,4 +120,3 @@ func (l *landingApp) createAdminDishHandler() fiber.Handler {
 		})
 	}
 }
-

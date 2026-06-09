@@ -199,9 +199,16 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 			COALESCE(u.phone, ''),
 			COALESCE(u.language::text, ''),
 			COALESCE(u.terms_accepted, false),
+			COALESCE(u.legal_version, ''),
+			COALESCE(u.accepted_language::text, ''),
+			u.accepted_at,
 			COALESCE(u.total_payments, 0)::float8,
 			COALESCE(u.attendance_count, 0),
 			COALESCE(u.friends_invited, 0),
+			COALESCE(u.referral_code, ''),
+			COALESCE(ruv.referal_code, ''),
+			COALESCE(u.points, 0),
+			COALESCE(u.discount, 0),
 			u.created_at,
 			u.updated_at,
 			COALESCE(COUNT(ru.id), 0) AS orders_count,
@@ -214,6 +221,14 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 				ORDER BY ru2.created_at DESC
 				LIMIT 1
 			), '') AS last_table_preference,
+			COALESCE((
+				SELECT pi.status
+				FROM registered_users ru2
+				JOIN package_info pi ON pi.id = ru2.package_info_id
+				WHERE ru2.user_id = u.id
+				ORDER BY ru2.created_at DESC
+				LIMIT 1
+			), '') AS last_application_status,
 			EXISTS (
 				SELECT 1
 				FROM blocked_users bu
@@ -222,13 +237,14 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 			) AS blocked_active
 		FROM users u
 		LEFT JOIN registered_users ru ON ru.user_id = u.id
+		LEFT JOIN referals ruv ON ruv.user_id = u.id
 	`
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 	args = append(args, limit, offset)
 	query += fmt.Sprintf(`
-		GROUP BY u.id, u.username, u.name, u.surname, u.phone, u.language, u.terms_accepted, u.total_payments, u.attendance_count, u.friends_invited, u.created_at, u.updated_at
+		GROUP BY u.id, u.username, u.name, u.surname, u.phone, u.language, u.terms_accepted, u.legal_version, u.accepted_language, u.accepted_at, u.total_payments, u.attendance_count, u.friends_invited, u.referral_code, ruv.referal_code, u.points, u.discount, u.created_at, u.updated_at
 		ORDER BY u.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, len(args)-1, len(args))
@@ -243,6 +259,7 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 	for rows.Next() {
 		var item TelegramUserRecord
 		var lastRegistered sql.NullTime
+		var acceptedAt sql.NullTime
 		if err := rows.Scan(
 			&item.ID,
 			&item.Username,
@@ -251,17 +268,29 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 			&item.Phone,
 			&item.Language,
 			&item.TermsAccepted,
+			&item.LegalVersion,
+			&item.AcceptedLanguage,
+			&acceptedAt,
 			&item.TotalPayments,
 			&item.AttendanceCount,
 			&item.FriendsInvited,
+			&item.ReferralCode,
+			&item.ReferralUsedCode,
+			&item.Points,
+			&item.Discount,
 			&item.CreatedAt,
 			&item.UpdatedAt,
 			&item.OrdersCount,
 			&lastRegistered,
 			&item.LastTablePreference,
+			&item.LastApplicationStatus,
 			&item.BlockedActive,
 		); err != nil {
 			return nil, err
+		}
+		if acceptedAt.Valid {
+			t := acceptedAt.Time
+			item.AcceptedAt = &t
 		}
 		if lastRegistered.Valid {
 			t := lastRegistered.Time
