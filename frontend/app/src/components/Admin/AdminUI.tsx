@@ -139,6 +139,8 @@ export function AdminKpiCard({
   tone?: Tone;
   hint?: string;
 }) {
+  const isLongValue = value.length > 18 || value.includes("://") || value.includes("/");
+
   return (
     <AdminCard
       className={cx("admin-kpi-card", `admin-kpi-card--${tone}`)}
@@ -148,7 +150,12 @@ export function AdminKpiCard({
           <p className="admin-kpi-card__label" title={hint}>
             {label}
           </p>
-          <p className="admin-kpi-card__value">{value}</p>
+          <p
+            className={cx("admin-kpi-card__value", isLongValue && "admin-kpi-card__value--long")}
+            title={value}
+          >
+            {value}
+          </p>
         </div>
         <div className="admin-kpi-card__icon" aria-hidden="true">
           {icon ?? <span className="admin-kpi-card__icon-dot" />}

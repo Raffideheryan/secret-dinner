@@ -24,7 +24,15 @@ func (r *adminAuditRepo) InsertAdminAuditLog(entry AdminAuditLogEntry) error {
 			previous_value,
 			new_value,
 			reason
-		) VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), BTRIM($7))
+		) VALUES (
+			$1,
+			$2,
+			$3,
+			$4,
+			CAST(NULLIF(BTRIM($5), '') AS JSONB),
+			CAST(NULLIF(BTRIM($6), '') AS JSONB),
+			BTRIM($7)
+		)
 	`
 	_, err := r.db.Exec(
 		query,
