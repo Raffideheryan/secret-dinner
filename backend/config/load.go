@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -34,11 +35,15 @@ func LoadConfig() (Config, error) {
 
 	authSecret := os.Getenv("ADMIN_AUTH_SECRET")
 	if authSecret == "" {
+		if !isExplicitLocalDevMode() {
+			return Config{}, errors.New("ADMIN_AUTH_SECRET is required unless LOCAL_DEV_MODE=true")
+		}
+
 		authSecret, err = randomHex(32)
 		if err != nil {
 			return Config{}, err
 		}
-		log.Warn("ADMIN_AUTH_SECRET is empty, generated ephemeral auth secret for this process")
+		log.Warn("ADMIN_AUTH_SECRET is empty; generated ephemeral auth secret for explicit local dev mode")
 	}
 
 	listenAddr := os.Getenv("BACKEND_LISTEN_ADDR")
@@ -75,10 +80,24 @@ func LoadConfig() (Config, error) {
 		},
 	}
 
-	log.Info("Configs loaded successfully.")
-	log.Warn(cfg)
+	log.WithFields(logrus.Fields{
+		"has_database_url":          strings.TrimSpace(cfg.DB.URL) != "",
+		"has_telegram_database_url": strings.TrimSpace(cfg.DB.TelegramURL) != "",
+		"migrations_path_set":       strings.TrimSpace(cfg.DB.MigrationsPath) != "",
+		"admin_username_set":        strings.TrimSpace(cfg.Admin.Username) != "",
+		"admin_password_set":        strings.TrimSpace(cfg.Admin.Password) != "",
+		"admin_auth_secret_set":     strings.TrimSpace(cfg.Admin.AuthSecret) != "",
+		"listen_addr":               cfg.HTTP.ListenAddr,
+		"frontend_origin":           cfg.HTTP.FrontendOrigin,
+		"local_dev_mode":            isExplicitLocalDevMode(),
+	}).Info("Configs loaded successfully.")
 
 	return cfg, nil
+}
+
+func isExplicitLocalDevMode() bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv("LOCAL_DEV_MODE")))
+	return value == "1" || value == "true" || value == "yes"
 }
 
 func valueOrDefault(v, fallback string) string {

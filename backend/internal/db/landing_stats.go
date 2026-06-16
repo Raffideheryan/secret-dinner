@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -300,15 +301,8 @@ func (r *landingStatsRepo) loadTopDinners() ([]DinnerFlowStat, error) {
 		SELECT
 			ld.id,
 			ld.description,
-			COALESCE(COUNT(ul.id), 0) AS registrations,
 			COALESCE(ld.places, 0) AS capacity
 		FROM landing_dinners ld
-		LEFT JOIN users_landing ul
-			ON ul.dinner_id = ld.id
-			AND ul.chosen_package IS NOT NULL
-		GROUP BY ld.id, ld.description, ld.places
-		ORDER BY registrations DESC, ld.id DESC
-		LIMIT 8
 	`
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -316,18 +310,56 @@ func (r *landingStatsRepo) loadTopDinners() ([]DinnerFlowStat, error) {
 	}
 	defer rows.Close()
 
-	stats := make([]DinnerFlowStat, 0, 8)
+	type dinnerRow struct {
+		id          int64
+		description string
+		capacity    int64
+	}
+
+	dinners := make([]dinnerRow, 0, 8)
+	ids := make([]int64, 0, 8)
 	for rows.Next() {
-		item := DinnerFlowStat{}
-		if err := rows.Scan(&item.DinnerID, &item.Description, &item.Registrations, &item.Capacity); err != nil {
+		var item dinnerRow
+		if err := rows.Scan(&item.id, &item.description, &item.capacity); err != nil {
 			return nil, err
+		}
+		dinners = append(dinners, item)
+		ids = append(ids, item.id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	registrations, err := countLandingDinnerSeats(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make([]DinnerFlowStat, 0, len(dinners))
+	for _, dinner := range dinners {
+		item := DinnerFlowStat{
+			DinnerID:      dinner.id,
+			Description:   dinner.description,
+			Registrations: registrations[dinner.id],
+			Capacity:      dinner.capacity,
 		}
 		if item.Capacity > 0 {
 			item.FillPercent = (float64(item.Registrations) / float64(item.Capacity)) * 100
 		}
 		stats = append(stats, item)
 	}
-	return stats, rows.Err()
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Registrations == stats[j].Registrations {
+			return stats[i].DinnerID > stats[j].DinnerID
+		}
+		return stats[i].Registrations > stats[j].Registrations
+	})
+
+	if len(stats) > 8 {
+		stats = stats[:8]
+	}
+	return stats, nil
 }
 
 func (r *landingStatsRepo) loadSelectionPercentiles() (float64, float64, error) {

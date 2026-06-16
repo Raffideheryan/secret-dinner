@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/lib/pq"
 )
 
 type DinnersDB interface {
@@ -390,66 +388,30 @@ func (d *dinnersRepo) attachCombinedRegistrations(dinners []Dinners) {
 		log.WithError(err).Warn("failed to count telegram registrations")
 		return
 	}
+	landingBookings, err := countLandingDinnerBookings(d.landingDB, ids)
+	if err != nil {
+		log.WithError(err).Warn("failed to count landing bookings")
+		return
+	}
+	telegramBookings, err := countTelegramDinnerBookings(d.telegramDB, ids)
+	if err != nil {
+		log.WithError(err).Warn("failed to count telegram bookings")
+		return
+	}
 
 	for i := range dinners {
 		id := dinners[i].ID
 		dinners[i].AlreadyRegistered = int(landingCount[id] + telegramCount[id])
+		dinners[i].ActiveBookings = int(landingBookings[id] + telegramBookings[id])
 	}
 }
 
 func (d *dinnersRepo) countLandingRegistrations(ids []int64) (map[int64]int64, error) {
-	result := make(map[int64]int64, len(ids))
-	if len(ids) == 0 {
-		return result, nil
-	}
-	const query = `
-		SELECT dinner_id, COUNT(*)
-		FROM users_landing
-		WHERE dinner_id = ANY($1)
-		  AND chosen_package IS NOT NULL
-		GROUP BY dinner_id
-	`
-	rows, err := d.landingDB.Query(query, pq.Array(ids))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var dinnerID int64
-		var count int64
-		if err := rows.Scan(&dinnerID, &count); err != nil {
-			return nil, err
-		}
-		result[dinnerID] = count
-	}
-	return result, rows.Err()
+	return countLandingDinnerSeats(d.landingDB, ids)
 }
 
 func (d *dinnersRepo) countTelegramRegistrations(ids []int64) (map[int64]int64, error) {
-	result := make(map[int64]int64, len(ids))
-	if d.telegramDB == nil || len(ids) == 0 {
-		return result, nil
-	}
-	const query = `
-		SELECT dinner_id, COUNT(*)
-		FROM registered_users
-		WHERE dinner_id = ANY($1)
-		GROUP BY dinner_id
-	`
-	rows, err := d.telegramDB.Query(query, pq.Array(ids))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var dinnerID int64
-		var count int64
-		if err := rows.Scan(&dinnerID, &count); err != nil {
-			return nil, err
-		}
-		result[dinnerID] = count
-	}
-	return result, rows.Err()
+	return countTelegramDinnerSeats(d.telegramDB, ids)
 }
 
 func (d *dinnersRepo) collectAllDinnerIDs() ([]int64, error) {

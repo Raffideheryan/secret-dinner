@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -248,13 +249,8 @@ func (r *telegramStatsRepo) loadTopDinners() ([]DinnerFlowStat, error) {
 		SELECT
 			d.id,
 			d.description,
-			COALESCE(COUNT(ru.id), 0) AS registrations,
 			COALESCE(d.places, 0) AS capacity
 		FROM dinners d
-		LEFT JOIN registered_users ru ON ru.dinner_id = d.id
-		GROUP BY d.id, d.description, d.places
-		ORDER BY registrations DESC, d.id DESC
-		LIMIT 8
 	`
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -262,18 +258,56 @@ func (r *telegramStatsRepo) loadTopDinners() ([]DinnerFlowStat, error) {
 	}
 	defer rows.Close()
 
-	stats := make([]DinnerFlowStat, 0, 8)
+	type dinnerRow struct {
+		id          int64
+		description string
+		capacity    int64
+	}
+
+	dinners := make([]dinnerRow, 0, 8)
+	ids := make([]int64, 0, 8)
 	for rows.Next() {
-		item := DinnerFlowStat{}
-		if err := rows.Scan(&item.DinnerID, &item.Description, &item.Registrations, &item.Capacity); err != nil {
+		var item dinnerRow
+		if err := rows.Scan(&item.id, &item.description, &item.capacity); err != nil {
 			return nil, err
+		}
+		dinners = append(dinners, item)
+		ids = append(ids, item.id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	registrations, err := countTelegramDinnerSeats(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make([]DinnerFlowStat, 0, len(dinners))
+	for _, dinner := range dinners {
+		item := DinnerFlowStat{
+			DinnerID:      dinner.id,
+			Description:   dinner.description,
+			Registrations: registrations[dinner.id],
+			Capacity:      dinner.capacity,
 		}
 		if item.Capacity > 0 {
 			item.FillPercent = (float64(item.Registrations) / float64(item.Capacity)) * 100
 		}
 		stats = append(stats, item)
 	}
-	return stats, rows.Err()
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Registrations == stats[j].Registrations {
+			return stats[i].DinnerID > stats[j].DinnerID
+		}
+		return stats[i].Registrations > stats[j].Registrations
+	})
+
+	if len(stats) > 8 {
+		stats = stats[:8]
+	}
+	return stats, nil
 }
 
 func (r *telegramStatsRepo) loadRegistrationsByHour() ([]HourlyCountPoint, error) {
@@ -380,27 +414,8 @@ func (r *telegramStatsRepo) loadRevenueByPackage() ([]LabelValuePoint, error) {
 
 func (r *telegramStatsRepo) loadDinnerFillBands() ([]LabelCountPoint, error) {
 	const query = `
-		WITH dinner_load AS (
-			SELECT
-				d.id,
-				COALESCE(d.places, 0) AS places,
-				COALESCE(COUNT(ru.id), 0) AS regs
-			FROM dinners d
-			LEFT JOIN registered_users ru ON ru.dinner_id = d.id
-			GROUP BY d.id, d.places
-		)
-		SELECT band, COUNT(*)
-		FROM (
-			SELECT CASE
-				WHEN places <= 0 THEN 'Unknown'
-				WHEN (regs::float8 / NULLIF(places, 0)) < 0.30 THEN 'Low <30%'
-				WHEN (regs::float8 / NULLIF(places, 0)) < 0.70 THEN 'Mid 30-70%'
-				WHEN (regs::float8 / NULLIF(places, 0)) <= 1.00 THEN 'High 70-100%'
-				ELSE 'Overbooked'
-			END AS band
-			FROM dinner_load
-		) bands
-		GROUP BY band
+		SELECT id, COALESCE(places, 0) AS places
+		FROM dinners
 	`
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -409,16 +424,45 @@ func (r *telegramStatsRepo) loadDinnerFillBands() ([]LabelCountPoint, error) {
 	defer rows.Close()
 
 	m := make(map[string]int64)
+	type dinnerLoad struct {
+		id     int64
+		places int64
+	}
+	loads := make([]dinnerLoad, 0, 16)
+	ids := make([]int64, 0, 16)
 	for rows.Next() {
-		var band string
-		var count int64
-		if err := rows.Scan(&band, &count); err != nil {
+		var load dinnerLoad
+		if err := rows.Scan(&load.id, &load.places); err != nil {
 			return nil, err
 		}
-		m[band] = count
+		loads = append(loads, load)
+		ids = append(ids, load.id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	registrations, err := countTelegramDinnerSeats(r.db, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, load := range loads {
+		band := "Unknown"
+		regs := registrations[load.id]
+		switch {
+		case load.places <= 0:
+			band = "Unknown"
+		case (float64(regs) / float64(load.places)) < 0.30:
+			band = "Low <30%"
+		case (float64(regs) / float64(load.places)) < 0.70:
+			band = "Mid 30-70%"
+		case regs <= load.places:
+			band = "High 70-100%"
+		default:
+			band = "Overbooked"
+		}
+		m[band]++
 	}
 
 	order := []string{"Low <30%", "Mid 30-70%", "High 70-100%", "Overbooked", "Unknown"}

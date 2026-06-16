@@ -133,6 +133,7 @@ type Dinners struct {
 	Description       string    `json:"description" db:"description"`
 	Places            int       `json:"places" db:"places"`
 	AlreadyRegistered int       `json:"alreadyRegistered" db:"already_registered"`
+	ActiveBookings    int       `json:"activeBookings"`
 	Location          string    `json:"location" db:"location"`
 	DinnerDate        time.Time `json:"dinnerDate" db:"dinner_date"`
 	SilverPrice       *float64  `json:"silverPrice" db:"silver_price"`
@@ -272,7 +273,8 @@ type TelegramApplicationsSummary struct {
 type AdminBookingsDB interface {
 	ListTelegramApplications(params UserListParams) ([]TelegramApplicationRecord, error)
 	TelegramApplicationsSummary() (TelegramApplicationsSummary, error)
-	UpdateTelegramApplication(packageInfoID int64, status string, note string) (TelegramApplicationRecord, TelegramApplicationRecord, error)
+	GetTelegramApplication(packageInfoID int64) (TelegramApplicationRecord, error)
+	UpdateTelegramApplication(packageInfoID int64, status string, note string, expectedUpdatedAt time.Time) (TelegramApplicationRecord, TelegramApplicationRecord, error)
 	Close() error
 }
 

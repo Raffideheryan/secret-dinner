@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"secret-dinner/internal/db"
 
@@ -22,6 +23,12 @@ var allowedTelegramApplicationStatuses = map[string]struct{}{
 	"paid":                {},
 	"cancelled":           {},
 	"no_show":             {},
+}
+
+var riskyTelegramApplicationStatuses = map[string]struct{}{
+	"cancelled": {},
+	"rejected":  {},
+	"no_show":   {},
 }
 
 func (l *landingApp) listAdminTelegramApplicationsHandler() fiber.Handler {
@@ -104,12 +111,52 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 				"error": "invalid telegram application status",
 			})
 		}
-
-		before, after, err := l.connections.AdminBookings.UpdateTelegramApplication(packageInfoID, status, body.Note)
+		expectedUpdatedAtRaw := strings.TrimSpace(body.ExpectedUpdatedAt)
+		if expectedUpdatedAtRaw == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "expectedUpdatedAt is required for stale-write protection",
+			})
+		}
+		expectedUpdatedAt, err := time.Parse(time.RFC3339Nano, expectedUpdatedAtRaw)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "expectedUpdatedAt must be a valid RFC3339 timestamp",
+			})
+		}
+		reason := strings.TrimSpace(body.Reason)
+		currentApplication, err := l.connections.AdminBookings.GetTelegramApplication(packageInfoID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 					"error": "application not found",
+				})
+			}
+			log.WithError(err).Error("failed to load current telegram application")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to load current telegram application",
+			})
+		}
+		if riskyTelegramStatusOverrideRequiresReason(currentApplication.Status, status) && reason == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": db.ErrTelegramApplicationReasonRequired.Error(),
+			})
+		}
+
+		before, after, err := l.connections.AdminBookings.UpdateTelegramApplication(packageInfoID, status, body.Note, expectedUpdatedAt)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "application not found",
+				})
+			}
+			if errors.Is(err, db.ErrInvalidTelegramApplicationStatusTransition) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": err.Error(),
+				})
+			}
+			if errors.Is(err, db.ErrTelegramApplicationStaleUpdate) {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"error": err.Error(),
 				})
 			}
 			log.WithError(err).Error("failed to update telegram application")
@@ -124,7 +171,7 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 			EntityID:      strconv.FormatInt(packageInfoID, 10),
 			PreviousValue: mustMarshalAuditJSON(before),
 			NewValue:      mustMarshalAuditJSON(after),
-			Reason:        strings.TrimSpace(body.Reason),
+			Reason:        reason,
 		})
 
 		return c.JSON(fiber.Map{
@@ -132,6 +179,16 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 			"application": after,
 		})
 	}
+}
+
+func riskyTelegramStatusOverrideRequiresReason(currentStatus string, nextStatus string) bool {
+	current := strings.ToLower(strings.TrimSpace(currentStatus))
+	next := strings.ToLower(strings.TrimSpace(nextStatus))
+	if current == next {
+		return false
+	}
+	_, risky := riskyTelegramApplicationStatuses[next]
+	return risky
 }
 
 func (l *landingApp) listAdminAuditLogsHandler() fiber.Handler {

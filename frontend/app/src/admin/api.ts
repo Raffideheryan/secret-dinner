@@ -35,6 +35,7 @@ export type AdminDinner = {
   description: string;
   places: number;
   alreadyRegistered: number;
+  activeBookings: number;
   location: string;
   dinnerDate: string;
   silverPrice?: number | null;
@@ -357,6 +358,7 @@ export type AdminTelegramApplicationUpdatePayload = {
   status: AdminTelegramApplicationStatus;
   note: string;
   reason?: string;
+  expectedUpdatedAt: string;
 };
 
 export async function adminLogin(username: string, password: string): Promise<void> {

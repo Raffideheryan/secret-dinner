@@ -27,9 +27,10 @@ type updateAdminSettingsRequest struct {
 }
 
 type updateTelegramApplicationRequest struct {
-	Status string `json:"status"`
-	Note   string `json:"note"`
-	Reason string `json:"reason"`
+	Status            string `json:"status"`
+	Note              string `json:"note"`
+	Reason            string `json:"reason"`
+	ExpectedUpdatedAt string `json:"expectedUpdatedAt"`
 }
 
 type rateLimitState struct {

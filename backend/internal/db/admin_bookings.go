@@ -2,12 +2,31 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 )
 
 type adminBookingsRepo struct {
 	db *sql.DB
+}
+
+var ErrInvalidTelegramApplicationStatusTransition = errors.New("invalid telegram application status transition")
+var ErrTelegramApplicationStaleUpdate = errors.New("telegram application was updated by another admin")
+var ErrTelegramApplicationReasonRequired = errors.New("reason is required for risky status overrides")
+
+var allowedTelegramApplicationStatusTransitions = map[string][]string{
+	"draft":               {"draft", "pending_application", "cancelled"},
+	"pending_application": {"pending_application", "contacted", "approved", "rejected", "cancelled"},
+	"contacted":           {"contacted", "approved", "rejected", "cancelled"},
+	"approved":            {"approved", "waiting_payment", "cancelled"},
+	"waiting_payment":     {"waiting_payment", "paid", "cancelled"},
+	"paid":                {"paid", "no_show", "cancelled"},
+	"rejected":            {"rejected"},
+	"cancelled":           {"cancelled"},
+	"no_show":             {"no_show"},
 }
 
 func NewAdminBookingsDB(db *sql.DB) AdminBookingsDB {
@@ -173,9 +192,41 @@ func (r *adminBookingsRepo) TelegramApplicationsSummary() (TelegramApplicationsS
 	return summary, nil
 }
 
-func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, status string, note string) (TelegramApplicationRecord, TelegramApplicationRecord, error) {
-	before, err := r.getTelegramApplication(packageInfoID)
+func (r *adminBookingsRepo) GetTelegramApplication(packageInfoID int64) (TelegramApplicationRecord, error) {
+	return r.getTelegramApplication(packageInfoID)
+}
+
+func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, status string, note string, expectedUpdatedAt time.Time) (TelegramApplicationRecord, TelegramApplicationRecord, error) {
+	tx, err := r.db.Begin()
 	if err != nil {
+		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+	}
+	defer tx.Rollback()
+
+	var currentUpdatedAt time.Time
+	var currentStatus string
+	if err := tx.QueryRow(
+		`SELECT COALESCE(status, ''), updated_at FROM package_info WHERE id = $1 FOR UPDATE`,
+		packageInfoID,
+	).Scan(&currentStatus, &currentUpdatedAt); err != nil {
+		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+	}
+
+	if !currentUpdatedAt.UTC().Equal(expectedUpdatedAt.UTC()) {
+		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, fmt.Errorf(
+			"%w: expected version %s but current version is %s; refresh and try again",
+			ErrTelegramApplicationStaleUpdate,
+			expectedUpdatedAt.UTC().Format(time.RFC3339Nano),
+			currentUpdatedAt.UTC().Format(time.RFC3339Nano),
+		)
+	}
+
+	before, err := r.getTelegramApplicationWithQuerier(tx, packageInfoID)
+	if err != nil {
+		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+	}
+
+	if err := validateTelegramApplicationStatusTransition(before.Status, status); err != nil {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
 
@@ -186,7 +237,7 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 			updated_at = now()
 		WHERE id = $1
 	`
-	result, err := r.db.Exec(query, packageInfoID, status, note)
+	result, err := tx.Exec(query, packageInfoID, status, note)
 	if err != nil {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
@@ -198,14 +249,55 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, sql.ErrNoRows
 	}
 
-	after, err := r.getTelegramApplication(packageInfoID)
+	after, err := r.getTelegramApplicationWithQuerier(tx, packageInfoID)
 	if err != nil {
+		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
 	return before, after, nil
 }
 
+func validateTelegramApplicationStatusTransition(currentStatus, nextStatus string) error {
+	current := strings.ToLower(strings.TrimSpace(currentStatus))
+	next := strings.ToLower(strings.TrimSpace(nextStatus))
+
+	if current == next {
+		return nil
+	}
+
+	allowedNext, ok := allowedTelegramApplicationStatusTransitions[current]
+	if !ok {
+		return fmt.Errorf("%w: cannot move from %q to %q", ErrInvalidTelegramApplicationStatusTransition, current, next)
+	}
+
+	for _, candidate := range allowedNext {
+		if candidate == next {
+			return nil
+		}
+	}
+
+	allowed := append([]string(nil), allowedNext...)
+	sort.Strings(allowed)
+	return fmt.Errorf(
+		"%w: cannot move from %q to %q; allowed next statuses: %s",
+		ErrInvalidTelegramApplicationStatusTransition,
+		current,
+		next,
+		strings.Join(allowed, ", "),
+	)
+}
+
 func (r *adminBookingsRepo) getTelegramApplication(packageInfoID int64) (TelegramApplicationRecord, error) {
+	return r.getTelegramApplicationWithQuerier(r.db, packageInfoID)
+}
+
+type telegramApplicationQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func (r *adminBookingsRepo) getTelegramApplicationWithQuerier(q telegramApplicationQuerier, packageInfoID int64) (TelegramApplicationRecord, error) {
 	const query = `
 		SELECT
 			pi.id,
@@ -242,7 +334,7 @@ func (r *adminBookingsRepo) getTelegramApplication(packageInfoID int64) (Telegra
 	`
 	var item TelegramApplicationRecord
 	var dinnerDate sql.NullTime
-	if err := r.db.QueryRow(query, packageInfoID).Scan(
+	if err := q.QueryRow(query, packageInfoID).Scan(
 		&item.PackageInfoID,
 		&item.PublicCode,
 		&item.UserID,
