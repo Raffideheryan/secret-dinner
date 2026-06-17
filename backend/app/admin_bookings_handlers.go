@@ -200,7 +200,16 @@ func (l *landingApp) listAdminAuditLogsHandler() fiber.Handler {
 			})
 		}
 		limit := c.QueryInt("limit", 20)
-		logs, err := l.connections.AdminAudit.ListAdminAuditLogs(limit)
+		offset := c.QueryInt("offset", 0)
+		logs, err := l.connections.AdminAudit.ListAdminAuditLogs(db.AdminAuditLogListParams{
+			Limit:         limit,
+			Offset:        offset,
+			Search:        strings.TrimSpace(c.Query("search")),
+			EntityType:    strings.TrimSpace(c.Query("entityType")),
+			ActionType:    strings.TrimSpace(c.Query("actionType")),
+			AdminUsername: strings.TrimSpace(c.Query("adminUsername")),
+			ReasonState:   strings.TrimSpace(c.Query("reasonState")),
+		})
 		if err != nil {
 			log.WithError(err).Error("failed to list admin audit logs")
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

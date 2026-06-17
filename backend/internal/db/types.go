@@ -174,6 +174,7 @@ type LandingUserRecord struct {
 	DinnerTitle     string    `json:"dinnerTitle"`
 	ChosenPackage   *string   `json:"chosenPackage,omitempty"`
 	SelectionStatus string    `json:"selectionStatus"`
+	AdminStatus     string    `json:"adminStatus"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
@@ -221,7 +222,7 @@ type TelegramUsersSummary struct {
 type AdminUsersDB interface {
 	ListLandingUsers(params UserListParams) ([]LandingUserRecord, error)
 	LandingUsersSummary() (LandingUsersSummary, error)
-	UpdateLandingUserStatus(userID string, status string) error
+	UpdateLandingUserStatus(userID string, selectionStatus *string, adminStatus *string) (LandingUserRecord, error)
 	ListTelegramUsers(params UserListParams) ([]TelegramUserRecord, error)
 	TelegramUsersSummary() (TelegramUsersSummary, error)
 	Close() error
@@ -300,8 +301,18 @@ type AdminAuditLogEntry struct {
 	Reason        string
 }
 
+type AdminAuditLogListParams struct {
+	Limit         int
+	Offset        int
+	Search        string
+	EntityType    string
+	ActionType    string
+	AdminUsername string
+	ReasonState   string
+}
+
 type AdminAuditDB interface {
 	InsertAdminAuditLog(entry AdminAuditLogEntry) error
-	ListAdminAuditLogs(limit int) ([]AdminAuditLogRecord, error)
+	ListAdminAuditLogs(params AdminAuditLogListParams) ([]AdminAuditLogRecord, error)
 	Close() error
 }

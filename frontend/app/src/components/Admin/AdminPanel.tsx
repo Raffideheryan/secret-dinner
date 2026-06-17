@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   adminLogout,
   createAdminDish,
   createAdminDinner,
+  deleteAdminDish,
   deleteAdminDinner,
   getAdminDishesByType,
   getAdminDishTypes,
@@ -28,6 +29,7 @@ import {
   type AdminTelegramUsersSummary,
   updateAdminLandingUserStatus,
   updateAdminTelegramApplication,
+  updateAdminDish,
   updateAdminSettings,
   updateAdminDinner,
 } from "../../admin/api";
@@ -226,65 +228,6 @@ function DishTypeSelect({
   );
 }
 
-function BookingStatusDropdown({
-  value,
-  options,
-  onChange,
-  disabled,
-  busy,
-  ariaLabel,
-  formatLabel,
-  getIcon,
-}: {
-  value?: string;
-  options: BookingActionOption[];
-  onChange: (next: string) => void;
-  disabled?: boolean;
-  busy?: boolean;
-  ariaLabel: string;
-  formatLabel: (status?: string) => string;
-  getIcon: (status?: string) => string;
-}) {
-  const currentLabel = formatLabel(value);
-
-  return (
-    <div className="admin-booking-actions" role="group" aria-label={ariaLabel}>
-      <div className="admin-booking-actions__header">
-        <span className="admin-booking-actions__label">Current status</span>
-        <span className={`admin-booking-actions__current admin-booking-actions__current--${getBookingActionTone(value)}`}>
-          <span className="admin-booking-actions__icon" aria-hidden="true">
-            {getIcon(value)}
-          </span>
-          <span className="admin-booking-actions__current-text">{busy ? "Saving..." : currentLabel}</span>
-        </span>
-      </div>
-
-      <div className="admin-booking-actions__segments">
-        {options.map((option) => {
-          const isActive = option.value === value;
-          const tone = getBookingActionTone(option.value);
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={isActive}
-              className={`admin-booking-actions__segment admin-booking-actions__segment--${tone} ${isActive ? "admin-booking-actions__segment--active" : ""}`}
-              disabled={Boolean(disabled || busy) || isActive}
-              onClick={() => onChange(option.value)}
-              title={option.label}
-            >
-              <span className="admin-booking-actions__icon" aria-hidden="true">
-                {getIcon(option.value)}
-              </span>
-              <span className="admin-booking-actions__text">{option.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 type DinnerFormState = {
   id?: number;
   description: string;
@@ -379,6 +322,49 @@ const emptyDishForm: DishFormState = {
   price: "",
 };
 const USERS_PAGE_SIZE = 30;
+const auditEntityTypeOptions = [
+  { value: "all", label: "All entities" },
+  { value: "telegram_application", label: "Telegram bookings" },
+  { value: "landing_user", label: "Landing guests" },
+  { value: "dinner", label: "Dinners" },
+  { value: "runtime_settings", label: "Settings" },
+] as const;
+const auditActionTypeOptions = [
+  { value: "all", label: "All actions" },
+  { value: "telegram_application_updated", label: "Booking updates" },
+  { value: "landing_user_status_updated", label: "Landing status updates" },
+  { value: "dinner_created", label: "Dinner created" },
+  { value: "dinner_updated", label: "Dinner updated" },
+  { value: "dinner_deleted", label: "Dinner deleted" },
+  { value: "dinners_synced", label: "Dinners synced" },
+  { value: "settings_updated", label: "Settings updated" },
+] as const;
+const auditReasonStateOptions = [
+  { value: "all", label: "Any reason" },
+  { value: "with_reason", label: "With reason" },
+  { value: "without_reason", label: "No reason" },
+] as const;
+
+function isAdminSection(value: string): value is AdminSection {
+  return [
+    "overview",
+    "guests",
+    "bookings",
+    "dinners",
+    "revenue",
+    "analytics",
+    "telegram",
+    "menu",
+    "operations",
+    "settings",
+    "audit",
+  ].includes(value);
+}
+
+function getSectionFromSearch(search: string): AdminSection {
+  const value = new URLSearchParams(search).get("section")?.trim().toLowerCase() ?? "";
+  return isAdminSection(value) ? value : "overview";
+}
 
 const metricHints: Record<string, string> = {
   "Landing applications": "Total join form applications from the landing website.",
@@ -451,6 +437,17 @@ const landingSelectionStatusOptions: Array<{
 }> = [
   { value: "open", label: "Open" },
   { value: "completed", label: "Completed" },
+];
+
+const landingReviewStatusOptions: Array<{
+  value: AdminLandingUser["adminStatus"];
+  label: string;
+}> = [
+  { value: "new", label: "New" },
+  { value: "review", label: "In review" },
+  { value: "contacted", label: "Contacted" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
 ];
 
 const telegramBookingActionOptions: BookingActionOption[] = [
@@ -646,6 +643,50 @@ function formatTelegramStatusChipLabel(group: BookingStatusSummaryBadge) {
   }
 }
 
+function getTelegramApplicationsSummaryKey(status: AdminTelegramApplication["status"]) {
+  switch (status) {
+    case "pending_application":
+      return "pendingApplication";
+    case "approved":
+      return "approved";
+    case "waiting_payment":
+      return "waitingPayment";
+    case "paid":
+      return "paid";
+    case "cancelled":
+      return "cancelled";
+    case "rejected":
+      return "rejected";
+    case "no_show":
+      return "noShow";
+    default:
+      return null;
+  }
+}
+
+function adjustTelegramApplicationsSummary(
+  summary: AdminTelegramApplicationsSummary,
+  previousStatus: AdminTelegramApplication["status"],
+  nextStatus: AdminTelegramApplication["status"]
+): AdminTelegramApplicationsSummary {
+  if (previousStatus === nextStatus) {
+    return summary;
+  }
+
+  const nextSummary = { ...summary };
+  const previousKey = getTelegramApplicationsSummaryKey(previousStatus);
+  const nextKey = getTelegramApplicationsSummaryKey(nextStatus);
+
+  if (previousKey) {
+    nextSummary[previousKey] = Math.max(0, nextSummary[previousKey] - 1);
+  }
+  if (nextKey) {
+    nextSummary[nextKey] += 1;
+  }
+
+  return nextSummary;
+}
+
 function DinnerCapacityInline({
   registered,
   places,
@@ -753,6 +794,98 @@ function formatLandingSelectionStatus(status?: string) {
       return "Completed";
     default:
       return status || "—";
+  }
+}
+
+function formatLandingAdminStatus(status?: string) {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "new":
+      return "New";
+    case "review":
+      return "In review";
+    case "contacted":
+      return "Contacted";
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    default:
+      return status || "—";
+  }
+}
+
+function getLandingAdminStatusSummary(status?: string): BookingStatusSummaryBadge {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "review":
+      return {
+        key: "application",
+        shortLabel: "Review",
+        fullLabel: "Review",
+        value: "In review",
+        tone: "gold",
+        description: "Landing application is currently under review.",
+      };
+    case "contacted":
+      return {
+        key: "application",
+        shortLabel: "Review",
+        fullLabel: "Review",
+        value: "Contacted",
+        tone: "default",
+        description: "Guest has been contacted by the team.",
+      };
+    case "approved":
+      return {
+        key: "application",
+        shortLabel: "Review",
+        fullLabel: "Review",
+        value: "Approved",
+        tone: "emerald",
+        description: "Landing application has been approved.",
+      };
+    case "rejected":
+      return {
+        key: "application",
+        shortLabel: "Review",
+        fullLabel: "Review",
+        value: "Rejected",
+        tone: "danger",
+        description: "Landing application has been rejected.",
+      };
+    case "new":
+    default:
+      return {
+        key: "application",
+        shortLabel: "Review",
+        fullLabel: "Review",
+        value: "New",
+        tone: "default",
+        description: "Landing application is newly created and not yet reviewed.",
+      };
+  }
+}
+
+function getLandingSelectionSummary(status?: string): BookingStatusSummaryBadge {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "completed":
+      return {
+        key: "payment",
+        shortLabel: "Selection",
+        fullLabel: "Selection",
+        value: "Completed",
+        tone: "emerald",
+        description: "Dinner and package selection have been completed.",
+      };
+    case "open":
+    default:
+      return {
+        key: "payment",
+        shortLabel: "Selection",
+        fullLabel: "Selection",
+        value: "Open",
+        tone: "gold",
+        description: "Dinner or package selection is still open.",
+      };
   }
 }
 
@@ -896,6 +1029,17 @@ function formatTelegramUsername(value?: string) {
   return normalized ? `@${normalized}` : "—";
 }
 
+function matchesLandingBookingFilter(item: AdminLandingUser, filter: string) {
+  const normalized = filter.trim().toLowerCase();
+  if (!normalized || normalized === "all") {
+    return true;
+  }
+  if (normalized === "open" || normalized === "completed") {
+    return (item.selectionStatus ?? "").trim().toLowerCase() === normalized;
+  }
+  return (item.adminStatus ?? "").trim().toLowerCase() === normalized;
+}
+
 function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
   return {
     key: `landing-${item.id}`,
@@ -903,7 +1047,7 @@ function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
     phone: item.phone || "—",
     telegramUsername: "—",
     source: "landing",
-    rawStatus: item.selectionStatus,
+    rawStatus: item.adminStatus,
     applicationsCount: 1,
     paidBookingsCount: null,
     attendanceCount: null,
@@ -912,7 +1056,7 @@ function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
     points: null,
     lastActivityAt: item.updatedAt || item.createdAt,
     createdAt: item.createdAt,
-    statusLabel: formatLandingSelectionStatus(item.selectionStatus),
+    statusLabel: formatLandingAdminStatus(item.adminStatus),
     packageLabel: item.chosenPackage || "Unselected",
     paidStatusLabel: "Not tracked",
     detailTitle: item.dinnerTitle || "No dinner selected",
@@ -920,7 +1064,8 @@ function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
       `Email: ${item.email || "—"}`,
       `Guests: ${item.guestCount}`,
       `Package: ${item.chosenPackage || "Unselected"}`,
-      `Status: ${formatLandingSelectionStatus(item.selectionStatus)}`,
+      `Selection: ${formatLandingSelectionStatus(item.selectionStatus)}`,
+      `Review: ${formatLandingAdminStatus(item.adminStatus)}`,
       `Hobbies: ${item.hobbies || "—"}`,
       `Allergies: ${item.allergies || "—"}`,
     ],
@@ -929,6 +1074,7 @@ function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
       `Last updated ${formatDateLabel(item.updatedAt)}`,
       item.dinnerTitle ? `Dinner selected: ${item.dinnerTitle}` : "Dinner not selected yet",
       item.chosenPackage ? `Package selected: ${item.chosenPackage}` : "Package not selected yet",
+      `Review status: ${formatLandingAdminStatus(item.adminStatus)}`,
     ],
   };
 }
@@ -1082,7 +1228,14 @@ function formatAuditStatus(entityType: string, status: string | null) {
   if (!status) {
     return null;
   }
-  return entityType === "landing_user" ? formatLandingSelectionStatus(status) : formatApplicationStatus(status);
+  if (entityType === "landing_user") {
+    const normalized = status.trim().toLowerCase();
+    if (normalized === "open" || normalized === "completed") {
+      return formatLandingSelectionStatus(status);
+    }
+    return formatLandingAdminStatus(status);
+  }
+  return formatApplicationStatus(status);
 }
 
 function getAuditStatusChange(item: AdminAuditLogEntry) {
@@ -1201,13 +1354,37 @@ function AuditTimelineList({
   emptyTitle,
   emptyDescription,
   compact = false,
+  groupEvents = true,
+  onOpenGroup,
 }: {
   logs: AdminAuditLogEntry[];
   emptyTitle: string;
   emptyDescription: string;
   compact?: boolean;
+  groupEvents?: boolean;
+  onOpenGroup?: (event: AuditTimelineEvent, sourceLogs: AdminAuditLogEntry[]) => void;
 }) {
-  const events = buildAuditTimelineEvents(logs);
+  const events = groupEvents
+    ? buildAuditTimelineEvents(logs)
+    : logs.map((item) => {
+        const change = getAuditStatusChange(item);
+        const entityMeta = getAuditBookingCode(item) ? `Booking code ${getAuditBookingCode(item)}` : undefined;
+        return {
+          key: `audit-event-${item.id}`,
+          adminLabel: item.adminUsername || "admin",
+          actionLabel: formatAuditActionLabel(item.actionType),
+          entityLabel: formatAuditEntityLabel(item.entityType, item.entityId),
+          entityMeta,
+          reason: item.reason || "No reason provided",
+          createdAt: item.createdAt,
+          previousStatus: change?.previousStatus ?? null,
+          nextStatus: change?.nextStatus ?? null,
+          previousTone: getAuditStatusBadgeTone(item.entityType, change?.previousStatusRaw ?? null),
+          nextTone: getAuditStatusBadgeTone(item.entityType, change?.nextStatusRaw ?? null),
+          itemCount: 1,
+          itemIds: [item.id],
+        } satisfies AuditTimelineEvent;
+      });
 
   if (events.length === 0) {
     return <AdminEmptyState compact={compact} title={emptyTitle} description={emptyDescription} />;
@@ -1220,7 +1397,16 @@ function AuditTimelineList({
           <div className="admin-audit-timeline__head">
             <div className="admin-audit-timeline__title-wrap">
               <strong className="admin-audit-timeline__title">{event.actionLabel}</strong>
-              {event.itemCount > 1 ? <AdminBadge tone="gold">Grouped {event.itemCount} edits</AdminBadge> : null}
+              {event.itemCount > 1 ? (
+                <button
+                  type="button"
+                  className="admin-audit-timeline__group-btn"
+                  onClick={() => onOpenGroup?.(event, logs)}
+                  title="Open this grouped audit history"
+                >
+                  <AdminBadge tone="gold">Grouped {event.itemCount} edits</AdminBadge>
+                </button>
+              ) : null}
             </div>
             <span className="admin-audit-timeline__time">{formatDateLabel(event.createdAt)}</span>
           </div>
@@ -1434,11 +1620,12 @@ function buildSparkline(values: number[], width = 560, height = 180, padding = 1
 
 export default function AdminPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<AdminPanelResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [activeSection, setActiveSection] = useState<AdminSection>("overview");
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => getSectionFromSearch(location.search));
   const [searchQuery, setSearchQuery] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
 
@@ -1457,6 +1644,9 @@ export default function AdminPanel() {
   const [dishesError, setDishesError] = useState("");
   const [dishSaving, setDishSaving] = useState(false);
   const [dishForm, setDishForm] = useState<DishFormState>(emptyDishForm);
+  const [editingDishId, setEditingDishId] = useState<number | null>(null);
+  const [dishDeleteTarget, setDishDeleteTarget] = useState<AdminDishItem | null>(null);
+  const [dishDeleting, setDishDeleting] = useState(false);
   const [settingsForm, setSettingsForm] = useState<SettingsFormState | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -1481,6 +1671,23 @@ export default function AdminPanel() {
     noShow: 0,
   });
   const [auditLogs, setAuditLogs] = useState<AdminAuditLogEntry[]>([]);
+  const [auditSearchQuery, setAuditSearchQuery] = useState("");
+  const [auditEntityTypeFilter, setAuditEntityTypeFilter] = useState("all");
+  const [auditActionTypeFilter, setAuditActionTypeFilter] = useState("all");
+  const [auditAdminFilter, setAuditAdminFilter] = useState("");
+  const [auditReasonStateFilter, setAuditReasonStateFilter] = useState<"all" | "with_reason" | "without_reason">("all");
+  const [auditSearchInput, setAuditSearchInput] = useState("");
+  const [auditEntityTypeDraft, setAuditEntityTypeDraft] = useState("all");
+  const [auditActionTypeDraft, setAuditActionTypeDraft] = useState("all");
+  const [auditAdminInput, setAuditAdminInput] = useState("");
+  const [auditReasonStateDraft, setAuditReasonStateDraft] = useState<"all" | "with_reason" | "without_reason">("all");
+  const [auditFocusedLogs, setAuditFocusedLogs] = useState<AdminAuditLogEntry[] | null>(null);
+  const [auditFocusedLabel, setAuditFocusedLabel] = useState("");
+  const [bookingsOffset, setBookingsOffset] = useState(0);
+  const [bookingsHasMore, setBookingsHasMore] = useState(false);
+  const [auditOffset, setAuditOffset] = useState(0);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [selectionStatusSaving, setSelectionStatusSaving] = useState<Record<string, boolean>>({});
   const [applicationSaving, setApplicationSaving] = useState<Record<number, boolean>>({});
   const [bookingManageTarget, setBookingManageTarget] = useState<AdminTelegramApplication | null>(null);
@@ -1488,13 +1695,21 @@ export default function AdminPanel() {
   const [bookingManageNote, setBookingManageNote] = useState("");
   const [bookingManageReason, setBookingManageReason] = useState("");
   const [bookingManageError, setBookingManageError] = useState("");
+  const [landingBookingManageTarget, setLandingBookingManageTarget] = useState<AdminLandingUser | null>(null);
+  const [landingBookingManageSelectionStatus, setLandingBookingManageSelectionStatus] = useState<AdminLandingUser["selectionStatus"] | "">("");
+  const [landingBookingManageAdminStatus, setLandingBookingManageAdminStatus] = useState<AdminLandingUser["adminStatus"] | "">("");
+  const [landingBookingManageError, setLandingBookingManageError] = useState("");
   const [expandedTelegramBookingId, setExpandedTelegramBookingId] = useState<number | null>(null);
+  const [expandedLandingBookingId, setExpandedLandingBookingId] = useState<string | null>(null);
   const [expandedGuestKey, setExpandedGuestKey] = useState<string | null>(null);
   const [guestTelegramApplications, setGuestTelegramApplications] = useState<AdminTelegramApplication[]>([]);
   const [telegramRecentApplications, setTelegramRecentApplications] = useState<AdminTelegramApplication[]>([]);
   const bookingManagerRef = useRef<HTMLElement | null>(null);
   const bookingManagerCloseRef = useRef<HTMLButtonElement | null>(null);
   const bookingManagerLastFocusRef = useRef<HTMLElement | null>(null);
+  const landingBookingManagerRef = useRef<HTMLElement | null>(null);
+  const landingBookingManagerCloseRef = useRef<HTMLButtonElement | null>(null);
+  const landingBookingManagerLastFocusRef = useRef<HTMLElement | null>(null);
   const [landingUsersSummary, setLandingUsersSummary] = useState<AdminLandingUsersSummary>({ total: 0, completed: 0, open: 0 });
   const [telegramUsersSummary, setTelegramUsersSummary] = useState<AdminTelegramUsersSummary>({
     total: 0,
@@ -1604,19 +1819,23 @@ export default function AdminPanel() {
     }
   };
 
-  const loadTelegramApplications = async () => {
+  const loadTelegramApplications = async (append = false) => {
     setUsersLoading(true);
     setUsersError("");
+    const pageSize = Math.max(5, Math.min(200, data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE));
+    const nextOffset = append ? bookingsOffset : 0;
     try {
       const response = await getAdminTelegramApplications({
         search: searchQuery.trim(),
         status: usersStatus === "all" ? "" : usersStatus,
-        limit: Math.max(5, Math.min(200, data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE)),
-        offset: 0,
+        limit: pageSize,
+        offset: nextOffset,
       });
-      setTelegramApplications(response.applications);
+      setTelegramApplications((prev) => (append ? [...prev, ...response.applications] : response.applications));
       setTelegramApplicationsSummary(response.summary);
-      const logs = await getAdminAuditLogs(12);
+      setBookingsHasMore(response.applications.length === pageSize);
+      setBookingsOffset(nextOffset + response.applications.length);
+      const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
       setAuditLogs(logs);
     } catch (err) {
       setUsersError(err instanceof Error ? err.message : "failed to load telegram applications");
@@ -1634,26 +1853,30 @@ export default function AdminPanel() {
         offset: 0,
       });
       setTelegramApplicationsSummary(response.summary);
-      const logs = await getAdminAuditLogs(12);
+      const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
       setAuditLogs(logs);
     } catch {
       // Keep overview resilient even if telegram booking storage is unavailable.
     }
   };
 
-  const loadLandingBookings = async () => {
+  const loadLandingBookings = async (append = false) => {
     setUsersLoading(true);
     setUsersError("");
+    const pageSize = Math.max(5, Math.min(200, data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE));
+    const nextOffset = append ? bookingsOffset : 0;
     try {
       const response = await getAdminLandingUsers({
         search: searchQuery.trim(),
         status: usersStatus === "all" ? "" : usersStatus,
-        limit: Math.max(5, Math.min(200, data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE)),
-        offset: 0,
+        limit: pageSize,
+        offset: nextOffset,
       });
-      setLandingUsers(response.users);
+      setLandingUsers((prev) => (append ? [...prev, ...response.users] : response.users));
       setLandingUsersSummary(response.summary);
-      const logs = await getAdminAuditLogs(12);
+      setBookingsHasMore(response.users.length === pageSize);
+      setBookingsOffset(nextOffset + response.users.length);
+      const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
       setAuditLogs(logs);
     } catch (err) {
       setUsersError(err instanceof Error ? err.message : "failed to load landing applications");
@@ -1662,18 +1885,55 @@ export default function AdminPanel() {
     }
   };
 
-  const loadAuditLogs = async () => {
+  const loadAuditLogs = async (append = false) => {
+    setAuditLoading(true);
     try {
-      const logs = await getAdminAuditLogs(24);
-      setAuditLogs(logs);
+      const pageSize = 24;
+      const nextOffset = append ? auditOffset : 0;
+      const useAuditFilters = activeSection === "audit";
+      const logs = await getAdminAuditLogs({
+        limit: pageSize,
+        offset: nextOffset,
+        search: useAuditFilters ? auditSearchQuery.trim() : "",
+        entityType: useAuditFilters && auditEntityTypeFilter !== "all" ? auditEntityTypeFilter : "",
+        actionType: useAuditFilters && auditActionTypeFilter !== "all" ? auditActionTypeFilter : "",
+        adminUsername: useAuditFilters ? auditAdminFilter.trim() : "",
+        reasonState: useAuditFilters ? auditReasonStateFilter : "all",
+      });
+      setAuditLogs((prev) => (append ? [...prev, ...logs] : logs));
+      setAuditHasMore(logs.length === pageSize);
+      setAuditOffset(nextOffset + logs.length);
     } catch (err) {
       setUsersError(err instanceof Error ? err.message : "failed to load admin audit logs");
+    } finally {
+      setAuditLoading(false);
     }
   };
 
   useEffect(() => {
     void loadPanel();
   }, []);
+
+  useEffect(() => {
+    const nextSection = getSectionFromSearch(location.search);
+    setActiveSection((current) => (current === nextSection ? current : nextSection));
+  }, [location.search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const currentSection = params.get("section")?.trim().toLowerCase() ?? "";
+    if (currentSection === activeSection) {
+      return;
+    }
+    params.set("section", activeSection);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${params.toString()}`,
+      },
+      { replace: true }
+    );
+  }, [activeSection, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (activeSection === "dinners" || activeSection === "overview" || activeSection === "bookings") {
@@ -1771,6 +2031,18 @@ export default function AdminPanel() {
     }
     void loadAuditLogs();
   }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "audit") {
+      return;
+    }
+    setAuditSearchInput(auditSearchQuery);
+    setAuditEntityTypeDraft(auditEntityTypeFilter);
+    setAuditActionTypeDraft(auditActionTypeFilter);
+    setAuditAdminInput(auditAdminFilter);
+    setAuditReasonStateDraft(auditReasonStateFilter);
+    void loadAuditLogs();
+  }, [auditSearchQuery, auditEntityTypeFilter, auditActionTypeFilter, auditAdminFilter, auditReasonStateFilter]);
 
   useEffect(() => {
     if (activeSection !== "telegram") {
@@ -1876,26 +2148,161 @@ export default function AdminPanel() {
     await loadUsers(true);
   };
 
-  const handleUpdateLandingUserStatus = async (userID: string, status: AdminLandingUser["selectionStatus"]) => {
+  const handleLoadMoreBookings = async () => {
+    if (usersLoading || !bookingsHasMore) {
+      return;
+    }
+    if (bookingsSource === "landing") {
+      await loadLandingBookings(true);
+      return;
+    }
+    await loadTelegramApplications(true);
+  };
+
+  const handleLoadMoreAuditLogs = async () => {
+    if (auditLoading || !auditHasMore) {
+      return;
+    }
+    await loadAuditLogs(true);
+  };
+
+  const handleOpenAuditGroup = (event: AuditTimelineEvent, sourceLogs: AdminAuditLogEntry[]) => {
+    const groupLogs = sourceLogs.filter((item) => event.itemIds.includes(item.id));
+    setAuditFocusedLogs(groupLogs);
+    setAuditFocusedLabel(`${event.actionLabel} · ${event.itemCount} edits`);
+    setActiveSection("audit");
+  };
+
+  const handleClearAuditFocus = () => {
+    setAuditFocusedLogs(null);
+    setAuditFocusedLabel("");
+  };
+
+  const handleApplyAuditFilters = () => {
+    setAuditFocusedLogs(null);
+    setAuditFocusedLabel("");
+    const nextSearch = auditSearchInput.trim();
+    const nextEntity = auditEntityTypeDraft;
+    const nextAction = auditActionTypeDraft;
+    const nextAdmin = auditAdminInput.trim();
+    const nextReason = auditReasonStateDraft;
+    const unchanged =
+      nextSearch === auditSearchQuery &&
+      nextEntity === auditEntityTypeFilter &&
+      nextAction === auditActionTypeFilter &&
+      nextAdmin === auditAdminFilter &&
+      nextReason === auditReasonStateFilter;
+
+    setAuditSearchQuery(nextSearch);
+    setAuditEntityTypeFilter(nextEntity);
+    setAuditActionTypeFilter(nextAction);
+    setAuditAdminFilter(nextAdmin);
+    setAuditReasonStateFilter(nextReason);
+
+    if (unchanged && activeSection === "audit") {
+      void loadAuditLogs();
+    }
+  };
+
+  const handleResetAuditFilters = () => {
+    setAuditFocusedLogs(null);
+    setAuditFocusedLabel("");
+    setAuditSearchInput("");
+    setAuditEntityTypeDraft("all");
+    setAuditActionTypeDraft("all");
+    setAuditAdminInput("");
+    setAuditReasonStateDraft("all");
+    setAuditSearchQuery("");
+    setAuditEntityTypeFilter("all");
+    setAuditActionTypeFilter("all");
+    setAuditAdminFilter("");
+    setAuditReasonStateFilter("all");
+  };
+
+  const handleUpdateLandingUserStatus = async (
+    userID: string,
+    payload: {
+      selectionStatus?: AdminLandingUser["selectionStatus"];
+      adminStatus?: AdminLandingUser["adminStatus"];
+    }
+  ) => {
     setSelectionStatusSaving((prev) => ({ ...prev, [userID]: true }));
     setUsersError("");
+    if (landingBookingManageTarget?.id === userID) {
+      setLandingBookingManageError("");
+    }
     try {
-      await updateAdminLandingUserStatus(userID, status);
-      setLandingUsers((prev) => prev.map((user) => (user.id === userID ? { ...user, selectionStatus: status } : user)));
+      const updated = await updateAdminLandingUserStatus(userID, payload);
+      setLandingUsers((prev) =>
+        prev
+          .map((user) => (user.id === userID ? updated : user))
+          .filter((user) => {
+            if (bookingsSource !== "landing") {
+              return true;
+            }
+            return matchesLandingBookingFilter(user, usersStatus);
+          })
+      );
+      if (landingBookingManageTarget?.id === updated.id) {
+        setLandingBookingManageTarget(updated);
+        setLandingBookingManageSelectionStatus(updated.selectionStatus);
+        setLandingBookingManageAdminStatus(updated.adminStatus);
+      }
       setInfoMessage("User status updated");
       window.setTimeout(() => setInfoMessage(""), 1500);
       if (activeSection === "bookings") {
-        const logs = await getAdminAuditLogs(12);
+        const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
         setAuditLogs(logs);
       }
+      return true;
     } catch (err) {
-      setUsersError(err instanceof Error ? err.message : "failed to update user status");
+      const message = err instanceof Error ? err.message : "failed to update user status";
+      if (landingBookingManageTarget?.id === userID) {
+        setLandingBookingManageError(message);
+      } else {
+        setUsersError(message);
+      }
+      return false;
     } finally {
       setSelectionStatusSaving((prev) => {
         const next = { ...prev };
         delete next[userID];
         return next;
       });
+    }
+  };
+
+  const openLandingBookingManager = (user: AdminLandingUser) => {
+    setLandingBookingManageTarget(user);
+    setLandingBookingManageSelectionStatus(user.selectionStatus);
+    setLandingBookingManageAdminStatus(user.adminStatus);
+    setLandingBookingManageError("");
+  };
+
+  const closeLandingBookingManager = (force = false) => {
+    if (!force && landingBookingManageTarget && selectionStatusSaving[landingBookingManageTarget.id]) {
+      return;
+    }
+    setLandingBookingManageTarget(null);
+    setLandingBookingManageSelectionStatus("");
+    setLandingBookingManageAdminStatus("");
+    setLandingBookingManageError("");
+  };
+
+  const toggleLandingBookingExpanded = (userID: string) => {
+    setExpandedLandingBookingId((current) => (current === userID ? null : userID));
+  };
+
+  const handleSaveLandingBookingManager = async () => {
+    if (!landingBookingManageTarget) {
+      return;
+    }
+    const saved = await handleUpdateLandingUserStatus(landingBookingManageTarget.id, {
+      selectionStatus: landingBookingManageSelectionStatus || undefined,
+      adminStatus: landingBookingManageAdminStatus || undefined,
+    });
+    if (saved) {
+      closeLandingBookingManager(true);
     }
   };
 
@@ -1919,8 +2326,25 @@ export default function AdminPanel() {
         reason: nextReason,
         expectedUpdatedAt: application.updatedAt,
       });
-      setTelegramApplications((prev) =>
+      setTelegramApplications((prev) => {
+        const nextItems = prev
+          .map((item) => (item.packageInfoId === updated.packageInfoId ? updated : item))
+          .filter((item) => {
+            if (bookingsSource !== "telegram" || usersStatus === "all") {
+              return true;
+            }
+            return item.status === usersStatus;
+          });
+        return nextItems;
+      });
+      setGuestTelegramApplications((prev) =>
         prev.map((item) => (item.packageInfoId === updated.packageInfoId ? updated : item))
+      );
+      setTelegramRecentApplications((prev) =>
+        prev.map((item) => (item.packageInfoId === updated.packageInfoId ? updated : item))
+      );
+      setTelegramApplicationsSummary((prev) =>
+        adjustTelegramApplicationsSummary(prev, application.status, updated.status)
       );
       if (bookingManageTarget?.packageInfoId === updated.packageInfoId) {
         setBookingManageTarget(updated);
@@ -1930,7 +2354,7 @@ export default function AdminPanel() {
       }
       setInfoMessage(`Application ${updated.publicCode || `#${updated.packageInfoId}`} updated`);
       window.setTimeout(() => setInfoMessage(""), 1800);
-      const logs = await getAdminAuditLogs(12);
+      const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
       setAuditLogs(logs);
       return true;
     } catch (err) {
@@ -2029,25 +2453,75 @@ export default function AdminPanel() {
     setDishSaving(true);
     try {
       const price = Number(dishForm.price);
-      const created = await createAdminDish({
+      const payload = {
         dishType: dishForm.dishType,
         nameEng: dishForm.nameEng.trim(),
         nameRus: dishForm.nameRus.trim(),
         nameArm: dishForm.nameArm.trim(),
         price,
-      });
-      setInfoMessage("Dish created");
+      };
+      const saved = editingDishId
+        ? await updateAdminDish(editingDishId, payload)
+        : await createAdminDish(payload);
+      setInfoMessage(editingDishId ? "Dish updated" : "Dish created");
       window.setTimeout(() => setInfoMessage(""), 1500);
-      if (created.dishType === dishType) {
-        setDishes((prev) => [created, ...prev]);
+      if (saved.dishType === dishType) {
+        setDishes((prev) => {
+          if (editingDishId) {
+            return prev.map((item) => (item.id === saved.id ? saved : item));
+          }
+          return [saved, ...prev];
+        });
       } else if (dishType) {
         await loadDishes(dishType);
       }
       setDishForm((prev) => ({ ...emptyDishForm, dishType: prev.dishType || dishType }));
+      setEditingDishId(null);
     } catch (err) {
-      setDishesError(err instanceof Error ? err.message : "failed to create dish");
+      setDishesError(err instanceof Error ? err.message : `failed to ${editingDishId ? "update" : "create"} dish`);
     } finally {
       setDishSaving(false);
+    }
+  };
+
+  const handleEditDish = (item: AdminDishItem) => {
+    setEditingDishId(item.id);
+    setDishForm({
+      dishType: item.dishType,
+      nameEng: item.nameEng,
+      nameRus: item.nameRus,
+      nameArm: item.nameArm,
+      price: item.price.toFixed(2),
+    });
+    setDishesError("");
+  };
+
+  const handleCancelDishEdit = () => {
+    setEditingDishId(null);
+    setDishForm({ ...emptyDishForm, dishType: dishType || dishForm.dishType });
+    setDishesError("");
+  };
+
+  const confirmDeleteDish = async () => {
+    if (!dishDeleteTarget) {
+      return;
+    }
+    setDishDeleting(true);
+    setDishesError("");
+    try {
+      await deleteAdminDish(dishDeleteTarget.id);
+      setDishes((prev) => prev.filter((item) => item.id !== dishDeleteTarget.id));
+      if (editingDishId === dishDeleteTarget.id) {
+        setEditingDishId(null);
+        setDishForm((prev) => ({ ...emptyDishForm, dishType: prev.dishType || dishType }));
+      }
+      setDishDeleteTarget(null);
+      setInfoMessage("Dish deleted");
+      window.setTimeout(() => setInfoMessage(""), 1500);
+    } catch (err) {
+      setDishesError(err instanceof Error ? err.message : "failed to delete dish");
+    } finally {
+      setDishDeleting(false);
     }
   };
 
@@ -2527,6 +3001,11 @@ export default function AdminPanel() {
     bookingsSource === "landing"
       ? [
           { value: "all", label: "All" },
+          { value: "new", label: "New" },
+          { value: "review", label: "In review" },
+          { value: "contacted", label: "Contacted" },
+          { value: "approved", label: "Approved" },
+          { value: "rejected", label: "Rejected" },
           { value: "open", label: "Open" },
           { value: "completed", label: "Completed" },
         ]
@@ -2665,6 +3144,66 @@ export default function AdminPanel() {
       bookingManagerLastFocusRef.current?.focus();
     };
   }, [applicationSaving, bookingManageTarget]);
+
+  useEffect(() => {
+    if (!landingBookingManageTarget) {
+      return;
+    }
+
+    landingBookingManagerLastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    window.setTimeout(() => {
+      landingBookingManagerCloseRef.current?.focus();
+    }, 0);
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape" && !selectionStatusSaving[landingBookingManageTarget.id]) {
+        event.preventDefault();
+        closeLandingBookingManager();
+        return;
+      }
+
+      if (event.key !== "Tab" || !landingBookingManagerRef.current) {
+        return;
+      }
+
+      const focusable = landingBookingManagerRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (!active || active === first || !landingBookingManagerRef.current.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (!active || active === last || !landingBookingManagerRef.current.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+      landingBookingManagerLastFocusRef.current?.focus();
+    };
+  }, [landingBookingManageTarget, selectionStatusSaving]);
 
   const completionDonutStyle = {
     background: `conic-gradient(#d4af37 0 ${completionPercent}%, #1f7a5c ${completionPercent}% 100%)`,
@@ -2960,6 +3499,160 @@ export default function AdminPanel() {
                   }
                 >
                   {applicationSaving[bookingManageTarget.packageInfoId] ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </article>
+          </div>,
+          document.body
+        )
+      : null;
+
+  const landingBookingManagerModal =
+    landingBookingManageTarget && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="admin-modal-backdrop admin-modal-backdrop--booking"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                closeLandingBookingManager();
+              }
+            }}
+          >
+            <article
+              ref={landingBookingManagerRef}
+              className="admin-modal admin-modal--booking"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="landing-booking-manager-title"
+              aria-describedby="landing-booking-manager-subtitle"
+              tabIndex={-1}
+            >
+              <header className="admin-modal__header admin-modal__header--booking">
+                <button
+                  ref={landingBookingManagerCloseRef}
+                  className="admin-modal__close"
+                  type="button"
+                  onClick={() => closeLandingBookingManager()}
+                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                  aria-label="Close booking manager"
+                >
+                  x
+                </button>
+                <p className="admin-modal__eyebrow">Booking Manager</p>
+                <h3 id="landing-booking-manager-title">{landingBookingManageTarget.fullName || `Lead ${landingBookingManageTarget.id.slice(0, 8)}`}</h3>
+                <p id="landing-booking-manager-subtitle" className="admin-modal__text">
+                  {[
+                    landingBookingManageTarget.dinnerTitle || "No dinner selected",
+                    landingBookingManageTarget.chosenPackage || "No package selected",
+                  ].join(" · ")}
+                </p>
+
+                <div className="admin-booking-manager__summary">
+                  <AdminBadge tone={getLandingAdminStatusSummary(landingBookingManageAdminStatus || landingBookingManageTarget.adminStatus).tone}>
+                    Review: {formatLandingAdminStatus(landingBookingManageAdminStatus || landingBookingManageTarget.adminStatus)}
+                  </AdminBadge>
+                  <AdminBadge tone={getLandingSelectionSummary(landingBookingManageSelectionStatus || landingBookingManageTarget.selectionStatus).tone}>
+                    Selection: {formatLandingSelectionStatus(landingBookingManageSelectionStatus || landingBookingManageTarget.selectionStatus)}
+                  </AdminBadge>
+                </div>
+              </header>
+
+              <div className="admin-modal__body admin-modal__body--booking">
+                {landingBookingManageError ? <p className="admin-auth__error admin-booking-manager__error">{landingBookingManageError}</p> : null}
+                <div className="admin-booking-manager__grid">
+                  <section className="admin-booking-manager__card">
+                    <h4>Review Status</h4>
+                    <div className="admin-booking-manager__options">
+                      {landingReviewStatusOptions.map((option) => {
+                        const tone = getBookingActionTone(option.value);
+                        const isActive = option.value === landingBookingManageAdminStatus;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`admin-booking-manager__option admin-booking-manager__option--${tone} ${isActive ? "admin-booking-manager__option--active" : ""}`}
+                            onClick={() => setLandingBookingManageAdminStatus(option.value)}
+                            disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                          >
+                            <span className="admin-booking-manager__option-icon" aria-hidden="true">
+                              {getApplicationStatusIcon(option.value)}
+                            </span>
+                            <span className="admin-booking-manager__option-text">{option.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="admin-booking-manager__card">
+                    <h4>Selection Status</h4>
+                    <div className="admin-booking-manager__options">
+                      {landingSelectionStatusOptions.map((option) => {
+                        const tone = getBookingActionTone(option.value);
+                        const isActive = option.value === landingBookingManageSelectionStatus;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`admin-booking-manager__option admin-booking-manager__option--${tone} ${isActive ? "admin-booking-manager__option--active" : ""}`}
+                            onClick={() => setLandingBookingManageSelectionStatus(option.value)}
+                            disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                          >
+                            <span className="admin-booking-manager__option-icon" aria-hidden="true">
+                              {getLandingSelectionStatusIcon(option.value)}
+                            </span>
+                            <span className="admin-booking-manager__option-text">{option.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="admin-booking-manager__card">
+                    <h4>Booking Details</h4>
+                    <p className="admin-booking-manager__copy">Dinner: {landingBookingManageTarget.dinnerTitle || "—"}</p>
+                    <p className="admin-booking-manager__copy">Package: {landingBookingManageTarget.chosenPackage || "Unselected"}</p>
+                    <p className="admin-booking-manager__copy">Guests: {landingBookingManageTarget.guestCount}</p>
+                    <p className="admin-booking-manager__copy">Email: {landingBookingManageTarget.email || "—"}</p>
+                    <p className="admin-booking-manager__copy">Phone: {landingBookingManageTarget.phone || "—"}</p>
+                    <p className="admin-booking-manager__copy">Hobbies: {landingBookingManageTarget.hobbies || "—"}</p>
+                    <p className="admin-booking-manager__copy">Allergies: {landingBookingManageTarget.allergies || "—"}</p>
+                  </section>
+
+                  <section className="admin-booking-manager__card">
+                    <h4>Timeline</h4>
+                    <p className="admin-booking-manager__copy">Created: {formatDateLabel(landingBookingManageTarget.createdAt)}</p>
+                    <p className="admin-booking-manager__copy">Last updated: {formatDateLabel(landingBookingManageTarget.updatedAt)}</p>
+                    <p className="admin-booking-manager__copy">
+                      Review: {formatLandingAdminStatus(landingBookingManageAdminStatus || landingBookingManageTarget.adminStatus)}
+                    </p>
+                    <p className="admin-booking-manager__copy">
+                      Selection: {formatLandingSelectionStatus(landingBookingManageSelectionStatus || landingBookingManageTarget.selectionStatus)}
+                    </p>
+                  </section>
+                </div>
+              </div>
+
+              <div className="admin-modal__actions admin-modal__actions--booking">
+                <button
+                  className="admin-toolbar__btn"
+                  type="button"
+                  onClick={() => closeLandingBookingManager()}
+                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                >
+                  Close
+                </button>
+                <button
+                  className="admin-toolbar__btn"
+                  type="button"
+                  onClick={() => void handleSaveLandingBookingManager()}
+                  disabled={
+                    Boolean(selectionStatusSaving[landingBookingManageTarget.id]) ||
+                    !landingBookingManageSelectionStatus ||
+                    !landingBookingManageAdminStatus
+                  }
+                >
+                  {selectionStatusSaving[landingBookingManageTarget.id] ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </article>
@@ -3525,9 +4218,13 @@ export default function AdminPanel() {
                                       {formatApplicationStatus(item.status)}
                                     </AdminBadge>
                                   </div>
-                                  <p>{[item.name, item.surname].filter(Boolean).join(" ").trim() || formatTelegramUsername(item.username)}</p>
-                                  <p>{item.dinnerTitle}</p>
-                                  <span>{formatDateLabel(item.updatedAt || item.createdAt)}</span>
+                                  <div className="admin-telegram-events__body">
+                                    <p className="admin-telegram-events__primary">
+                                      {[item.name, item.surname].filter(Boolean).join(" ").trim() || formatTelegramUsername(item.username)}
+                                    </p>
+                                    <p className="admin-telegram-events__secondary">{item.dinnerTitle}</p>
+                                  </div>
+                                  <span className="admin-telegram-events__time">{formatDateLabel(item.updatedAt || item.createdAt)}</span>
                                 </article>
                               ))}
                             </div>
@@ -3536,12 +4233,13 @@ export default function AdminPanel() {
 
                         <div className="admin-telegram-events__column">
                           <h3>Recent Admin Actions</h3>
-                          <AuditTimelineList
-                            logs={auditLogs.filter((item) => item.entityType === "telegram_application").slice(0, 8)}
-                            compact
-                            emptyTitle="No recent Telegram admin actions"
-                            emptyDescription="Booking overrides and status decisions will appear here."
-                          />
+                      <AuditTimelineList
+                        logs={auditLogs.filter((item) => item.entityType === "telegram_application").slice(0, 8)}
+                        compact
+                        emptyTitle="No recent Telegram admin actions"
+                        emptyDescription="Booking overrides and status decisions will appear here."
+                        onOpenGroup={handleOpenAuditGroup}
+                      />
                         </div>
                       </div>
                     </article>
@@ -3843,6 +4541,7 @@ export default function AdminPanel() {
                         compact
                         emptyTitle="No recent admin actions"
                         emptyDescription="Overrides and operational changes will appear here once admins begin updating records."
+                        onOpenGroup={handleOpenAuditGroup}
                       />
                     </AdminAuditLogCard>
                   </section>
@@ -4580,9 +5279,6 @@ export default function AdminPanel() {
                             ...group,
                             text: formatTelegramStatusChipLabel(group),
                           }));
-                          const mainStatus = statusChipLabels.find((group) => group.key === "payment" && group.value !== "Not Started")
-                            ?? statusChipLabels.find((group) => group.key === "attendance" && group.value !== "Not Scheduled")
-                            ?? statusChipLabels[0];
                           const contactSummary = item.phone || formatTelegramUsername(item.username);
                           const sourceSummary = item.referralUsedCode ? `Referral ${item.referralUsedCode}` : "Direct source";
                           return (
@@ -4593,13 +5289,9 @@ export default function AdminPanel() {
                             >
                               <div className="admin-telegram-booking-card__line admin-telegram-booking-card__line--top">
                                 <div className="admin-telegram-booking-card__identity">
-                                  <div className="admin-users__cell-head">
+                                  <div className="admin-users__cell-head admin-telegram-booking-card__header-main">
                                     <div className="admin-users__cell-title">{guestName}</div>
-                                    {renderSourceBadge("telegram")}
-                                  </div>
-                                  <div className="admin-telegram-booking-card__header-meta">
                                     <span className="admin-telegram-booking-card__code">{item.publicCode || `#${item.packageInfoId}`}</span>
-                                    <AdminBadge tone={mainStatus?.tone ?? "default"}>{mainStatus?.text ?? formatApplicationStatus(item.status)}</AdminBadge>
                                   </div>
                                 </div>
                                 <div className="admin-telegram-booking-card__header-action">
@@ -4689,75 +5381,131 @@ export default function AdminPanel() {
                     ) : null}
 
                     {bookingsSource === "landing" && landingUsers.length > 0 ? (
-                      <AdminTable className="admin-table-wrap">
-                        <table className="admin-table admin-table--stack">
-                          <thead>
-                            <tr>
-                              <th>Guest</th>
-                              <th>Contact</th>
-                              <th>Booking</th>
-                              <th>Package</th>
-                              <th>Status</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {landingUsers.map((item) => (
-                              <tr key={item.id}>
-                                <td data-label="Guest">
-                                  <div className="admin-users__cell-head">
+                      <div className="admin-telegram-booking-list admin-landing-booking-list" role="list" aria-label="Bookings list">
+                        {landingUsers.map((item) => {
+                          const isExpanded = expandedLandingBookingId === item.id;
+                          const bookingCode = `LAND-${item.id.slice(0, 8).toUpperCase()}`;
+                          const reviewSummary = getLandingAdminStatusSummary(item.adminStatus);
+                          const selectionSummary = getLandingSelectionSummary(item.selectionStatus);
+                          const dinnerCapacity = item.dinnerId ? dinnersById.get(item.dinnerId) : undefined;
+                          const capacityDetail = getDinnerCapacityDetail(
+                            dinnerCapacity?.alreadyRegistered,
+                            dinnerCapacity?.places,
+                            dinnerCapacity?.activeBookings
+                          );
+                          return (
+                            <article
+                              key={item.id}
+                              className={`admin-telegram-booking-card admin-landing-booking-card ${isExpanded ? "admin-telegram-booking-card--expanded" : ""}`}
+                              role="listitem"
+                            >
+                              <div className="admin-telegram-booking-card__line admin-telegram-booking-card__line--top">
+                                <div className="admin-telegram-booking-card__identity">
+                                  <div className="admin-users__cell-head admin-telegram-booking-card__header-main">
                                     <div className="admin-users__cell-title">{item.fullName}</div>
-                                    {renderSourceBadge("landing")}
+                                    <span className="admin-telegram-booking-card__code">{bookingCode}</span>
                                   </div>
-                                  <div className="admin-users__cell-sub">ID: {item.id.slice(0, 8)}...</div>
-                                  <div className="admin-users__cell-sub">{item.guestCount} guests</div>
-                                </td>
-                                <td data-label="Contact">
-                                  <div className="admin-users__cell-title">{item.email}</div>
-                                  <div className="admin-users__cell-sub">{item.phone}</div>
-                                </td>
-                                <td data-label="Booking">
-                                  <div className="admin-users__cell-head">
-                                    <div className="admin-users__cell-title">{item.dinnerTitle || "No dinner selected"}</div>
-                                    {renderSourceBadge("landing")}
+                                </div>
+                                <div className="admin-telegram-booking-card__header-action">
+                                  <button
+                                    type="button"
+                                    className="admin-guest-crm__toggle"
+                                    onClick={() => openLandingBookingManager(item)}
+                                  >
+                                    Manage
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="admin-guest-crm__toggle admin-guest-crm__toggle--ghost"
+                                    onClick={() => toggleLandingBookingExpanded(item.id)}
+                                    aria-expanded={isExpanded}
+                                    aria-controls={`landing-booking-details-${item.id}`}
+                                  >
+                                    {isExpanded ? "Hide details" : "Details"}
+                                  </button>
+                                  {selectionStatusSaving[item.id] ? <span className="admin-users__status-saving">Saving override...</span> : null}
+                                </div>
+                              </div>
+
+                              <div className="admin-telegram-booking-card__line admin-telegram-booking-card__line--summary">
+                                <div className="admin-telegram-booking-card__summary-item">
+                                  <span className="admin-telegram-booking-card__label">Dinner</span>
+                                  <strong>{item.dinnerTitle || "No dinner selected"}</strong>
+                                  <span>{item.dinnerId ? `Dinner #${item.dinnerId}` : "Awaiting dinner choice"}</span>
+                                </div>
+                                <div className="admin-telegram-booking-card__summary-item">
+                                  <span className="admin-telegram-booking-card__label">Package</span>
+                                  <strong>{item.chosenPackage || "Unselected"}</strong>
+                                  <span>{`${item.guestCount} guests`}</span>
+                                </div>
+                                <div className="admin-telegram-booking-card__summary-item">
+                                  <span className="admin-telegram-booking-card__label">Guest contact</span>
+                                  <strong>{item.email || "No email"}</strong>
+                                  <span>{item.phone || "No phone"}</span>
+                                </div>
+                              </div>
+
+                              <div className="admin-telegram-booking-card__statuses" aria-label={`Booking status summary for ${bookingCode}`}>
+                                <AdminBadge tone={reviewSummary.tone}>
+                                  <span className="admin-telegram-bookings__summary-badge" title={`${reviewSummary.fullLabel}: ${reviewSummary.value}. ${reviewSummary.description}`}>
+                                    Review {reviewSummary.value}
+                                  </span>
+                                </AdminBadge>
+                                <AdminBadge tone={selectionSummary.tone}>
+                                  <span className="admin-telegram-bookings__summary-badge" title={`${selectionSummary.fullLabel}: ${selectionSummary.value}. ${selectionSummary.description}`}>
+                                    Selection {selectionSummary.value}
+                                  </span>
+                                </AdminBadge>
+                                <AdminBadge tone={item.chosenPackage ? getPackageTone(item.chosenPackage) : "default"}>
+                                  <span className="admin-telegram-bookings__summary-badge">Package {item.chosenPackage || "Unselected"}</span>
+                                </AdminBadge>
+                              </div>
+
+                              <div
+                                id={`landing-booking-details-${item.id}`}
+                                className={`admin-telegram-booking-card__details ${isExpanded ? "admin-telegram-booking-card__details--open" : ""}`}
+                              >
+                                <div className="admin-telegram-booking-card__details-inner">
+                                  <div className="admin-telegram-booking-card__body">
+                                    <div className="admin-telegram-booking-card__block">
+                                      <span className="admin-telegram-booking-card__label">Dinner details</span>
+                                      <strong>{item.dinnerTitle || "No dinner selected"}</strong>
+                                      <span>{item.dinnerId ? `Dinner #${item.dinnerId}` : "Awaiting dinner choice"}</span>
+                                      <span>{item.chosenPackage ? `Package ${item.chosenPackage}` : "No package selected yet"}</span>
+                                    </div>
+                                    <div className="admin-telegram-booking-card__block">
+                                      <span className="admin-telegram-booking-card__label">Capacity</span>
+                                      <strong>{capacityDetail.message}</strong>
+                                      <span>{capacityDetail.available ? `Bookings: ${capacityDetail.activeBookings} · Guests: ${capacityDetail.occupiedGuests}` : "Bookings and guest counts unavailable"}</span>
+                                      <span>{capacityDetail.supporting}</span>
+                                    </div>
+                                    <div className="admin-telegram-booking-card__block admin-telegram-booking-card__block--note">
+                                      <span className="admin-telegram-booking-card__label">Guest profile</span>
+                                      <strong>{item.email || "No email saved"}</strong>
+                                      <span>{`Phone ${item.phone || "—"} · Guests ${item.guestCount}`}</span>
+                                      <span>{`Hobbies ${item.hobbies || "—"} · Allergies ${item.allergies || "—"}`}</span>
+                                    </div>
+                                    <div className="admin-telegram-booking-card__block admin-telegram-booking-card__block--meta">
+                                      <span className="admin-telegram-booking-card__label">Additional metadata</span>
+                                      <strong>{formatLandingAdminStatus(item.adminStatus)}</strong>
+                                      <span>{`Selection ${formatLandingSelectionStatus(item.selectionStatus)}`}</span>
+                                      <span>{`Created ${formatDateLabel(item.createdAt)} · Updated ${formatDateLabel(item.updatedAt)}`}</span>
+                                    </div>
                                   </div>
-                                  <div className="admin-users__cell-sub">Created {formatDateLabel(item.createdAt)}</div>
-                                  {item.dinnerId ? (
-                                    <DinnerCapacityInline
-                                      registered={dinnersById.get(item.dinnerId)?.alreadyRegistered}
-                                      places={dinnersById.get(item.dinnerId)?.places}
-                                      compact
-                                    />
-                                  ) : null}
-                                </td>
-                                <td data-label="Package">
-                                  {item.chosenPackage ? <AdminBadge tone={getPackageTone(item.chosenPackage)}>{item.chosenPackage}</AdminBadge> : <AdminBadge>Unselected</AdminBadge>}
-                                  <div className="admin-users__cell-sub">{item.allergies || "No allergies noted"}</div>
-                                </td>
-                                <td data-label="Status">
-                                  <AdminBadge tone={item.selectionStatus === "completed" ? "emerald" : "gold"}>
-                                    {formatLandingSelectionStatus(item.selectionStatus)}
-                                  </AdminBadge>
-                                  <div className="admin-users__cell-sub">{item.hobbies || "No hobbies saved"}</div>
-                                </td>
-                                <td data-label="Actions">
-                                  <BookingStatusDropdown
-                                    value={item.selectionStatus}
-                                    options={landingSelectionStatusOptions}
-                                    disabled={Boolean(selectionStatusSaving[item.id])}
-                                    busy={Boolean(selectionStatusSaving[item.id])}
-                                    ariaLabel={`Update landing booking status for ${item.fullName}`}
-                                    formatLabel={formatLandingSelectionStatus}
-                                    getIcon={getLandingSelectionStatusIcon}
-                                    onChange={(next) => void handleUpdateLandingUserStatus(item.id, next as AdminLandingUser["selectionStatus"])}
-                                  />
-                                  {selectionStatusSaving[item.id] ? <span className="admin-users__status-saving">Saving...</span> : null}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </AdminTable>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {(bookingsSource === "telegram" ? telegramApplications.length > 0 : landingUsers.length > 0) ? (
+                      <div className="admin-users__footer">
+                        <button className="admin-toolbar__btn" type="button" onClick={handleLoadMoreBookings} disabled={!bookingsHasMore || usersLoading}>
+                          {usersLoading ? "Loading..." : bookingsHasMore ? "Load more bookings" : "No more bookings"}
+                        </button>
+                      </div>
                     ) : null}
                   </article>
 
@@ -4771,6 +5519,7 @@ export default function AdminPanel() {
                       compact
                       emptyTitle="No recent admin audit entries"
                       emptyDescription="Manual overrides and operational changes will appear here once admins start updating synced records."
+                      onOpenGroup={handleOpenAuditGroup}
                     />
                   </AdminAuditLogCard>
                 </section>
@@ -4805,46 +5554,58 @@ export default function AdminPanel() {
 
                         {dishesError ? <p className="admin-auth__error">{dishesError}</p> : null}
 
-                        <div className="admin-table-wrap">
-                          <table className="admin-table admin-table--stack">
-                            <thead>
-                              <tr>
-                                <th>ID</th>
-                                <th>English</th>
-                                <th>Russian</th>
-                                <th>Armenian</th>
-                                <th>Price (AMD)</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {dishesLoading ? (
-                                <tr>
-                                  <td colSpan={5}>Loading...</td>
-                                </tr>
-                              ) : null}
-                              {!dishesLoading && dishCards.length === 0 ? (
-                                <tr>
-                                  <td colSpan={5}>No dishes found for this type.</td>
-                                </tr>
-                              ) : null}
-                              {!dishesLoading
-                                ? dishCards.map((item) => (
-                                    <tr key={item.id}>
-                                      <td data-label="ID">#{item.id}</td>
-                                      <td data-label="English">{item.nameEng}</td>
-                                      <td data-label="Russian">{item.nameRus}</td>
-                                      <td data-label="Armenian">{item.nameArm}</td>
-                                      <td data-label="Price">{item.price.toFixed(2)}</td>
-                                    </tr>
-                                  ))
-                                : null}
-                            </tbody>
-                          </table>
-                        </div>
+                        {dishesLoading ? <p className="admin-dashboard__state">Loading dishes...</p> : null}
+
+                        {!dishesLoading && dishCards.length === 0 ? (
+                          <AdminEmptyState
+                            compact
+                            title="No dishes found"
+                            description="Choose a dish type or add the first dish for this category."
+                          />
+                        ) : null}
+
+                        {!dishesLoading && dishCards.length > 0 ? (
+                          <div className="admin-dish-grid">
+                            {dishCards.map((item) => (
+                              <article key={item.id} className="admin-dish-card">
+                                <div className="admin-dish-card__head">
+                                  <div className="admin-dish-card__copy">
+                                    <span className="admin-dish-card__eyebrow">Dish #{item.id}</span>
+                                    <strong className="admin-dish-card__title">{item.nameEng}</strong>
+                                  </div>
+                                  <AdminBadge tone="gold">{formatCurrency(item.price)}</AdminBadge>
+                                </div>
+                                <div className="admin-dish-card__meta">
+                                  <span title={item.nameRus}>RU: {item.nameRus}</span>
+                                  <span title={item.nameArm}>AM: {item.nameArm}</span>
+                                  <span title={item.dishType}>Type: {item.dishType}</span>
+                                </div>
+                                <div className="admin-dish-card__actions">
+                                  <button
+                                    className="admin-toolbar__btn admin-toolbar__btn--info"
+                                    type="button"
+                                    onClick={() => handleEditDish(item)}
+                                    disabled={dishSaving || dishDeleting}
+                                  >
+                                    Edit Dish
+                                  </button>
+                                  <button
+                                    className="admin-toolbar__btn admin-toolbar__btn--danger"
+                                    type="button"
+                                    onClick={() => setDishDeleteTarget(item)}
+                                    disabled={dishSaving || dishDeleting}
+                                  >
+                                    Delete Dish
+                                  </button>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
 
                         <div className="admin-widget__header" style={{ marginTop: 18 }}>
-                          <h2>Add new dish</h2>
-                          <span>Visible in Telegram bot</span>
+                          <h2>{editingDishId ? `Edit dish #${editingDishId}` : "Add new dish"}</h2>
+                          <span>{editingDishId ? "Update names, type, and price" : "Visible in Telegram bot"}</span>
                         </div>
                         <div className="admin-dinner-form">
                           <DishTypeSelect
@@ -4882,9 +5643,14 @@ export default function AdminPanel() {
                             onChange={(event) => setDishForm((prev) => ({ ...prev, price: event.target.value }))}
                           />
                           <div className="admin-dinner-actions">
-                            <button className="admin-toolbar__btn" type="button" onClick={handleCreateDish} disabled={dishSaving}>
-                              {dishSaving ? "Saving..." : "Create dish"}
+                            <button className="admin-toolbar__btn" type="button" onClick={handleCreateDish} disabled={dishSaving || dishDeleting}>
+                              {dishSaving ? "Saving..." : editingDishId ? "Save dish changes" : "Create dish"}
                             </button>
+                            {editingDishId ? (
+                              <button className="admin-toolbar__btn" type="button" onClick={handleCancelDishEdit} disabled={dishSaving || dishDeleting}>
+                                Cancel edit
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       </>
@@ -5167,11 +5933,102 @@ export default function AdminPanel() {
                     subtitle="Every important admin action should be reviewable and attributable."
                     className="admin-widget admin-widget--fit"
                   >
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        handleApplyAuditFilters();
+                      }}
+                    >
+                      <AdminFilterBar className="admin-users__controls admin-audit-log__filters">
+                        <div className="admin-topbar__search admin-audit-log__search">
+                          <span aria-hidden="true">⌕</span>
+                          <input
+                            value={auditSearchInput}
+                            onChange={(event) => setAuditSearchInput(event.target.value)}
+                            placeholder="Search booking code, entity ID, reason, status JSON..."
+                          />
+                        </div>
+                        <label className="admin-users__filter">
+                          <span>Entity</span>
+                          <select value={auditEntityTypeDraft} onChange={(event) => setAuditEntityTypeDraft(event.target.value)}>
+                            {auditEntityTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="admin-users__filter">
+                          <span>Action</span>
+                          <select value={auditActionTypeDraft} onChange={(event) => setAuditActionTypeDraft(event.target.value)}>
+                            {auditActionTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="admin-users__filter">
+                          <span>Reason</span>
+                          <select value={auditReasonStateDraft} onChange={(event) => setAuditReasonStateDraft(event.target.value as "all" | "with_reason" | "without_reason")}>
+                            {auditReasonStateOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="admin-users__filter admin-audit-log__admin-filter">
+                          <span>Admin</span>
+                          <input
+                            className="admin-dinner-input"
+                            value={auditAdminInput}
+                            onChange={(event) => setAuditAdminInput(event.target.value)}
+                            placeholder="Username"
+                          />
+                        </label>
+                        <div className="admin-audit-log__actions">
+                          <button className="admin-toolbar__btn admin-toolbar__btn--info" type="submit">
+                            Search
+                          </button>
+                          <button className="admin-toolbar__btn" type="button" onClick={handleResetAuditFilters}>
+                            Reset
+                          </button>
+                        </div>
+                      </AdminFilterBar>
+                    </form>
+                    {auditFocusedLogs && auditFocusedLogs.length > 0 ? (
+                      <article className="admin-audit-log__focus">
+                        <div className="admin-widget__header admin-audit-log__focus-header">
+                          <div>
+                            <h2>Focused Group</h2>
+                            <span>{auditFocusedLabel || "Ungrouped audit history"}</span>
+                          </div>
+                          <button className="admin-toolbar__btn" type="button" onClick={handleClearAuditFocus}>
+                            Clear Focus
+                          </button>
+                        </div>
+                        <AuditTimelineList
+                          logs={auditFocusedLogs}
+                          groupEvents={false}
+                          emptyTitle="No actions in this group"
+                          emptyDescription="This grouped event does not have any individual audit rows to show."
+                        />
+                      </article>
+                    ) : null}
                     <AuditTimelineList
                       logs={auditLogs}
                       emptyTitle="No audit activity yet"
                       emptyDescription="As admins update bookings, dinners, and runtime controls, the operational audit trail will appear here."
+                      onOpenGroup={handleOpenAuditGroup}
                     />
+                    {auditLogs.length > 0 ? (
+                      <div className="admin-users__footer">
+                        <button className="admin-toolbar__btn" type="button" onClick={handleLoadMoreAuditLogs} disabled={!auditHasMore || auditLoading}>
+                          {auditLoading ? "Loading..." : auditHasMore ? "Load more audit entries" : "No more audit entries"}
+                        </button>
+                      </div>
+                    ) : null}
                   </AdminAuditLogCard>
                 </section>
               ) : null}
@@ -5233,9 +6090,65 @@ export default function AdminPanel() {
             </div>
           ) : null}
 
+          {dishDeleteTarget ? (
+            <div
+              className="admin-modal-backdrop"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirm dish deletion"
+              onClick={(event) => {
+                if (event.target === event.currentTarget && !dishDeleting) {
+                  setDishDeleteTarget(null);
+                }
+              }}
+            >
+              <article className="admin-modal admin-modal--danger">
+                <button
+                  className="admin-modal__close"
+                  type="button"
+                  onClick={() => setDishDeleteTarget(null)}
+                  disabled={dishDeleting}
+                  aria-label="Close dish delete confirmation"
+                >
+                  x
+                </button>
+                <p className="admin-modal__eyebrow">Delete Dish</p>
+                <h3>Remove dish #{dishDeleteTarget.id}?</h3>
+                <p className="admin-modal__text">
+                  This dish will be removed from the Telegram custom menu catalog.
+                </p>
+                <div className="admin-modal__detail">
+                  <b>{dishDeleteTarget.nameEng}</b>
+                  <span>
+                    {dishDeleteTarget.dishType} · {formatCurrency(dishDeleteTarget.price)}
+                  </span>
+                </div>
+                <div className="admin-modal__actions">
+                  <button
+                    className="admin-toolbar__btn"
+                    type="button"
+                    onClick={() => setDishDeleteTarget(null)}
+                    disabled={dishDeleting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="admin-toolbar__btn admin-toolbar__btn--danger"
+                    type="button"
+                    onClick={confirmDeleteDish}
+                    disabled={dishDeleting}
+                  >
+                    {dishDeleting ? "Deleting..." : "Delete Dish"}
+                  </button>
+                </div>
+              </article>
+            </div>
+          ) : null}
+
         </div>
       </div>
       {bookingManagerModal}
+      {landingBookingManagerModal}
     </section>
   );
 }

@@ -15,6 +15,14 @@ var allowedLandingAdminStatuses = map[string]struct{}{
 	"completed": {},
 }
 
+var allowedLandingReviewStatuses = map[string]struct{}{
+	"new":       {},
+	"review":    {},
+	"contacted": {},
+	"approved":  {},
+	"rejected":  {},
+}
+
 func (l *landingApp) listAdminLandingUsersHandler() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if l.connections.AdminUsers == nil {
@@ -109,7 +117,9 @@ func (l *landingApp) listAdminTelegramUsersHandler() fiber.Handler {
 
 func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 	type request struct {
-		Status string `json:"status"`
+		Status          string `json:"status"`
+		SelectionStatus string `json:"selectionStatus"`
+		AdminStatus     string `json:"adminStatus"`
 	}
 
 	return func(c *fiber.Ctx) error {
@@ -138,14 +148,61 @@ func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 			})
 		}
 
-		status := strings.ToLower(strings.TrimSpace(body.Status))
-		if _, ok := allowedLandingAdminStatuses[status]; !ok {
+		var selectionStatus *string
+		var adminStatus *string
+
+		selectionRaw := strings.ToLower(strings.TrimSpace(body.SelectionStatus))
+		adminRaw := strings.ToLower(strings.TrimSpace(body.AdminStatus))
+		legacyStatus := strings.ToLower(strings.TrimSpace(body.Status))
+
+		// Be tolerant of older clients that may send one of the values in the wrong field.
+		if selectionRaw != "" {
+			if _, ok := allowedLandingReviewStatuses[selectionRaw]; ok && adminRaw == "" {
+				adminRaw = selectionRaw
+				selectionRaw = ""
+			}
+		}
+		if adminRaw != "" {
+			if _, ok := allowedLandingAdminStatuses[adminRaw]; ok && selectionRaw == "" {
+				selectionRaw = adminRaw
+				adminRaw = ""
+			}
+		}
+
+		if selectionRaw == "" && adminRaw == "" && legacyStatus != "" {
+			if _, ok := allowedLandingAdminStatuses[legacyStatus]; ok {
+				selectionRaw = legacyStatus
+			} else if _, ok := allowedLandingReviewStatuses[legacyStatus]; ok {
+				adminRaw = legacyStatus
+			}
+		}
+
+		if selectionRaw != "" {
+			if _, ok := allowedLandingAdminStatuses[selectionRaw]; !ok {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid selectionStatus; allowed: open, completed",
+				})
+			}
+			selectionStatus = &selectionRaw
+		}
+
+		if adminRaw != "" {
+			if _, ok := allowedLandingReviewStatuses[adminRaw]; !ok {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid adminStatus; allowed: new, review, contacted, approved, rejected",
+				})
+			}
+			adminStatus = &adminRaw
+		}
+
+		if selectionStatus == nil && adminStatus == nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "invalid status; allowed: open, completed",
+				"error": "at least one of selectionStatus or adminStatus is required",
 			})
 		}
 
-		if err := l.connections.AdminUsers.UpdateLandingUserStatus(userID, status); err != nil {
+		updated, err := l.connections.AdminUsers.UpdateLandingUserStatus(userID, selectionStatus, adminStatus)
+		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 					"error": "user not found",
@@ -161,14 +218,16 @@ func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 			ActionType:    "landing_user_status_updated",
 			EntityType:    "landing_user",
 			EntityID:      userID,
-			PreviousValue: string(mustJSONMap(map[string]string{"selectionStatus": "unknown"})),
-			NewValue:      string(mustJSONMap(map[string]string{"selectionStatus": status})),
+			PreviousValue: string(mustJSONMap(map[string]string{"selectionStatus": "unknown", "adminStatus": "unknown"})),
+			NewValue: string(mustJSONMap(map[string]string{
+				"selectionStatus": updated.SelectionStatus,
+				"adminStatus":     updated.AdminStatus,
+			})),
 		})
 
 		return c.JSON(fiber.Map{
-			"ok":     true,
-			"userId": userID,
-			"status": status,
+			"ok":   true,
+			"user": updated,
 		})
 	}
 }

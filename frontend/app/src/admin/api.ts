@@ -58,6 +58,7 @@ export type AdminLandingUser = {
   dinnerTitle: string;
   chosenPackage?: string;
   selectionStatus: "open" | "completed";
+  adminStatus: "new" | "review" | "contacted" | "approved" | "rejected";
   createdAt: string;
   updatedAt: string;
 };
@@ -492,8 +493,25 @@ export async function updateAdminTelegramApplication(
   return data.application;
 }
 
-export async function getAdminAuditLogs(limit = 20): Promise<AdminAuditLog[]> {
-  const response = await adminFetch(`/audit-logs?limit=${limit}`, {
+export async function getAdminAuditLogs(params: {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  entityType?: string;
+  actionType?: string;
+  adminUsername?: string;
+  reasonState?: "all" | "with_reason" | "without_reason";
+} = {}): Promise<AdminAuditLog[]> {
+  const query = new URLSearchParams();
+  if (params.limit != null) query.set("limit", String(params.limit));
+  if (params.offset != null) query.set("offset", String(params.offset));
+  if (params.search) query.set("search", params.search);
+  if (params.entityType) query.set("entityType", params.entityType);
+  if (params.actionType) query.set("actionType", params.actionType);
+  if (params.adminUsername) query.set("adminUsername", params.adminUsername);
+  if (params.reasonState && params.reasonState !== "all") query.set("reasonState", params.reasonState);
+
+  const response = await adminFetch(`/audit-logs?${query.toString()}`, {
     method: "GET",
   });
 
@@ -619,19 +637,25 @@ export async function getAdminTelegramUsers(
 
 export async function updateAdminLandingUserStatus(
   userId: string,
-  status: "open" | "completed"
-): Promise<void> {
+  payload: {
+    selectionStatus?: AdminLandingUser["selectionStatus"];
+    adminStatus?: AdminLandingUser["adminStatus"];
+  }
+): Promise<AdminLandingUser> {
   const response = await adminFetch(`/users/landing/${encodeURIComponent(userId)}/status`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
     throw new Error(await parseError(response));
   }
+
+  const data = (await response.json()) as { user: AdminLandingUser };
+  return data.user;
 }
 
 export async function updateAdminSettings(payload: AdminSettingsPayload): Promise<AdminPanelResponse["settings"]> {
@@ -700,4 +724,31 @@ export async function createAdminDish(payload: AdminDishCreatePayload): Promise<
 
   const data = (await response.json()) as { item: AdminDishItem };
   return data.item;
+}
+
+export async function updateAdminDish(id: number, payload: AdminDishCreatePayload): Promise<AdminDishItem> {
+  const response = await adminFetch(`/dishes/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { item: AdminDishItem };
+  return data.item;
+}
+
+export async function deleteAdminDish(id: number): Promise<void> {
+  const response = await adminFetch(`/dishes/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
 }

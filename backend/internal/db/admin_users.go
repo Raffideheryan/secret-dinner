@@ -47,6 +47,9 @@ func (r *adminUsersRepo) ListLandingUsers(params UserListParams) ([]LandingUserR
 		conditions = append(conditions, "COALESCE(ul.selection_status, 'open') = 'completed'")
 	case "open":
 		conditions = append(conditions, "COALESCE(ul.selection_status, 'open') = 'open'")
+	case "new", "review", "contacted", "approved", "rejected":
+		args = append(args, status)
+		conditions = append(conditions, fmt.Sprintf("COALESCE(ul.admin_status, 'new') = $%d", len(args)))
 	}
 
 	query := `
@@ -61,6 +64,7 @@ func (r *adminUsersRepo) ListLandingUsers(params UserListParams) ([]LandingUserR
 			ul.dinner_id,
 			ul.chosen_package,
 			COALESCE(ul.selection_status, CASE WHEN ul.dinner_id IS NOT NULL AND ul.chosen_package IS NOT NULL THEN 'completed' ELSE 'open' END),
+			COALESCE(ul.admin_status, 'new'),
 			COALESCE(ld.description, ''),
 			ul.created_at,
 			ul.updated_at
@@ -96,6 +100,7 @@ func (r *adminUsersRepo) ListLandingUsers(params UserListParams) ([]LandingUserR
 			&dinnerID,
 			&chosenPackage,
 			&item.SelectionStatus,
+			&item.AdminStatus,
 			&item.DinnerTitle,
 			&item.CreatedAt,
 			&item.UpdatedAt,
@@ -135,31 +140,88 @@ func (r *adminUsersRepo) LandingUsersSummary() (LandingUsersSummary, error) {
 	return summary, nil
 }
 
-func (r *adminUsersRepo) UpdateLandingUserStatus(userID string, status string) error {
+func (r *adminUsersRepo) UpdateLandingUserStatus(userID string, selectionStatus *string, adminStatus *string) (LandingUserRecord, error) {
 	if r.landingDB == nil {
-		return sql.ErrConnDone
+		return LandingUserRecord{}, sql.ErrConnDone
 	}
 
-	const query = `
+	if selectionStatus == nil && adminStatus == nil {
+		return LandingUserRecord{}, sql.ErrNoRows
+	}
+
+	query := `
 		UPDATE users_landing
-		SET selection_status = $2, updated_at = now()
+		SET selection_status = COALESCE($2, selection_status),
+			admin_status = COALESCE($3, admin_status),
+			updated_at = now()
 		WHERE id::text = $1
 	`
 
-	result, err := r.landingDB.Exec(query, userID, status)
+	result, err := r.landingDB.Exec(query, userID, selectionStatus, adminStatus)
 	if err != nil {
-		return err
+		return LandingUserRecord{}, err
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return LandingUserRecord{}, err
 	}
 	if rowsAffected == 0 {
-		return sql.ErrNoRows
+		return LandingUserRecord{}, sql.ErrNoRows
 	}
 
-	return nil
+	const fetchQuery = `
+		SELECT
+			ul.id::text,
+			ul.full_name,
+			ul.email,
+			ul.phone,
+			ul.guest_count,
+			COALESCE(ul.hobbies, ''),
+			COALESCE(ul.allergies, ''),
+			ul.dinner_id,
+			ul.chosen_package,
+			COALESCE(ul.selection_status, CASE WHEN ul.dinner_id IS NOT NULL AND ul.chosen_package IS NOT NULL THEN 'completed' ELSE 'open' END),
+			COALESCE(ul.admin_status, 'new'),
+			COALESCE(ld.description, ''),
+			ul.created_at,
+			ul.updated_at
+		FROM users_landing ul
+		LEFT JOIN landing_dinners ld ON ld.id = ul.dinner_id
+		WHERE ul.id::text = $1
+	`
+
+	var item LandingUserRecord
+	var dinnerID sql.NullInt64
+	var chosenPackage sql.NullString
+	if err := r.landingDB.QueryRow(fetchQuery, userID).Scan(
+		&item.ID,
+		&item.FullName,
+		&item.Email,
+		&item.Phone,
+		&item.GuestCount,
+		&item.Hobbies,
+		&item.Allergies,
+		&dinnerID,
+		&chosenPackage,
+		&item.SelectionStatus,
+		&item.AdminStatus,
+		&item.DinnerTitle,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	); err != nil {
+		return LandingUserRecord{}, err
+	}
+	if dinnerID.Valid {
+		id := dinnerID.Int64
+		item.DinnerID = &id
+	}
+	if chosenPackage.Valid && chosenPackage.String != "" {
+		cp := chosenPackage.String
+		item.ChosenPackage = &cp
+	}
+
+	return item, nil
 }
 
 func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUserRecord, error) {

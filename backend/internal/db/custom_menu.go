@@ -34,6 +34,8 @@ type CustomMenuDB interface {
 	ListDishTypes() ([]string, error)
 	ListItemsByType(dishType string) ([]CustomMenuItem, error)
 	CreateItem(input CreateCustomMenuItemInput) (CustomMenuItem, error)
+	UpdateItem(id int64, input CreateCustomMenuItemInput) (CustomMenuItem, error)
+	DeleteItem(id int64) error
 }
 
 type customMenuRepo struct {
@@ -150,4 +152,77 @@ func (r *customMenuRepo) CreateItem(input CreateCustomMenuItemInput) (CustomMenu
 		return CustomMenuItem{}, fmt.Errorf("failed to create dish: %w", err)
 	}
 	return item, nil
+}
+
+func (r *customMenuRepo) UpdateItem(id int64, input CreateCustomMenuItemInput) (CustomMenuItem, error) {
+	input.NameArm = strings.TrimSpace(input.NameArm)
+	input.NameRus = strings.TrimSpace(input.NameRus)
+	input.NameEng = strings.TrimSpace(input.NameEng)
+	input.DishType = strings.TrimSpace(input.DishType)
+
+	if id <= 0 {
+		return CustomMenuItem{}, sql.ErrNoRows
+	}
+	if input.NameArm == "" || input.NameRus == "" || input.NameEng == "" {
+		return CustomMenuItem{}, errors.New("dish names are required")
+	}
+	if input.DishType == "" {
+		return CustomMenuItem{}, ErrInvalidDishType
+	}
+	if input.Price <= 0 {
+		return CustomMenuItem{}, errors.New("price must be positive")
+	}
+
+	const query = `
+		UPDATE custom_menu
+		SET
+			name_arm = $2,
+			name_rus = $3,
+			name_eng = $4,
+			price = $5,
+			dish_type = $6,
+			updated_at = now()
+		WHERE id = $1
+		RETURNING id, name_arm, name_rus, name_eng, price, dish_type, created_at, updated_at
+	`
+
+	var item CustomMenuItem
+	if err := r.db.QueryRow(query, id, input.NameArm, input.NameRus, input.NameEng, input.Price, input.DishType).Scan(
+		&item.ID,
+		&item.NameArm,
+		&item.NameRus,
+		&item.NameEng,
+		&item.Price,
+		&item.DishType,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return CustomMenuItem{}, err
+		}
+		return CustomMenuItem{}, fmt.Errorf("failed to update dish: %w", err)
+	}
+
+	return item, nil
+}
+
+func (r *customMenuRepo) DeleteItem(id int64) error {
+	if id <= 0 {
+		return sql.ErrNoRows
+	}
+
+	result, err := r.db.Exec(`DELETE FROM custom_menu WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete dish: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
