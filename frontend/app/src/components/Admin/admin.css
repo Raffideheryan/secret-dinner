@@ -1327,21 +1327,21 @@
 }
 
 .admin-user-badge--ok {
-  background: rgba(31, 122, 92, 0.22);
-  border-color: rgba(31, 122, 92, 0.4);
-  color: #9ce4cb;
+  background: linear-gradient(135deg, rgba(49, 96, 53, 0.84), rgba(29, 62, 33, 0.94));
+  border-color: rgba(110, 231, 147, 0.18);
+  color: #d9f4e1;
 }
 
 .admin-user-badge--warn {
-  background: rgba(212, 175, 55, 0.2);
-  border-color: rgba(212, 175, 55, 0.4);
-  color: #f2d67c;
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
+  border-color: rgba(252, 211, 77, 0.18);
+  color: #f3e7c0;
 }
 
 .admin-user-badge--danger {
-  background: rgba(230, 90, 90, 0.2);
-  border-color: rgba(230, 90, 90, 0.45);
-  color: #ffb4b4;
+  background: linear-gradient(135deg, rgba(111, 47, 47, 0.86), rgba(76, 28, 28, 0.94));
+  border-color: rgba(252, 165, 165, 0.18);
+  color: #f4dddd;
 }
 
 .admin-capacity {
@@ -1423,38 +1423,38 @@
 
 .admin-capacity--low .admin-capacity__state,
 .admin-capacity__fill--low {
-  background: rgba(96, 165, 250, 0.18);
-  color: #dbeafe;
+  background: linear-gradient(135deg, rgba(63, 98, 145, 0.86), rgba(40, 64, 102, 0.94));
+  color: #dcecff;
 }
 
 .admin-capacity--healthy .admin-capacity__state,
 .admin-capacity__fill--healthy {
-  background: rgba(34, 197, 94, 0.2);
-  color: #dcfce7;
+  background: linear-gradient(135deg, rgba(49, 96, 53, 0.84), rgba(29, 62, 33, 0.94));
+  color: #d9f4e1;
 }
 
 .admin-capacity--almost-full .admin-capacity__state,
 .admin-capacity__fill--almost-full {
-  background: rgba(249, 115, 22, 0.22);
-  color: #ffedd5;
+  background: linear-gradient(135deg, rgba(134, 89, 28, 0.86), rgba(91, 58, 16, 0.94));
+  color: #f3dfc3;
 }
 
 .admin-capacity--full .admin-capacity__state,
 .admin-capacity__fill--full {
-  background: rgba(234, 179, 8, 0.22);
-  color: #fef3c7;
+  background: linear-gradient(135deg, rgba(137, 101, 31, 0.86), rgba(95, 68, 18, 0.94));
+  color: #f3e7c0;
 }
 
 .admin-capacity--overbooked .admin-capacity__state,
 .admin-capacity__fill--overbooked {
-  background: rgba(239, 68, 68, 0.24);
-  color: #fee2e2;
+  background: linear-gradient(135deg, rgba(111, 47, 47, 0.86), rgba(76, 28, 28, 0.94));
+  color: #f4dddd;
 }
 
 .admin-capacity--unknown .admin-capacity__state,
 .admin-capacity__fill--unknown {
-  background: rgba(148, 163, 184, 0.18);
-  color: #e5e7eb;
+  background: linear-gradient(135deg, rgba(82, 88, 94, 0.84), rgba(55, 61, 68, 0.94));
+  color: #e6eaef;
 }
 
 .admin-users__footer {
@@ -4235,21 +4235,21 @@
 }
 
 .admin-badge--gold {
-  color: var(--admin-gold-strong);
+  color: #f3e7c0;
   border-color: rgba(212, 175, 55, 0.2);
-  background: rgba(212, 175, 55, 0.08);
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
 }
 
 .admin-badge--emerald {
-  color: #b6ffd6;
-  border-color: rgba(46, 204, 143, 0.2);
-  background: rgba(46, 204, 143, 0.08);
+  color: #d9f4e1;
+  border-color: rgba(46, 204, 143, 0.18);
+  background: linear-gradient(135deg, rgba(49, 96, 53, 0.84), rgba(29, 62, 33, 0.94));
 }
 
 .admin-badge--danger {
-  color: #ffd2d2;
-  border-color: rgba(232, 93, 93, 0.24);
-  background: rgba(232, 93, 93, 0.08);
+  color: #f4dddd;
+  border-color: rgba(232, 93, 93, 0.2);
+  background: linear-gradient(135deg, rgba(111, 47, 47, 0.86), rgba(76, 28, 28, 0.94));
 }
 
 .admin-card,
@@ -4672,8 +4672,8 @@
 .admin-booking-actions__current--neutral,
 .admin-booking-actions__segment--neutral {
   border-color: rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.08);
-  color: #e5e7eb;
+  background: linear-gradient(135deg, rgba(82, 88, 94, 0.84), rgba(55, 61, 68, 0.94));
+  color: #e6eaef;
 }
 
 .admin-booking-actions__segment--neutral:hover {
@@ -4683,15 +4683,15 @@
 
 .admin-booking-actions__segment--neutral.admin-booking-actions__segment--active,
 .admin-booking-actions__current--neutral {
-  border-color: rgba(148, 163, 184, 0.42);
-  background: linear-gradient(135deg, rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16));
+  border-color: rgba(148, 163, 184, 0.28);
+  background: linear-gradient(135deg, rgba(114, 125, 140, 0.9), rgba(78, 88, 102, 0.98));
 }
 
 .admin-booking-actions__current--info,
 .admin-booking-actions__segment--info {
   border-color: rgba(96, 165, 250, 0.18);
-  background: rgba(59, 130, 246, 0.08);
-  color: #dbeafe;
+  background: linear-gradient(135deg, rgba(40, 76, 118, 0.84), rgba(23, 48, 81, 0.94));
+  color: #d8e9fb;
 }
 
 .admin-booking-actions__segment--info:hover {
@@ -4701,15 +4701,15 @@
 
 .admin-booking-actions__segment--info.admin-booking-actions__segment--active,
 .admin-booking-actions__current--info {
-  border-color: rgba(96, 165, 250, 0.42);
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.18));
+  border-color: rgba(96, 165, 250, 0.28);
+  background: linear-gradient(135deg, rgba(53, 101, 177, 0.9), rgba(28, 69, 138, 0.98));
 }
 
 .admin-booking-actions__current--violet,
 .admin-booking-actions__segment--violet {
-  border-color: rgba(167, 139, 250, 0.22);
-  background: rgba(124, 58, 237, 0.1);
-  color: #ede9fe;
+  border-color: rgba(167, 139, 250, 0.18);
+  background: linear-gradient(135deg, rgba(88, 55, 126, 0.84), rgba(60, 35, 91, 0.94));
+  color: #ebe2fb;
 }
 
 .admin-booking-actions__segment--violet:hover {
@@ -4719,15 +4719,15 @@
 
 .admin-booking-actions__segment--violet.admin-booking-actions__segment--active,
 .admin-booking-actions__current--violet {
-  border-color: rgba(167, 139, 250, 0.44);
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.32), rgba(91, 33, 182, 0.18));
+  border-color: rgba(167, 139, 250, 0.28);
+  background: linear-gradient(135deg, rgba(113, 72, 168, 0.9), rgba(80, 43, 128, 0.98));
 }
 
 .admin-booking-actions__current--warning,
 .admin-booking-actions__segment--warning {
-  border-color: rgba(251, 146, 60, 0.2);
-  background: rgba(249, 115, 22, 0.08);
-  color: #ffedd5;
+  border-color: rgba(251, 146, 60, 0.18);
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
+  color: #f3dfc3;
 }
 
 .admin-booking-actions__segment--warning:hover {
@@ -4737,15 +4737,15 @@
 
 .admin-booking-actions__segment--warning.admin-booking-actions__segment--active,
 .admin-booking-actions__current--warning {
-  border-color: rgba(251, 146, 60, 0.42);
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(234, 88, 12, 0.18));
+  border-color: rgba(251, 146, 60, 0.28);
+  background: linear-gradient(135deg, rgba(170, 112, 34, 0.9), rgba(124, 72, 17, 0.98));
 }
 
 .admin-booking-actions__current--success,
 .admin-booking-actions__segment--success {
-  border-color: rgba(74, 222, 128, 0.2);
-  background: rgba(34, 197, 94, 0.08);
-  color: #dcfce7;
+  border-color: rgba(74, 222, 128, 0.18);
+  background: linear-gradient(135deg, rgba(49, 96, 53, 0.84), rgba(29, 62, 33, 0.94));
+  color: #d9f4e1;
 }
 
 .admin-booking-actions__segment--success:hover {
@@ -4755,15 +4755,15 @@
 
 .admin-booking-actions__segment--success.admin-booking-actions__segment--active,
 .admin-booking-actions__current--success {
-  border-color: rgba(74, 222, 128, 0.42);
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.28), rgba(21, 128, 61, 0.18));
+  border-color: rgba(74, 222, 128, 0.28);
+  background: linear-gradient(135deg, rgba(60, 142, 72, 0.9), rgba(31, 102, 54, 0.98));
 }
 
 .admin-booking-actions__current--danger,
 .admin-booking-actions__segment--danger {
-  border-color: rgba(248, 113, 113, 0.2);
-  background: rgba(239, 68, 68, 0.08);
-  color: #fee2e2;
+  border-color: rgba(248, 113, 113, 0.18);
+  background: linear-gradient(135deg, rgba(111, 47, 47, 0.86), rgba(76, 28, 28, 0.94));
+  color: #f4dddd;
 }
 
 .admin-booking-actions__segment--danger:hover {
@@ -4773,15 +4773,15 @@
 
 .admin-booking-actions__segment--danger.admin-booking-actions__segment--active,
 .admin-booking-actions__current--danger {
-  border-color: rgba(248, 113, 113, 0.42);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(185, 28, 28, 0.18));
+  border-color: rgba(248, 113, 113, 0.28);
+  background: linear-gradient(135deg, rgba(158, 57, 57, 0.9), rgba(114, 29, 29, 0.98));
 }
 
 .admin-booking-actions__current--danger-deep,
 .admin-booking-actions__segment--danger-deep {
-  border-color: rgba(127, 29, 29, 0.34);
-  background: rgba(69, 10, 10, 0.34);
-  color: #fecaca;
+  border-color: rgba(127, 29, 29, 0.24);
+  background: linear-gradient(135deg, rgba(86, 27, 27, 0.9), rgba(55, 15, 15, 0.96));
+  color: #efcccc;
 }
 
 .admin-booking-actions__segment--danger-deep:hover {
@@ -4791,14 +4791,15 @@
 
 .admin-booking-actions__segment--danger-deep.admin-booking-actions__segment--active,
 .admin-booking-actions__current--danger-deep {
-  border-color: rgba(153, 27, 27, 0.54);
-  background: linear-gradient(135deg, rgba(127, 29, 29, 0.42), rgba(69, 10, 10, 0.32));
+  border-color: rgba(153, 27, 27, 0.34);
+  background: linear-gradient(135deg, rgba(111, 34, 34, 0.94), rgba(69, 18, 18, 0.98));
 }
 
 .admin-booking-actions__segment--default.admin-booking-actions__segment--active,
 .admin-booking-actions__current--default {
-  border-color: rgba(212, 175, 55, 0.3);
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.18), rgba(212, 175, 55, 0.08));
+  border-color: rgba(212, 175, 55, 0.24);
+  background: linear-gradient(135deg, rgba(170, 112, 34, 0.88), rgba(124, 72, 17, 0.96));
+  color: #f3e7c0;
 }
 
 .admin-booking-menu {
@@ -4972,57 +4973,57 @@
 .admin-booking-menu__current--neutral,
 .admin-booking-menu__item--neutral {
   border-color: rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.08);
-  color: #e5e7eb;
+  background: linear-gradient(135deg, rgba(82, 88, 94, 0.84), rgba(55, 61, 68, 0.94));
+  color: #e6eaef;
 }
 
 .admin-booking-menu__current--info,
 .admin-booking-menu__item--info {
   border-color: rgba(96, 165, 250, 0.18);
-  background: rgba(59, 130, 246, 0.08);
-  color: #dbeafe;
+  background: linear-gradient(135deg, rgba(40, 76, 118, 0.84), rgba(23, 48, 81, 0.94));
+  color: #d8e9fb;
 }
 
 .admin-booking-menu__current--violet,
 .admin-booking-menu__item--violet {
-  border-color: rgba(167, 139, 250, 0.22);
-  background: rgba(124, 58, 237, 0.1);
-  color: #ede9fe;
+  border-color: rgba(167, 139, 250, 0.18);
+  background: linear-gradient(135deg, rgba(88, 55, 126, 0.84), rgba(60, 35, 91, 0.94));
+  color: #ebe2fb;
 }
 
 .admin-booking-menu__current--warning,
 .admin-booking-menu__item--warning {
-  border-color: rgba(251, 146, 60, 0.2);
-  background: rgba(249, 115, 22, 0.08);
-  color: #ffedd5;
+  border-color: rgba(251, 146, 60, 0.18);
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
+  color: #f3dfc3;
 }
 
 .admin-booking-menu__current--success,
 .admin-booking-menu__item--success {
-  border-color: rgba(74, 222, 128, 0.2);
-  background: rgba(34, 197, 94, 0.08);
-  color: #dcfce7;
+  border-color: rgba(74, 222, 128, 0.18);
+  background: linear-gradient(135deg, rgba(49, 96, 53, 0.84), rgba(29, 62, 33, 0.94));
+  color: #d9f4e1;
 }
 
 .admin-booking-menu__current--danger,
 .admin-booking-menu__item--danger {
-  border-color: rgba(248, 113, 113, 0.2);
-  background: rgba(239, 68, 68, 0.08);
-  color: #fee2e2;
+  border-color: rgba(248, 113, 113, 0.18);
+  background: linear-gradient(135deg, rgba(111, 47, 47, 0.86), rgba(76, 28, 28, 0.94));
+  color: #f4dddd;
 }
 
 .admin-booking-menu__current--danger-deep,
 .admin-booking-menu__item--danger-deep {
-  border-color: rgba(127, 29, 29, 0.34);
-  background: rgba(69, 10, 10, 0.34);
-  color: #fecaca;
+  border-color: rgba(127, 29, 29, 0.24);
+  background: linear-gradient(135deg, rgba(86, 27, 27, 0.9), rgba(55, 15, 15, 0.96));
+  color: #efcccc;
 }
 
 .admin-booking-menu__current--default,
 .admin-booking-menu__item--default {
-  border-color: rgba(212, 175, 55, 0.25);
-  background: rgba(212, 175, 55, 0.08);
-  color: var(--admin-gold-strong);
+  border-color: rgba(212, 175, 55, 0.2);
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
+  color: #f3e7c0;
 }
 
 .admin-telegram-booking-list {
@@ -5340,45 +5341,45 @@
 
 .admin-booking-manager__option--neutral {
   border-color: rgba(148, 163, 184, 0.18);
-  background: rgba(148, 163, 184, 0.08);
-  color: #e5e7eb;
+  background: linear-gradient(135deg, rgba(82, 88, 94, 0.84), rgba(55, 61, 68, 0.94));
+  color: #e6eaef;
 }
 
 .admin-booking-manager__option--info {
   border-color: rgba(96, 165, 250, 0.18);
-  background: rgba(59, 130, 246, 0.08);
-  color: #dbeafe;
+  background: linear-gradient(135deg, rgba(40, 76, 118, 0.84), rgba(23, 48, 81, 0.94));
+  color: #d8e9fb;
 }
 
 .admin-booking-manager__option--violet {
-  border-color: rgba(167, 139, 250, 0.22);
-  background: rgba(124, 58, 237, 0.1);
-  color: #ede9fe;
+  border-color: rgba(167, 139, 250, 0.18);
+  background: linear-gradient(135deg, rgba(88, 55, 126, 0.84), rgba(60, 35, 91, 0.94));
+  color: #ebe2fb;
 }
 
 .admin-booking-manager__option--warning {
-  border-color: rgba(251, 146, 60, 0.2);
-  background: rgba(249, 115, 22, 0.08);
-  color: #ffedd5;
+  border-color: rgba(251, 146, 60, 0.18);
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
+  color: #f3dfc3;
 }
 
 .admin-booking-manager__option--success {
-  border-color: rgba(74, 222, 128, 0.2);
-  background: rgba(34, 197, 94, 0.08);
-  color: #dcfce7;
+  border-color: rgba(74, 222, 128, 0.18);
+  background: linear-gradient(135deg, rgba(49, 96, 53, 0.84), rgba(29, 62, 33, 0.94));
+  color: #d9f4e1;
 }
 
 .admin-booking-manager__option--danger,
 .admin-booking-manager__option--danger-deep {
-  border-color: rgba(248, 113, 113, 0.2);
-  background: rgba(239, 68, 68, 0.08);
-  color: #fee2e2;
+  border-color: rgba(248, 113, 113, 0.18);
+  background: linear-gradient(135deg, rgba(111, 47, 47, 0.86), rgba(76, 28, 28, 0.94));
+  color: #f4dddd;
 }
 
 .admin-booking-manager__option--default {
-  border-color: rgba(212, 175, 55, 0.25);
-  background: rgba(212, 175, 55, 0.08);
-  color: var(--admin-gold-strong);
+  border-color: rgba(212, 175, 55, 0.2);
+  background: linear-gradient(135deg, rgba(124, 88, 28, 0.84), rgba(86, 58, 16, 0.94));
+  color: #f3e7c0;
 }
 
 .admin-booking-manager__option-icon {
