@@ -75,9 +75,21 @@ func (l *landingApp) Shutdown() error {
 			return err
 		}
 	}
+	if l.connections.AdminCampaigns != nil {
+		if err := l.connections.AdminCampaigns.Close(); err != nil {
+			log.WithError(err).Error("Error closing admin campaigns connection")
+			return err
+		}
+	}
 	if l.connections.AdminAudit != nil {
 		if err := l.connections.AdminAudit.Close(); err != nil {
 			log.WithError(err).Error("Error closing admin audit connection")
+			return err
+		}
+	}
+	if l.connections.ActivityEvents != nil {
+		if err := l.connections.ActivityEvents.Close(); err != nil {
+			log.WithError(err).Error("Error closing activity events connection")
 			return err
 		}
 	}
@@ -141,12 +153,21 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 		return db.Connections{}, err
 	}
 
+	activityEventsConn, err := openPostgresConnection(cfg.DB.URL)
+	if err != nil {
+		landingUsersConn.Close()
+		landingDinnersConn.Close()
+		landingStatsConn.Close()
+		return db.Connections{}, err
+	}
+
 	connections := db.Connections{
-		Users:        db.NewUsersDB(landingUsersConn),
-		AdminUsers:   db.NewAdminUsersDB(landingUsersConn, nil),
-		AdminAudit:   db.NewAdminAuditDB(landingUsersConn),
-		Dinners:      db.NewDinnersDB(landingDinnersConn, nil),
-		LandingStats: db.NewLandingStatsDB(landingStatsConn),
+		Users:          db.NewUsersDB(landingUsersConn),
+		AdminUsers:     db.NewAdminUsersDB(landingUsersConn, nil, activityEventsConn),
+		AdminAudit:     db.NewAdminAuditDB(landingUsersConn),
+		ActivityEvents: db.NewActivityEventsDB(activityEventsConn),
+		Dinners:        db.NewDinnersDB(landingDinnersConn, nil),
+		LandingStats:   db.NewLandingStatsDB(landingStatsConn),
 	}
 
 	telegramURL := strings.TrimSpace(cfg.DB.TelegramURL)
@@ -156,6 +177,7 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 			landingUsersConn.Close()
 			landingDinnersConn.Close()
 			landingStatsConn.Close()
+			activityEventsConn.Close()
 			return db.Connections{}, err
 		}
 		connections.Dinners = db.NewDinnersDB(landingDinnersConn, telegramDinnersConn)
@@ -165,28 +187,32 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 			landingUsersConn.Close()
 			landingDinnersConn.Close()
 			landingStatsConn.Close()
+			activityEventsConn.Close()
 			telegramDinnersConn.Close()
 			return db.Connections{}, err
 		}
 		connections.TelegramStats = db.NewTelegramStatsDB(telegramStatsConn)
-		connections.AdminUsers = db.NewAdminUsersDB(landingUsersConn, telegramStatsConn)
+		connections.AdminUsers = db.NewAdminUsersDB(landingUsersConn, telegramStatsConn, activityEventsConn)
 
 		adminBookingsConn, err := openPostgresConnection(telegramURL)
 		if err != nil {
 			landingUsersConn.Close()
 			landingDinnersConn.Close()
 			landingStatsConn.Close()
+			activityEventsConn.Close()
 			telegramDinnersConn.Close()
 			telegramStatsConn.Close()
 			return db.Connections{}, err
 		}
 		connections.AdminBookings = db.NewAdminBookingsDB(adminBookingsConn)
+		connections.AdminCampaigns = db.NewAdminCampaignsDB(adminBookingsConn, activityEventsConn)
 
 		customMenuConn, err := openPostgresConnection(telegramURL)
 		if err != nil {
 			landingUsersConn.Close()
 			landingDinnersConn.Close()
 			landingStatsConn.Close()
+			activityEventsConn.Close()
 			telegramDinnersConn.Close()
 			telegramStatsConn.Close()
 			adminBookingsConn.Close()

@@ -9,12 +9,14 @@ import (
 type adminUsersRepo struct {
 	landingDB  *sql.DB
 	telegramDB *sql.DB
+	activityDB *sql.DB
 }
 
-func NewAdminUsersDB(landingDB, telegramDB *sql.DB) AdminUsersDB {
+func NewAdminUsersDB(landingDB, telegramDB, activityDB *sql.DB) AdminUsersDB {
 	return &adminUsersRepo{
 		landingDB:  landingDB,
 		telegramDB: telegramDB,
+		activityDB: activityDB,
 	}
 }
 

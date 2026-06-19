@@ -9,6 +9,8 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import { useI18n } from "../../i18n";
+import { clearLandingTrackingIdentity, trackLandingError, trackLandingEvent } from "../../activity/tracker";
+import SeoHead from "../SEO/SeoHead";
 
 const TIERS: PackageTier[] = ["silver", "gold", "vip", "custom"];
 
@@ -39,7 +41,11 @@ export default function JoinDinners() {
             const data = await res.json();
             if (!res.ok) throw new Error(data?.message || t("join.step2.loadFailed"));
             setDinners(data.dinners ?? []);
+            trackLandingEvent("landing_dinners_loaded", {
+                dinnerCount: Array.isArray(data.dinners) ? data.dinners.length : 0,
+            });
         } catch (e) {
+            trackLandingError("landing_dinners_load_failed", e);
             setError(e instanceof Error ? e.message : t("join.step2.requestFailed"));
         } finally {
             setLoading(false);
@@ -47,6 +53,7 @@ export default function JoinDinners() {
     };
 
     useEffect(() => {
+        trackLandingEvent("landing_dinner_selection_opened");
         void fetchDinners();
     }, []);
 
@@ -109,6 +116,13 @@ export default function JoinDinners() {
 
     const handleSelectDinner = (dinner: Dinner) => {
         setSelectedDinnerId(dinner.id);
+        trackLandingEvent("landing_dinner_viewed", {
+            dinnerTitle: dinner.description,
+            availabilityLabel: getAvailabilityLabel(dinner),
+        }, {
+            entityType: "dinner",
+            entityId: String(dinner.id),
+        });
         if (!selectedPackage || getPriceForTier(dinner, selectedPackage) === null) {
             setSelectedPackage(getFirstAvailableTier(dinner));
         }
@@ -117,6 +131,12 @@ export default function JoinDinners() {
     const handleChoosePackage = (dinnerId: number, packageTier: PackageTier) => {
         setSelectedDinnerId(dinnerId);
         setSelectedPackage(packageTier);
+        trackLandingEvent("landing_package_clicked", {
+            package: packageTier,
+        }, {
+            entityType: "dinner",
+            entityId: String(dinnerId),
+        });
     };
 
     const handleSaveSelection = async () => {
@@ -149,8 +169,23 @@ export default function JoinDinners() {
                 })
             );
 
+            trackLandingEvent("landing_dinner_selection_saved", {
+                package: chosenPackage,
+            }, {
+                userId,
+                entityType: "dinner",
+                entityId: String(selectedDinner.id),
+            });
             setShowSuccessCard(true);
         } catch (e) {
+            trackLandingError("landing_dinner_selection_save_error", e, {
+                dinnerId: selectedDinner.id,
+                package: chosenPackage,
+            }, {
+                userId,
+                entityType: "dinner",
+                entityId: String(selectedDinner.id),
+            });
             setSaveError(e instanceof Error ? e.message : t("join.step2.saveFailed"));
         } finally {
             setSaving(false);
@@ -158,13 +193,20 @@ export default function JoinDinners() {
     };
 
     const handleReturnHome = () => {
+        trackLandingEvent("landing_return_home");
         sessionStorage.removeItem("joinFormCompleted");
         sessionStorage.removeItem("joinUserId");
+        clearLandingTrackingIdentity();
         navigate("/");
     };
 
     return (
         <section className="join join--dinners" id="join-dinners">
+            <SeoHead
+                title="Select Your Secret Dinner"
+                description="Choose a dinner date and package tier for your Secret Dinner reservation."
+                noindex
+            />
             <BlinkingParticles overlayClassName="join__overlay" particleClassName="join__particle" />
             <div className="join__content">
                 {showSuccessCard ? (
@@ -190,6 +232,7 @@ export default function JoinDinners() {
                             href="https://t.me/secret_dinner_bot"
                             target="_blank"
                             rel="noreferrer"
+                            onClick={() => trackLandingEvent("landing_telegram_redirect_clicked", { location: "selection_success" })}
                         >
                             <TelegramIcon />
                             {t("join.step2.success.telegram")}

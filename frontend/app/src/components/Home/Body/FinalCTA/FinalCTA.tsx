@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { ArrowForwardIcon, QrCode2OutlinedIcon } from "../../../Icons"
 import TelegramIcon from "@mui/icons-material/Telegram";
 import { useI18n } from "../../../../i18n";
+import { trackLandingEvent } from "../../../../activity/tracker";
 
 
 export default function FinalCTA() {
@@ -37,9 +38,9 @@ export default function FinalCTA() {
                 <div className="final-cta__line" />
 
                 <div className="final-cta__actions">
-                    <Link className="final-cta__button final-cta__button--primary" to="/join">
+                    <Link className="final-cta__button final-cta__button--primary" to="/join" onClick={() => trackLandingEvent("landing_cta_clicked", { location: "final_cta", action: "join" })}>
                     <span>{t("home.final.joinNextDinner")}</span><ArrowForwardIcon /></Link>
-                    <Link className="final-cta__button final-cta__button--ghost" to="https://t.me/secret_dinner_bot">
+                    <Link className="final-cta__button final-cta__button--ghost" to="https://t.me/secret_dinner_bot" onClick={() => trackLandingEvent("landing_cta_clicked", { location: "final_cta", action: "telegram" })}>
                         <TelegramIcon />
                         <span>{t("home.final.joinTelegram")}</span>
                     </Link>

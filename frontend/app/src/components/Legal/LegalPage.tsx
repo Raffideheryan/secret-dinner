@@ -1,9 +1,14 @@
 import { Link } from "react-router-dom";
 import "./legal.css";
+import SeoHead from "../SEO/SeoHead";
 
 export default function LegalPage() {
     return (
         <section className="legal-page">
+            <SeoHead
+                title="Terms, Privacy Policy and Legal Information"
+                description="Read the Secret Dinner legal terms, privacy policy, and participation policies in one place."
+            />
             <div className="legal-page__shell">
                 <div className="legal-page__header">
                     <div className="legal-page__intro">

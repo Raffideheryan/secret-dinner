@@ -9,10 +9,12 @@ import JoinDinners from "./components/Join/ChooseDinner"
 import JoinFormGuard from "./components/Join/JoinFormGuard";
 import NotFound from "./components/NotFound/NotFound";
 import LegalPage from "./components/Legal/LegalPage";
+import ActivityRouteTracker from "./activity/ActivityRouteTracker";
 
 export default function App() {
   return (
     <>
+      <ActivityRouteTracker />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
@@ -30,6 +32,14 @@ export default function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route
           path="/admin"
+          element={
+            <ProtectedAdminRoute>
+              <AdminPanel />
+            </ProtectedAdminRoute>
+          }
+        />
+        <Route
+          path="/users/:userId"
           element={
             <ProtectedAdminRoute>
               <AdminPanel />

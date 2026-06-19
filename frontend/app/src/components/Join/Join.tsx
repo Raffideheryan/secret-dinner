@@ -1,10 +1,12 @@
 import "./join.css"
-import { useRef, useState, type SubmitEvent } from "react";
+import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import type { JoinForm, JoinPayload } from "./types";
 import { Link, useNavigate } from "react-router-dom"
 import BlinkingParticles from "../common/BlinkingParticles";
 import { submitMainInfo } from "./ApplicationSubmit";
 import { useI18n } from "../../i18n";
+import { rememberLandingUserId, trackLandingError, trackLandingEvent } from "../../activity/tracker";
+import SeoHead from "../SEO/SeoHead";
 
 
 export default function Join() {
@@ -22,6 +24,10 @@ export default function Join() {
     });
     const [formAlert, setFormAlert] = useState("");
     const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof JoinForm, string>>>({});
+
+    useEffect(() => {
+        trackLandingEvent("landing_form_started");
+    }, []);
 
     const validateForm = () => {
         const errors: Partial<Record<keyof JoinForm, string>> = {};
@@ -45,6 +51,9 @@ export default function Join() {
         event.preventDefault();
         const errors = validateForm();
         if (Object.keys(errors).length > 0) {
+            trackLandingEvent("landing_form_validation_failed", {
+                fields: Object.keys(errors),
+            });
             setFieldErrors(errors);
             setFormAlert(t("join.step1.alertRequired"));
             return;
@@ -55,6 +64,9 @@ export default function Join() {
 
         const guestCount = Number(form.guestCount);
         if (!Number.isInteger(guestCount) || guestCount <= 0) {
+            trackLandingEvent("landing_guest_count_invalid", {
+                rawGuestCount: form.guestCount,
+            });
             setFieldErrors({ guestCount: t("join.error.guestsMin") });
             setFormAlert(t("join.step1.alertRequired"));
             return;
@@ -72,16 +84,35 @@ export default function Join() {
 
         try {
             const response = await submitMainInfo(payload);
+            rememberLandingUserId(response.userId);
             sessionStorage.setItem("joinUserId", response.userId);
             sessionStorage.setItem("joinFormCompleted", "true");
+            trackLandingEvent("landing_form_submitted", {
+                guestCount,
+                fillDurationMs: payload.fillDurationMs,
+            }, { userId: response.userId });
             navigate("/join/dinners");
         } catch (e) {
+            trackLandingError("landing_form_submit_error", e, {
+                guestCount,
+            });
             setFormAlert(e instanceof Error ? e.message : t("join.error.submitFailed"));
         }
     };
 
     const handleChange = (field: keyof JoinForm, value: string) => {
+        const previousValue = form[field];
         setForm((prev) => ({ ...prev, [field]: value }));
+        if (previousValue === "" && value.trim() !== "") {
+            trackLandingEvent("landing_form_field_started", {
+                field,
+            });
+        }
+        if (field === "guestCount" && previousValue !== value && value.trim() !== "") {
+            trackLandingEvent("landing_guest_count_changed", {
+                value,
+            });
+        }
         if (fieldErrors[field]) {
             setFieldErrors((prev) => {
                 const next = { ...prev };
@@ -96,6 +127,11 @@ export default function Join() {
 
     return (
         <section className="join" id="join">
+            <SeoHead
+                title="Join Secret Dinner"
+                description="Apply for a Secret Dinner invitation and reserve your place for an exclusive private dining experience."
+                noindex
+            />
             <BlinkingParticles overlayClassName="join__overlay" particleClassName="join__particle" />
             <div className="join__content">     
                 <form className="join__form-card" onSubmit={handleSubmit}>

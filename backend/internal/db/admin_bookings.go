@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 )
@@ -18,15 +17,15 @@ var ErrTelegramApplicationStaleUpdate = errors.New("telegram application was upd
 var ErrTelegramApplicationReasonRequired = errors.New("reason is required for risky status overrides")
 
 var allowedTelegramApplicationStatusTransitions = map[string][]string{
-	"draft":               {"draft", "pending_application", "cancelled"},
-	"pending_application": {"pending_application", "contacted", "approved", "rejected", "cancelled"},
-	"contacted":           {"contacted", "approved", "rejected", "cancelled"},
-	"approved":            {"approved", "waiting_payment", "cancelled"},
-	"waiting_payment":     {"waiting_payment", "paid", "cancelled"},
-	"paid":                {"paid", "no_show", "cancelled"},
-	"rejected":            {"rejected"},
-	"cancelled":           {"cancelled"},
-	"no_show":             {"no_show"},
+	"draft":               {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"pending_application": {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"contacted":           {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"approved":            {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"waiting_payment":     {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"paid":                {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"rejected":            {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"cancelled":           {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"no_show":             {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
 }
 
 func NewAdminBookingsDB(db *sql.DB) AdminBookingsDB {
@@ -277,15 +276,12 @@ func validateTelegramApplicationStatusTransition(currentStatus, nextStatus strin
 			return nil
 		}
 	}
-
-	allowed := append([]string(nil), allowedNext...)
-	sort.Strings(allowed)
 	return fmt.Errorf(
 		"%w: cannot move from %q to %q; allowed next statuses: %s",
 		ErrInvalidTelegramApplicationStatusTransition,
 		current,
 		next,
-		strings.Join(allowed, ", "),
+		strings.Join(allowedNext, ", "),
 	)
 }
 

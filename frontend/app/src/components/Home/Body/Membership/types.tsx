@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useI18n } from "../../../../i18n";
+import { trackLandingEvent } from "../../../../activity/tracker";
 
 type PriceCardType = {
     package: string;
@@ -30,7 +31,7 @@ export function PriceCard({package:packageName,price,buttonText, options, featur
                 ))}
             </ul>
 
-            <Link className="package__btn" to="/join">
+            <Link className="package__btn" to="/join" onClick={() => trackLandingEvent("landing_cta_clicked", { location: "membership", package: packageName, action: "join" })}>
                 {buttonText}
             </Link>
         </div>

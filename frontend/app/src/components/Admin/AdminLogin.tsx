@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { adminLogin } from "../../admin/api";
 import { AdminButton } from "./AdminUI";
+import SeoHead from "../SEO/SeoHead";
 import "./admin.css";
 
 export default function AdminLogin() {
@@ -28,6 +29,11 @@ export default function AdminLogin() {
 
   return (
     <section className="admin-auth">
+      <SeoHead
+        title="Admin Login"
+        description="Secret Dinner admin access."
+        noindex
+      />
       <form className="admin-auth__card" onSubmit={handleSubmit}>
         <p className="admin-auth__eyebrow">Secret Dinner Control Room</p>
         <h1 className="admin-auth__title">Admin Login</h1>

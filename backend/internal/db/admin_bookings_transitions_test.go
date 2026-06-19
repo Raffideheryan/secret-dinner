@@ -12,14 +12,14 @@ func TestValidateTelegramApplicationStatusTransition(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "pending to contacted", current: "pending_application", next: "contacted", wantErr: false},
-		{name: "pending to paid rejected", current: "pending_application", next: "paid", wantErr: true},
+		{name: "pending to paid allowed for admin override", current: "pending_application", next: "paid", wantErr: false},
 		{name: "approved to waiting payment", current: "approved", next: "waiting_payment", wantErr: false},
-		{name: "approved to paid rejected", current: "approved", next: "paid", wantErr: true},
+		{name: "approved to paid allowed for admin override", current: "approved", next: "paid", wantErr: false},
 		{name: "waiting payment to paid", current: "waiting_payment", next: "paid", wantErr: false},
 		{name: "paid to no show", current: "paid", next: "no_show", wantErr: false},
-		{name: "paid to rejected blocked", current: "paid", next: "rejected", wantErr: true},
+		{name: "paid to rejected allowed for admin override", current: "paid", next: "rejected", wantErr: false},
 		{name: "terminal rejected to rejected", current: "rejected", next: "rejected", wantErr: false},
-		{name: "terminal cancelled to approved blocked", current: "cancelled", next: "approved", wantErr: true},
+		{name: "terminal cancelled to approved allowed for admin override", current: "cancelled", next: "approved", wantErr: false},
 	}
 
 	for _, tt := range tests {

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { WineBarIcon } from "../../Icons";
 import BlinkingParticles from "../../common/BlinkingParticles";
 import { useI18n } from "../../../i18n";
+import { trackLandingEvent } from "../../../activity/tracker";
 
 export default function Hero() {
   const { t } = useI18n();
@@ -30,8 +31,8 @@ export default function Hero() {
         </p>
 
         <div className="hero__buttons">
-          <Link className="request__btn" to="/join">{t("home.hero.requestInvitation")}</Link>
-          <Link className="experience__btn" to="/" onClick={scrollToExperience}>{t("home.hero.exploreExperience")}</Link>  
+          <Link className="request__btn" to="/join" onClick={() => trackLandingEvent("landing_cta_clicked", { location: "hero", action: "join" })}>{t("home.hero.requestInvitation")}</Link>
+          <Link className="experience__btn" to="/" onClick={() => { scrollToExperience(); trackLandingEvent("landing_cta_clicked", { location: "hero", action: "explore" }); }}>{t("home.hero.exploreExperience")}</Link>
         </div>
       </div>
     </section>

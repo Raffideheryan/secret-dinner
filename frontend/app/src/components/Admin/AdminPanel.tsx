@@ -1,15 +1,33 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { FormControl, MenuItem, Select, TextField } from "@mui/material";
+import SeoHead from "../SEO/SeoHead";
 import {
   adminLogout,
   createAdminDish,
   createAdminDinner,
+  createEngagementCampaign,
   deleteAdminDish,
   deleteAdminDinner,
+  cancelEngagementCampaign,
   getAdminDishesByType,
   getAdminDishTypes,
   getAdminAuditLogs,
+  getEngagementCampaign,
+  getEngagementCampaignLogs,
+  getEngagementCampaignOptions,
+  getEngagementCampaigns,
+  getEngagementAnalytics,
+  getEngagementUserEvents,
+  getEngagementUserProfile,
+  getEngagementUsers,
+  addUserTag,
+  removeUserTag,
+  addUserNote,
+  deleteUserNote,
+  getSmartSegments,
+  getAdminRecommendations,
   getAdminLandingUsers,
   getAdminTelegramApplications,
   getAdminTelegramUsers,
@@ -27,11 +45,23 @@ import {
   type AdminTelegramApplicationsSummary,
   type AdminTelegramUser,
   type AdminTelegramUsersSummary,
+  type EngagementAnalytics,
+  type EngagementCampaignLog,
+  type EngagementCampaignMessagePayload,
+  type EngagementCampaignPayload,
+  type EngagementCampaignRecord,
+  type EngagementUserListItem,
+  type EngagementUserProfile,
+  type SmartSegmentResult,
+  type AdminRecommendation,
+  scheduleEngagementCampaign,
+  testSendEngagementCampaign,
   updateAdminLandingUserStatus,
   updateAdminTelegramApplication,
   updateAdminDish,
   updateAdminSettings,
   updateAdminDinner,
+  updateEngagementCampaign,
 } from "../../admin/api";
 import {
   AdminAuditLog as AdminAuditLogCard,
@@ -46,7 +76,10 @@ import {
 } from "./AdminUI";
 import "./admin.css";
 
-type AdminSection = "overview" | "guests" | "bookings" | "dinners" | "revenue" | "analytics" | "telegram" | "menu" | "operations" | "settings" | "audit";
+type AdminSection = "overview" | "guests" | "bookings" | "dinners" | "revenue" | "analytics" | "telegram" | "engagement" | "menu" | "operations" | "settings" | "audit";
+type EngagementTab = "analytics" | "users" | "campaigns" | "segments" | "debug";
+type EngagementProfileTab = "overview" | "journey" | "activity" | "referrals" | "revenue" | "notes" | "campaigns" | "events";
+type EngagementUsersSource = "telegram" | "landing";
 type PackageBar = { label: string; value: number; height: number };
 type BookingsSource = "landing" | "telegram";
 type MetricItem = {
@@ -73,6 +106,33 @@ type SingleTrendBar = {
 type SparklineGeometry = {
   linePath: string;
   areaPath: string;
+};
+type AnalyticsTooltipState = {
+  left: number;
+  top: number;
+  title: string;
+  value: string;
+};
+type EngagementHeatmapCell = {
+  key: string;
+  dateKey: string;
+  shortLabel: string;
+  fullLabel: string;
+  count: number;
+  intensity: number;
+};
+type EngagementHeatmapWeek = {
+  key: string;
+  cells: EngagementHeatmapCell[];
+};
+type EngagementJourneyStageSummary = {
+  key: string;
+  label: string;
+  completed: boolean;
+  occurredAt?: string;
+  delayLabel: string;
+  detail: string;
+  inferred?: boolean;
 };
 
 type AuditPayload = Record<string, unknown>;
@@ -262,6 +322,57 @@ type DishFormState = {
   price: string;
 };
 
+type EngagementFilterState = {
+  startDate: string;
+  endDate: string;
+  source: "all" | "landing" | "telegram";
+  dinnerId: string;
+  package: string;
+};
+type CampaignStatusFilter = "all" | "draft" | "scheduled" | "sending" | "completed" | "cancelled";
+type CampaignObjective = "awareness" | "engagement" | "conversion" | "retention";
+type CampaignComposerTab = "content" | "audience" | "schedule" | "preview";
+type CampaignComposerState = {
+  id?: number;
+  title: string;
+  description: string;
+  objective: CampaignObjective;
+  status: "draft" | "scheduled";
+  messageType: EngagementCampaignPayload["messageType"];
+  audienceType: string;
+  dinnerId: string;
+  packageValue: string;
+  selectedUsers: string;
+  language: string;
+  search: string;
+  termsAccepted: "all" | "yes" | "no";
+  includeBlocked: boolean;
+  text: string;
+  caption: string;
+  parseMode: string;
+  mediaKind: "url" | "file_id" | "data_url";
+  mediaValue: string;
+  mediaFileName: string;
+  pollQuestion: string;
+  pollOptions: string;
+  allowsMultiple: boolean;
+  isAnonymous: boolean;
+  correctOptionIndex: string;
+  pollExplanation: string;
+  buttons: Array<{
+    id: string;
+    label: string;
+    kind: "callback" | "link" | "cta";
+    url: string;
+    action: string;
+    dinnerId: string;
+  }>;
+  scheduledFor: string;
+  rateLimitPerMinute: string;
+  maxRetries: string;
+  confirmBulkSend: boolean;
+};
+
 const sectionLabels: Record<AdminSection, string> = {
   overview: "Overview",
   guests: "Guests",
@@ -270,6 +381,7 @@ const sectionLabels: Record<AdminSection, string> = {
   revenue: "Revenue",
   analytics: "Analytics",
   telegram: "Telegram",
+  engagement: "Engagement",
   menu: "Menu",
   operations: "Operations",
   settings: "Settings",
@@ -284,6 +396,7 @@ const sectionHints: Record<AdminSection, string> = {
   revenue: "Paid performance, ticket economics, package revenue, and dinner yield.",
   analytics: "Application, package selection, capacity, and behavioral insights across channels.",
   telegram: "Telegram service health, users, and revenue activity.",
+  engagement: "Activity tracking foundation for lifecycle analytics, audience intelligence, and future campaign workflows.",
   menu: "Custom package and menu catalog used by Telegram operations.",
   operations: "Runtime controls and operational switches for the admin control room.",
   settings: "Infrastructure-facing runtime details and environment configuration.",
@@ -298,6 +411,7 @@ const sectionEyebrows: Record<AdminSection, string> = {
   revenue: "Commercial",
   analytics: "Performance",
   telegram: "Concierge Channel",
+  engagement: "Lifecycle Intelligence",
   menu: "Custom Menu",
   operations: "Operations",
   settings: "Configuration",
@@ -320,6 +434,38 @@ const emptyDishForm: DishFormState = {
   nameRus: "",
   nameArm: "",
   price: "",
+};
+const emptyCampaignComposerState: CampaignComposerState = {
+  title: "",
+  description: "",
+  objective: "engagement",
+  status: "draft",
+  messageType: "text",
+  audienceType: "all_users",
+  dinnerId: "all",
+  packageValue: "all",
+  selectedUsers: "",
+  language: "",
+  search: "",
+  termsAccepted: "all",
+  includeBlocked: false,
+  text: "",
+  caption: "",
+  parseMode: "HTML",
+  mediaKind: "url",
+  mediaValue: "",
+  mediaFileName: "",
+  pollQuestion: "",
+  pollOptions: "Option 1\nOption 2",
+  allowsMultiple: false,
+  isAnonymous: false,
+  correctOptionIndex: "",
+  pollExplanation: "",
+  buttons: [],
+  scheduledFor: "",
+  rateLimitPerMinute: "60",
+  maxRetries: "3",
+  confirmBulkSend: true,
 };
 const USERS_PAGE_SIZE = 30;
 const auditEntityTypeOptions = [
@@ -344,6 +490,254 @@ const auditReasonStateOptions = [
   { value: "with_reason", label: "With reason" },
   { value: "without_reason", label: "No reason" },
 ] as const;
+const engagementSourceOptions = [
+  { value: "all", label: "Telegram + Landing" },
+  { value: "telegram", label: "Telegram" },
+  { value: "landing", label: "Landing" },
+] as const;
+const engagementUsersSourceOptions: Array<{ value: EngagementUsersSource; label: string }> = [
+  { value: "telegram", label: "Telegram Users" },
+  { value: "landing", label: "Landing Users" },
+] as const;
+const engagementTabOptions: Array<{ value: EngagementTab; label: string; description: string }> = [
+  { value: "analytics", label: "Analytics", description: "Event model and measurement readiness" },
+  { value: "users", label: "Users", description: "Identity stitching and session tracking" },
+  { value: "campaigns", label: "Campaigns", description: "Future audience and activation workflows" },
+  { value: "segments", label: "Segments & BI", description: "Smart audience segments and actionable recommendations" },
+  { value: "debug", label: "Debug", description: "Analytics data quality report and widget-to-event mapping" },
+] as const;
+const engagementFieldSx = {
+  minWidth: 170,
+  "& .MuiInputBase-root": {
+    minHeight: 46,
+    color: "#f5f1e8",
+    background: "rgba(255, 255, 255, 0.03)",
+    borderRadius: "14px",
+  },
+  "& .MuiInputLabel-root": {
+    color: "#a6afa8",
+  },
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(212, 175, 55, 0.24)",
+  },
+  "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(212, 175, 55, 0.42)",
+  },
+  "& .MuiSvgIcon-root": {
+    color: "#f5f1e8",
+  },
+  "& .MuiSelect-select": {
+    whiteSpace: "nowrap",
+  },
+};
+
+function formatDateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildDefaultEngagementFilters(): EngagementFilterState {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 29);
+  return {
+    startDate: formatDateInputValue(startDate),
+    endDate: formatDateInputValue(endDate),
+    source: "all",
+    dinnerId: "all",
+    package: "all",
+  };
+}
+
+function parseDateInputValue(value: string): Date {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function getPreviousEngagementRange(startDateValue: string, endDateValue: string) {
+  const currentStart = parseDateInputValue(startDateValue);
+  const currentEnd = parseDateInputValue(endDateValue);
+  const inclusiveDays = Math.max(1, Math.round((currentEnd.getTime() - currentStart.getTime()) / 86400000) + 1);
+  const previousEnd = new Date(currentStart);
+  previousEnd.setDate(previousEnd.getDate() - 1);
+  const previousStart = new Date(previousEnd);
+  previousStart.setDate(previousStart.getDate() - (inclusiveDays - 1));
+  return {
+    startDate: formatDateInputValue(previousStart),
+    endDate: formatDateInputValue(previousEnd),
+  };
+}
+
+function buildCampaignButtonState() {
+  return {
+    id: `btn_${Math.random().toString(36).slice(2, 8)}`,
+    label: "",
+    kind: "callback" as const,
+    url: "",
+    action: "menu",
+    dinnerId: "",
+  };
+}
+
+function humanizeLabel(value: string): string {
+  const normalized = value.trim().replace(/[_-]+/g, " ");
+  if (!normalized) {
+    return "—";
+  }
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getCampaignResponseTone(correct: boolean, messageType: string): "default" | "gold" | "emerald" | "danger" {
+  if (messageType === "quiz") {
+    return correct ? "emerald" : "danger";
+  }
+  return "gold";
+}
+
+function getRecommendationTone(priority: string): "default" | "gold" | "emerald" | "danger" {
+  switch (priority) {
+    case "high":
+      return "danger";
+    case "medium":
+      return "gold";
+    default:
+      return "default";
+  }
+}
+
+function getSegmentCountTone(count: number): "default" | "gold" | "emerald" | "danger" {
+  if (count >= 10) {
+    return "danger";
+  }
+  if (count > 0) {
+    return "gold";
+  }
+  return "default";
+}
+
+function buildCampaignPayload(form: CampaignComposerState): EngagementCampaignPayload {
+  const message: EngagementCampaignMessagePayload = {
+    parseMode: form.parseMode || "HTML",
+  };
+
+  if (form.text.trim()) {
+    message.text = form.text.trim();
+  }
+  if (form.caption.trim()) {
+    message.caption = form.caption.trim();
+  }
+  if (form.mediaValue.trim()) {
+    message.media = {
+      kind: form.mediaKind,
+      value: form.mediaValue.trim(),
+      fileName: form.mediaFileName.trim() || undefined,
+    };
+  }
+  const buttons = form.buttons
+    .map((item) => ({
+      id: item.id,
+      label: item.label.trim(),
+      kind: item.kind,
+      url: item.url.trim() || undefined,
+      action: item.action.trim() || undefined,
+      dinnerId: item.dinnerId && item.dinnerId !== "all" ? Number(item.dinnerId) : undefined,
+    }))
+    .filter((item) => item.label);
+  if (buttons.length > 0) {
+    message.buttons = buttons;
+  }
+  if (form.messageType === "rating") {
+    message.poll = {
+      question: form.pollQuestion.trim() || "How would you rate your experience?",
+      options: [],
+      allowsMultiple: false,
+      isAnonymous: false,
+    };
+  } else if (form.messageType === "poll" || form.messageType === "quiz") {
+    const options = form.pollOptions
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    message.poll = {
+      question: form.pollQuestion.trim(),
+      options,
+      allowsMultiple: form.allowsMultiple,
+      isAnonymous: form.isAnonymous,
+      correctOptionIndex: form.correctOptionIndex.trim() ? Number(form.correctOptionIndex) : undefined,
+      explanation: form.pollExplanation.trim() || undefined,
+    };
+  }
+
+  return {
+    title: form.title.trim(),
+    description: form.description.trim(),
+    status: form.status,
+    messageType: form.messageType,
+    audience: {
+      audienceType: form.audienceType,
+      dinnerIds: form.dinnerId !== "all" ? [Number(form.dinnerId)] : undefined,
+      packages: form.packageValue !== "all" ? [form.packageValue] : undefined,
+      selectedUsers: form.selectedUsers
+        .split(/[\n,\s]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      language: form.language.trim() || undefined,
+      search: form.search.trim() || undefined,
+      termsAccepted: form.termsAccepted === "all" ? undefined : form.termsAccepted === "yes",
+      includeBlocked: form.includeBlocked,
+    },
+    message,
+    scheduledFor: form.scheduledFor ? new Date(form.scheduledFor).toISOString() : undefined,
+    rateLimitPerMinute: Number(form.rateLimitPerMinute) || 60,
+    maxRetries: Number(form.maxRetries) || 3,
+    confirmBulkSend: form.confirmBulkSend,
+  };
+}
+
+function buildCampaignComposerStateFromRecord(record: EngagementCampaignRecord): CampaignComposerState {
+  return {
+    id: record.id,
+    title: record.title,
+    description: record.description || "",
+    objective: "engagement",
+    status: record.status === "scheduled" ? "scheduled" : "draft",
+    messageType: record.messageType as CampaignComposerState["messageType"],
+    audienceType: record.audience.audienceType || "all_users",
+    dinnerId: record.audience.dinnerIds?.[0] != null ? String(record.audience.dinnerIds[0]) : "all",
+    packageValue: record.audience.packages?.[0] ?? "all",
+    selectedUsers: (record.audience.selectedUsers ?? []).join("\n"),
+    language: record.audience.language ?? "",
+    search: record.audience.search ?? "",
+    termsAccepted: record.audience.termsAccepted == null ? "all" : record.audience.termsAccepted ? "yes" : "no",
+    includeBlocked: Boolean(record.audience.includeBlocked),
+    text: record.message.text ?? "",
+    caption: record.message.caption ?? "",
+    parseMode: record.message.parseMode ?? "HTML",
+    mediaKind: (record.message.media?.kind as CampaignComposerState["mediaKind"]) ?? "url",
+    mediaValue: record.message.media?.value ?? "",
+    mediaFileName: record.message.media?.fileName ?? "",
+    pollQuestion: record.message.poll?.question ?? "",
+    pollOptions: record.message.poll?.options?.join("\n") ?? "Option 1\nOption 2",
+    allowsMultiple: Boolean(record.message.poll?.allowsMultiple),
+    isAnonymous: record.message.poll?.isAnonymous ?? false,
+    correctOptionIndex: record.message.poll?.correctOptionIndex != null ? String(record.message.poll.correctOptionIndex) : "",
+    pollExplanation: record.message.poll?.explanation ?? "",
+    buttons: (record.message.buttons ?? []).map((item) => ({
+      id: item.id,
+      label: item.label,
+      kind: item.kind,
+      url: item.url ?? "",
+      action: item.action ?? "menu",
+      dinnerId: item.dinnerId != null ? String(item.dinnerId) : "",
+    })),
+    scheduledFor: record.scheduledFor ? record.scheduledFor.slice(0, 16) : "",
+    rateLimitPerMinute: String(record.rateLimitPerMinute || 60),
+    maxRetries: String(record.maxRetries || 3),
+    confirmBulkSend: true,
+  };
+}
 
 function isAdminSection(value: string): value is AdminSection {
   return [
@@ -354,6 +748,7 @@ function isAdminSection(value: string): value is AdminSection {
     "revenue",
     "analytics",
     "telegram",
+    "engagement",
     "menu",
     "operations",
     "settings",
@@ -364,6 +759,33 @@ function isAdminSection(value: string): value is AdminSection {
 function getSectionFromSearch(search: string): AdminSection {
   const value = new URLSearchParams(search).get("section")?.trim().toLowerCase() ?? "";
   return isAdminSection(value) ? value : "overview";
+}
+
+function normalizeEngagementUsersSource(value?: string | null): EngagementUsersSource {
+  return (value ?? "").trim().toLowerCase() === "landing" ? "landing" : "telegram";
+}
+
+function getEngagementTabFromSearch(search: string): EngagementTab {
+  const value = new URLSearchParams(search).get("engagementTab")?.trim().toLowerCase() ?? "";
+  return (["analytics", "users", "campaigns", "segments", "debug"] as const).includes(value as EngagementTab)
+    ? (value as EngagementTab)
+    : "analytics";
+}
+
+function getEngagementProfileTabFromSearch(search: string): EngagementProfileTab {
+  const value = new URLSearchParams(search).get("tab")?.trim().toLowerCase() ?? "";
+  return ([
+    "overview",
+    "journey",
+    "activity",
+    "referrals",
+    "revenue",
+    "notes",
+    "campaigns",
+    "events",
+  ] as const).includes(value as EngagementProfileTab)
+    ? (value as EngagementProfileTab)
+    : "overview";
 }
 
 const metricHints: Record<string, string> = {
@@ -461,6 +883,18 @@ const telegramBookingActionOptions: BookingActionOption[] = [
   { value: "no_show", label: "No-show" },
 ];
 
+const telegramBookingAllowedTransitions: Record<AdminTelegramApplication["status"], AdminTelegramApplication["status"][]> = {
+  draft: ["draft", "pending_application", "cancelled"],
+  pending_application: ["pending_application", "contacted", "approved", "rejected", "cancelled"],
+  contacted: ["contacted", "approved", "rejected", "cancelled"],
+  approved: ["approved", "waiting_payment", "cancelled"],
+  waiting_payment: ["waiting_payment", "paid", "cancelled"],
+  paid: ["paid", "no_show", "cancelled"],
+  rejected: ["rejected"],
+  cancelled: ["cancelled"],
+  no_show: ["no_show"],
+};
+
 function buildPackageBars(input: {
   silver: number;
   gold: number;
@@ -509,6 +943,73 @@ function formatCurrency(value?: number | null) {
     currency: "AMD",
     maximumFractionDigits: 0,
   }).format(value ?? 0);
+}
+
+function parseDateValue(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDateOnlyLabel(value?: string | null) {
+  const parsed = parseDateValue(value);
+  if (!parsed) {
+    return "—";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(parsed);
+}
+
+function formatAccountAgeLabel(value?: string | null) {
+  const parsed = parseDateValue(value);
+  if (!parsed) {
+    return "—";
+  }
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - parsed.getTime());
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 1) {
+    return "Today";
+  }
+  if (diffDays < 30) {
+    return `${diffDays} day${diffDays === 1 ? "" : "s"}`;
+  }
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) {
+    return `${diffMonths} month${diffMonths === 1 ? "" : "s"}`;
+  }
+  const diffYears = Math.floor(diffMonths / 12);
+  const remMonths = diffMonths % 12;
+  if (remMonths === 0) {
+    return `${diffYears} year${diffYears === 1 ? "" : "s"}`;
+  }
+  return `${diffYears}y ${remMonths}m`;
+}
+
+function formatStageDelayLabel(previous?: string, current?: string) {
+  const prevDate = parseDateValue(previous);
+  const currentDate = parseDateValue(current);
+  if (!prevDate || !currentDate) {
+    return "Awaiting signal";
+  }
+  const diffMs = currentDate.getTime() - prevDate.getTime();
+  if (diffMs <= 0) {
+    return "Same step window";
+  }
+  const diffMinutes = Math.round(diffMs / (1000 * 60));
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min later`;
+  }
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} hr${diffHours === 1 ? "" : "s"} later`;
+  }
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? "" : "s"} later`;
 }
 
 function formatCompactNumber(value?: number | null) {
@@ -984,7 +1485,23 @@ function getTelegramStatusSummary(status?: string): BookingStatusSummaryBadge[] 
   }
 }
 
-function getTelegramBookingActionSections(options: BookingActionOption[]): BookingActionSection[] {
+function getAllowedTelegramBookingActions(
+  currentStatus?: AdminTelegramApplication["status"]
+): BookingActionOption[] {
+  const normalizedStatus = (currentStatus || "pending_application") as AdminTelegramApplication["status"];
+  const allowedStatuses = telegramBookingAllowedTransitions[normalizedStatus] ?? [normalizedStatus];
+  const lookup = new Map(telegramBookingActionOptions.map((option) => [option.value, option]));
+  return allowedStatuses
+    .map((value) => lookup.get(value))
+    .filter((option): option is BookingActionOption => Boolean(option));
+}
+
+function getTelegramBookingActionSections(
+  options: BookingActionOption[],
+  currentStatus?: AdminTelegramApplication["status"]
+): BookingActionSection[] {
+  const allowedOptions = getAllowedTelegramBookingActions(currentStatus);
+  const allowedValues = new Set(allowedOptions.map((option) => option.value));
   const lookup = new Map(options.map((option) => [option.value, option]));
   const sections: BookingActionSection[] = [
     {
@@ -992,29 +1509,33 @@ function getTelegramBookingActionSections(options: BookingActionOption[]): Booki
       label: "Application",
       options: ["pending_application", "contacted", "approved", "rejected"]
         .map((value) => lookup.get(value))
-        .filter((option): option is BookingActionOption => Boolean(option)),
+        .filter((option): option is BookingActionOption => Boolean(option))
+        .filter((option) => allowedValues.has(option.value)),
     },
     {
       key: "payment",
       label: "Payment",
       options: ["waiting_payment", "paid", "cancelled"]
         .map((value) => lookup.get(value))
-        .filter((option): option is BookingActionOption => Boolean(option)),
+        .filter((option): option is BookingActionOption => Boolean(option))
+        .filter((option) => allowedValues.has(option.value)),
     },
     {
       key: "attendance",
       label: "Attendance",
       options: ["no_show"]
         .map((value) => lookup.get(value))
-        .filter((option): option is BookingActionOption => Boolean(option)),
+        .filter((option): option is BookingActionOption => Boolean(option))
+        .filter((option) => allowedValues.has(option.value)),
     },
   ];
   return sections.filter((section) => section.options.length > 0);
 }
 
-function getTelegramBookingDangerOptions(options: BookingActionOption[]) {
+function getTelegramBookingDangerOptions(options: BookingActionOption[], currentStatus?: AdminTelegramApplication["status"]) {
+  const allowedValues = new Set(getAllowedTelegramBookingActions(currentStatus).map((option) => option.value));
   const dangerValues = new Set(["rejected", "cancelled", "no_show"]);
-  return options.filter((option) => dangerValues.has(option.value));
+  return options.filter((option) => dangerValues.has(option.value) && allowedValues.has(option.value));
 }
 
 function formatNullableCount(value: number | null) {
@@ -1027,6 +1548,385 @@ function formatNullableCount(value: number | null) {
 function formatTelegramUsername(value?: string) {
   const normalized = (value ?? "").trim();
   return normalized ? `@${normalized}` : "—";
+}
+
+function formatEngagementUserStatus(source: EngagementUsersSource, status?: string) {
+  if (source === "landing") {
+    return formatLandingAdminStatus(status);
+  }
+  if ((status ?? "").trim().toLowerCase() === "blocked") {
+    return "Blocked";
+  }
+  return formatApplicationStatus(status);
+}
+
+function getEngagementScoreTone(score: number): "default" | "gold" | "emerald" | "danger" {
+  if (score >= 75) {
+    return "emerald";
+  }
+  if (score >= 45) {
+    return "gold";
+  }
+  if (score >= 20) {
+    return "default";
+  }
+  return "danger";
+}
+
+function getEngagementHealthCardTone(score: number) {
+  if (score >= 75) {
+    return "positive";
+  }
+  if (score >= 45) {
+    return "opportunity";
+  }
+  return "risk";
+}
+
+function getEngagementRevenueCardTone(profile: EngagementUserProfile) {
+  if ((profile.revenue.totalPayments || 0) > 0 || profile.revenue.paidBookings > 0) {
+    return "positive";
+  }
+  if (profile.overview.applications > 0 || profile.behavioral.applicationsSent > 0) {
+    return "warning";
+  }
+  return "info";
+}
+
+function getEngagementAttendanceCardTone(profile: EngagementUserProfile) {
+  if (profile.attendance.noShowCount > 0 && profile.attendance.attendanceCount === 0) {
+    return "risk";
+  }
+  if (profile.attendance.attendanceCount > 0 && profile.attendance.noShowCount === 0) {
+    return "positive";
+  }
+  if (profile.attendance.attendanceCount > 0 || profile.attendance.noShowCount > 0) {
+    return "warning";
+  }
+  return "info";
+}
+
+function getEngagementReferralCardTone(profile: EngagementUserProfile) {
+  if (profile.referral.referralSuccesses > 0 || profile.referral.invitedUsers > 0) {
+    return "opportunity";
+  }
+  return "info";
+}
+
+function getEngagementJourneyCardTone(profile: EngagementUserProfile) {
+  if (profile.attendance.attendanceCount > 0 || profile.revenue.paidBookings > 0) {
+    return "positive";
+  }
+  if (["cancelled", "blocked", "rejected", "no_show"].includes((profile.overview.status || "").toLowerCase())) {
+    return "risk";
+  }
+  if (profile.overview.applications > 0) {
+    return "warning";
+  }
+  return "info";
+}
+
+function getEngagementCampaignCardTone(profile: EngagementUserProfile) {
+  return profile.campaignResponses.length > 0 ? "special" : "info";
+}
+
+function getEngagementCardToneClass(tone: "positive" | "opportunity" | "warning" | "risk" | "info" | "special") {
+  return `admin-engagement-card--${tone}`;
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, value));
+}
+
+function buildEngagementScoreBreakdown(profile: EngagementUserProfile) {
+  const totalPayments = profile.revenue.totalPayments || profile.overview.payments || 0;
+  const attended = profile.attendance.attendanceCount || 0;
+  const noShows = profile.attendance.noShowCount || 0;
+  const attendanceBase = attended + noShows;
+  const attendanceScore = attendanceBase > 0 ? clampPercent((attended / attendanceBase) * 100) : 0;
+  const spendingScore = totalPayments > 0 ? clampPercent((totalPayments / 250000) * 100) : 0;
+  const engagementScore = clampPercent(profile.overview.engagementScore);
+  const loyaltyScore = clampPercent(profile.overview.loyaltyScore || profile.loyaltyScore);
+  const referralScore = clampPercent(profile.overview.referralScore || profile.referralScore);
+  const healthScore = clampPercent(profile.overview.healthScore);
+
+  return {
+    healthScore,
+    items: [
+      { key: "engagement", label: "Engagement", value: engagementScore, hint: "Based on meaningful actions and recency." },
+      { key: "loyalty", label: "Loyalty", value: loyaltyScore, hint: "Reflects repeat bookings and ongoing relationship depth." },
+      { key: "referral", label: "Referral", value: referralScore, hint: "How strongly this guest drives new guests." },
+      { key: "attendance", label: "Attendance", value: attendanceScore, hint: "Attendance reliability versus no-shows." },
+      { key: "spending", label: "Spending", value: spendingScore, hint: "Commercial value normalized from tracked revenue." },
+    ],
+  };
+}
+
+function buildEngagementHeatmap(timeline: EngagementUserProfile["timeline"], windowDays = 56) {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  start.setDate(start.getDate() - (windowDays - 1));
+
+  const counts = new Map<string, number>();
+  timeline.forEach((item) => {
+    const parsed = parseDateValue(item.occurredAt);
+    if (!parsed) {
+      return;
+    }
+    parsed.setHours(0, 0, 0, 0);
+    if (parsed < start || parsed > end) {
+      return;
+    }
+    const key = parsed.toISOString().slice(0, 10);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const maxCount = Math.max(...Array.from(counts.values()), 1);
+  const weeks: EngagementHeatmapWeek[] = [];
+
+  for (let weekIndex = 0; weekIndex < Math.ceil(windowDays / 7); weekIndex += 1) {
+    const cells: EngagementHeatmapCell[] = [];
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      const offset = weekIndex * 7 + dayIndex;
+      const current = new Date(start);
+      current.setDate(start.getDate() + offset);
+      const key = current.toISOString().slice(0, 10);
+      const count = counts.get(key) ?? 0;
+      const intensity = count <= 0 ? 0 : Math.max(1, Math.ceil((count / maxCount) * 4));
+      cells.push({
+        key,
+        dateKey: key,
+        shortLabel: weekdayLabels[current.getDay()],
+        fullLabel: `${formatDateOnlyLabel(current.toISOString())} · ${count} event${count === 1 ? "" : "s"}`,
+        count,
+        intensity,
+      });
+    }
+    weeks.push({ key: `week-${weekIndex}`, cells });
+  }
+
+  return weeks;
+}
+
+function buildEngagementHourBars(timeline: EngagementUserProfile["timeline"]) {
+  const counts = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+  timeline.forEach((item) => {
+    const parsed = parseDateValue(item.occurredAt);
+    if (!parsed) {
+      return;
+    }
+    counts[parsed.getHours()].count += 1;
+  });
+  const activeHours = counts.filter((item) => item.count > 0);
+  const max = Math.max(...counts.map((item) => item.count), 1);
+  return {
+    bestHour: activeHours.slice().sort((a, b) => b.count - a.count)[0] ?? null,
+    bars: activeHours
+      .slice()
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+      .map((item) => ({
+        key: `${item.hour}`,
+        label: `${item.hour.toString().padStart(2, "0")}:00`,
+        value: item.count,
+        percent: clampPercent((item.count / max) * 100),
+      })),
+  };
+}
+
+function buildEngagementJourneyStages(profile: EngagementUserProfile): EngagementJourneyStageSummary[] {
+  const attendanceCount = profile.attendance.attendanceCount || 0;
+  const paidBookings = profile.overview.paidBookings || 0;
+  const approved = profile.journey.some((item) => ["approved", "paid", "no_show", "completed"].includes((item.status || "").toLowerCase())) || (profile.overview.status || "").toLowerCase() === "approved";
+
+  const stageSignals = [
+    {
+      key: "viewed_dinner",
+      label: "Viewed Dinner",
+      completed: profile.behavioral.dinnerViews > 0,
+      occurredAt: profile.dinnerInterest.find((item) => item.lastViewAt)?.lastViewAt || profile.timeline.find((item) => /dinner|view/i.test(`${item.title} ${item.description}`))?.occurredAt,
+      detail: profile.behavioral.dinnerViews > 0 ? `${profile.behavioral.dinnerViews} dinner view${profile.behavioral.dinnerViews === 1 ? "" : "s"} tracked` : "No dinner views tracked yet",
+      inferred: false,
+    },
+    {
+      key: "selected_package",
+      label: "Selected Package",
+      completed: profile.behavioral.packageSelections > 0,
+      occurredAt: profile.timeline.find((item) => /package|selection|ticket buy/i.test(`${item.title} ${item.description}`))?.occurredAt,
+      detail: profile.behavioral.packageSelections > 0 ? `${profile.behavioral.packageSelections} package selections captured` : "No package intent captured yet",
+      inferred: false,
+    },
+    {
+      key: "started_application",
+      label: "Started Application",
+      completed: profile.behavioral.applicationStarts > 0 || profile.behavioral.applicationsSent > 0,
+      occurredAt: profile.timeline.find((item) => /start|apply|application/i.test(`${item.title} ${item.description}`))?.occurredAt,
+      detail: profile.behavioral.applicationStarts > 0
+        ? `${profile.behavioral.applicationStarts} application start${profile.behavioral.applicationStarts === 1 ? "" : "s"} tracked`
+        : profile.behavioral.applicationsSent > 0
+          ? "Inferred from submitted application activity"
+          : "No application start tracked yet",
+      inferred: profile.behavioral.applicationStarts <= 0 && profile.behavioral.applicationsSent > 0,
+    },
+    {
+      key: "submitted_application",
+      label: "Submitted Application",
+      completed: profile.behavioral.applicationsSent > 0 || profile.overview.applications > 0,
+      occurredAt: profile.journey[0]?.occurredAt || profile.timeline.find((item) => /submitted|application|booking/i.test(`${item.title} ${item.description}`))?.occurredAt,
+      detail: `${profile.overview.applications} submitted application${profile.overview.applications === 1 ? "" : "s"}`,
+      inferred: false,
+    },
+    {
+      key: "approved",
+      label: "Approved",
+      completed: approved,
+      occurredAt: profile.journey.find((item) => ["approved", "paid", "no_show", "completed"].includes((item.status || "").toLowerCase()))?.occurredAt,
+      detail: approved ? "Application reached approved or later status" : "No approval recorded yet",
+      inferred: false,
+    },
+    {
+      key: "paid",
+      label: "Paid",
+      completed: paidBookings > 0 || (profile.revenue.totalPayments || 0) > 0,
+      occurredAt: profile.journey.find((item) => ["paid", "no_show", "completed"].includes((item.status || "").toLowerCase()))?.occurredAt || profile.revenue.latestPaymentAt,
+      detail: paidBookings > 0 ? `${paidBookings} paid booking${paidBookings === 1 ? "" : "s"}` : "No completed payment tracked yet",
+      inferred: false,
+    },
+    {
+      key: "attended",
+      label: "Attended",
+      completed: attendanceCount > 0,
+      occurredAt: profile.attendance.lastAttendance,
+      detail: attendanceCount > 0 ? `${attendanceCount} attended dinner${attendanceCount === 1 ? "" : "s"}` : "No attendance recorded yet",
+      inferred: false,
+    },
+  ];
+
+  return stageSignals.map((stage, index) => ({
+    ...stage,
+    delayLabel: index === 0 ? "Starting point" : formatStageDelayLabel(stageSignals[index - 1].occurredAt, stage.occurredAt),
+  }));
+}
+
+function groupEngagementTimelineItems(timeline: EngagementUserProfile["timeline"]) {
+  const grouped: Array<EngagementUserProfile["timeline"][number] & { itemCount: number }> = [];
+  timeline.forEach((item) => {
+    const parsed = parseDateValue(item.occurredAt);
+    const minuteKey = parsed ? `${parsed.getUTCFullYear()}-${parsed.getUTCMonth()}-${parsed.getUTCDate()}-${parsed.getUTCHours()}-${parsed.getUTCMinutes()}` : item.occurredAt;
+    const previous = grouped[grouped.length - 1];
+    if (
+      previous &&
+      previous.title === item.title &&
+      previous.description === item.description &&
+      parseDateValue(previous.occurredAt) &&
+      minuteKey === (() => {
+        const previousDate = parseDateValue(previous.occurredAt);
+        if (!previousDate) {
+          return previous.occurredAt;
+        }
+        return `${previousDate.getUTCFullYear()}-${previousDate.getUTCMonth()}-${previousDate.getUTCDate()}-${previousDate.getUTCHours()}-${previousDate.getUTCMinutes()}`;
+      })()
+    ) {
+      previous.itemCount += 1;
+      return;
+    }
+    grouped.push({ ...item, itemCount: 1 });
+  });
+  return grouped;
+}
+
+function buildTimelineFrequency(
+  timeline: EngagementUserProfile["timeline"],
+  matcher: (item: EngagementUserProfile["timeline"][number]) => string | null,
+  limit = 8
+) {
+  const counts = new Map<string, number>();
+  timeline.forEach((item) => {
+    const label = matcher(item);
+    if (!label) {
+      return;
+    }
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  const rows = Array.from(counts.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+  const max = Math.max(...rows.map((item) => item.value), 1);
+  return rows.map((item) => ({
+    ...item,
+    percent: clampPercent((item.value / max) * 100),
+  }));
+}
+
+function buildDailyActivityRows(timeline: EngagementUserProfile["timeline"], days = 14) {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const counts = new Map<string, number>();
+  timeline.forEach((item) => {
+    const parsed = parseDateValue(item.occurredAt);
+    if (!parsed) {
+      return;
+    }
+    parsed.setHours(0, 0, 0, 0);
+    const key = parsed.toISOString().slice(0, 10);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  const rows: Array<{ key: string; label: string; value: number; percent: number }> = [];
+  for (let index = days - 1; index >= 0; index -= 1) {
+    const current = new Date(end);
+    current.setDate(end.getDate() - index);
+    const key = current.toISOString().slice(0, 10);
+    rows.push({
+      key,
+      label: formatDateOnlyLabel(key),
+      value: counts.get(key) ?? 0,
+      percent: 0,
+    });
+  }
+  const max = Math.max(...rows.map((item) => item.value), 1);
+  return rows.map((item) => ({
+    ...item,
+    percent: clampPercent((item.value / max) * 100),
+  }));
+}
+
+function getBookingToneByStatus(status?: string): "default" | "gold" | "emerald" | "danger" {
+  switch ((status ?? "").trim().toLowerCase()) {
+    case "approved":
+    case "paid":
+    case "completed":
+      return "emerald";
+    case "waiting_payment":
+    case "contacted":
+    case "review":
+      return "gold";
+    case "rejected":
+    case "cancelled":
+    case "no_show":
+    case "blocked":
+      return "danger";
+    default:
+      return "default";
+  }
+}
+
+function getTimelineToneBadge(tone?: string): "default" | "gold" | "emerald" | "danger" {
+  switch ((tone ?? "").trim().toLowerCase()) {
+    case "gold":
+      return "gold";
+    case "emerald":
+      return "emerald";
+    case "danger":
+      return "danger";
+    default:
+      return "default";
+  }
 }
 
 function matchesLandingBookingFilter(item: AdminLandingUser, filter: string) {
@@ -1618,14 +2518,217 @@ function buildSparkline(values: number[], width = 560, height = 180, padding = 1
   return { linePath, areaPath };
 }
 
+function formatChartNumber(value: number) {
+  return value >= 1000 ? value.toLocaleString() : `${value}`;
+}
+
+function buildLineGeometry(values: number[], width: number, height: number, paddingX = 18, paddingY = 18) {
+  if (values.length === 0) {
+    return { points: [] as Array<{ x: number; y: number }>, linePath: "", areaPath: "", maxValue: 1 };
+  }
+
+  const innerWidth = Math.max(1, width - paddingX * 2);
+  const innerHeight = Math.max(1, height - paddingY * 2);
+  const maxValue = Math.max(1, ...values);
+  const stepX = values.length > 1 ? innerWidth / (values.length - 1) : 0;
+  const points = values.map((value, index) => ({
+    x: paddingX + stepX * index,
+    y: paddingY + innerHeight - (value / maxValue) * innerHeight,
+  }));
+  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const baselineY = paddingY + innerHeight;
+  const areaPath = `${linePath} L ${points[points.length - 1]?.x ?? paddingX} ${baselineY} L ${points[0]?.x ?? paddingX} ${baselineY} Z`;
+  return { points, linePath, areaPath, maxValue };
+}
+
+function AnalyticsTooltip({
+  left,
+  top,
+  title,
+  value,
+}: {
+  left: number;
+  top: number;
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className="admin-custom-chart__tooltip" style={{ left, top }}>
+      <strong>{title}</strong>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function getChartTooltipPosition(
+  event: React.MouseEvent<Element>,
+  container: HTMLElement | null,
+  title: string,
+  value: string
+): AnalyticsTooltipState {
+  if (!container) {
+    return { left: 12, top: 12, title, value };
+  }
+
+  const rect = container.getBoundingClientRect();
+  const tooltipWidth = Math.min(220, Math.max(140, rect.width * 0.42));
+  const tooltipHeight = 64;
+  const padding = 10;
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+
+  let left = localX + 14;
+  let top = localY - tooltipHeight - 10;
+
+  if (left + tooltipWidth > rect.width - padding) {
+    left = rect.width - tooltipWidth - padding;
+  }
+  if (left < padding) {
+    left = padding;
+  }
+  if (top < padding) {
+    top = Math.min(rect.height - tooltipHeight - padding, localY + 14);
+  }
+  if (top + tooltipHeight > rect.height - padding) {
+    top = rect.height - tooltipHeight - padding;
+  }
+
+  return { left, top, title, value };
+}
+
+function CustomMiniSparkline({
+  values,
+  color,
+}: {
+  values: number[];
+  color: string;
+}) {
+  const safeValues = values.length > 1 ? values : [0, ...values];
+  const { linePath, areaPath } = buildLineGeometry(safeValues, 140, 44, 4, 6);
+  return (
+    <svg viewBox="0 0 140 44" className="admin-engagement-kpi__sparkline" aria-hidden="true" preserveAspectRatio="none">
+      <path d={areaPath} fill={`${color}20`} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CustomStackedSourceBar({
+  items,
+}: {
+  items: Array<{ key: string; label: string; value: number; color: string }>;
+}) {
+  const [hover, setHover] = useState<AnalyticsTooltipState | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div ref={containerRef} className="admin-custom-chart admin-custom-chart--stacked">
+      <div className="admin-custom-chart__stacked-bar">
+        {items.map((item) => {
+          const width = total > 0 ? (item.value / total) * 100 : 0;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className="admin-custom-chart__stacked-segment"
+              style={{ width: `${Math.max(width, width > 0 ? 12 : 0)}%`, background: item.color }}
+              onMouseMove={(event) =>
+                setHover(getChartTooltipPosition(event, containerRef.current, item.label, `${formatChartNumber(item.value)} users`))
+              }
+              onMouseLeave={() => setHover(null)}
+            >
+              <span>{width >= 16 ? `${Math.round(width)}%` : ""}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="admin-custom-chart__legend admin-custom-chart__legend--inline">
+        {items.map((item) => (
+          <div key={item.key} className="admin-custom-chart__legend-item">
+            <span className="admin-custom-chart__legend-dot" style={{ background: item.color }} />
+            <span>{item.label}</span>
+            <strong>{formatChartNumber(item.value)}</strong>
+          </div>
+        ))}
+      </div>
+      {hover ? <AnalyticsTooltip left={hover.left} top={hover.top} title={hover.title} value={hover.value} /> : null}
+    </div>
+  );
+}
+
+function CustomGroupedHistogram({
+  points,
+  firstLabel,
+  secondLabel,
+  firstColor,
+  secondColor,
+}: {
+  points: Array<{ key: string; label: string; firstValue: number; secondValue: number }>;
+  firstLabel: string;
+  secondLabel: string;
+  firstColor: string;
+  secondColor: string;
+}) {
+  const [hover, setHover] = useState<AnalyticsTooltipState | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const maxValue = Math.max(1, ...points.flatMap((item) => [item.firstValue, item.secondValue]));
+
+  return (
+    <div ref={containerRef} className="admin-custom-chart">
+      <div className="admin-custom-chart__legend admin-custom-chart__legend--inline">
+        <div className="admin-custom-chart__legend-item">
+          <span className="admin-custom-chart__legend-dot" style={{ background: firstColor }} />
+          <span>{firstLabel}</span>
+        </div>
+        <div className="admin-custom-chart__legend-item">
+          <span className="admin-custom-chart__legend-dot" style={{ background: secondColor }} />
+          <span>{secondLabel}</span>
+        </div>
+      </div>
+      <div className="admin-custom-chart__histogram">
+        {points.map((point) => (
+          <div key={point.key} className="admin-custom-chart__histogram-col">
+            <div className="admin-custom-chart__histogram-track">
+              <button
+                type="button"
+                className="admin-custom-chart__histogram-bar admin-custom-chart__histogram-bar--secondary"
+                style={{ height: `${(point.secondValue / maxValue) * 100}%`, background: secondColor }}
+                onMouseMove={(event) =>
+                  setHover(getChartTooltipPosition(event, containerRef.current, `${point.label} active users`, `${formatChartNumber(point.secondValue)} users`))
+                }
+                onMouseLeave={() => setHover(null)}
+              />
+              <button
+                type="button"
+                className="admin-custom-chart__histogram-bar admin-custom-chart__histogram-bar--primary"
+                style={{ height: `${(point.firstValue / maxValue) * 100}%`, background: firstColor }}
+                onMouseMove={(event) =>
+                  setHover(getChartTooltipPosition(event, containerRef.current, `${point.label} events`, `${formatChartNumber(point.firstValue)} events`))
+                }
+                onMouseLeave={() => setHover(null)}
+              />
+            </div>
+            <span className="admin-custom-chart__column-label" title={point.label}>{point.label}</span>
+          </div>
+        ))}
+      </div>
+      {hover ? <AnalyticsTooltip left={hover.left} top={hover.top} title={hover.title} value={hover.value} /> : null}
+    </div>
+  );
+}
+
 export default function AdminPanel() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { userId: routeUserId = "" } = useParams<{ userId?: string }>();
+  const isEngagementUserProfileRoute = location.pathname.startsWith("/users/");
+  const routeProfileSource = normalizeEngagementUsersSource(new URLSearchParams(location.search).get("source"));
   const [data, setData] = useState<AdminPanelResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [activeSection, setActiveSection] = useState<AdminSection>(() => getSectionFromSearch(location.search));
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => (location.pathname.startsWith("/users/") ? "engagement" : getSectionFromSearch(location.search)));
   const [searchQuery, setSearchQuery] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
 
@@ -1652,6 +2755,61 @@ export default function AdminPanel() {
   const [settingsError, setSettingsError] = useState("");
   const [usersSource, setUsersSource] = useState<UsersSource>("landing");
   const [bookingsSource, setBookingsSource] = useState<BookingsSource>("telegram");
+  const [engagementTab, setEngagementTab] = useState<EngagementTab>(() => getEngagementTabFromSearch(location.search));
+  const [engagementProfileTab, setEngagementProfileTab] = useState<EngagementProfileTab>(() => getEngagementProfileTabFromSearch(location.search));
+  const [engagementFilters, setEngagementFilters] = useState<EngagementFilterState>(() => buildDefaultEngagementFilters());
+  const [engagementAnalytics, setEngagementAnalytics] = useState<EngagementAnalytics | null>(null);
+  const [engagementPreviousAnalytics, setEngagementPreviousAnalytics] = useState<EngagementAnalytics | null>(null);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [engagementError, setEngagementError] = useState("");
+  const [engagementUsersSource, setEngagementUsersSource] = useState<EngagementUsersSource>(() => normalizeEngagementUsersSource(new URLSearchParams(location.search).get("engagementSource")));
+  const [engagementUsersSearch, setEngagementUsersSearch] = useState("");
+  const [engagementUsers, setEngagementUsers] = useState<EngagementUserListItem[]>([]);
+  const [engagementUsersTotal, setEngagementUsersTotal] = useState(0);
+  const [engagementUsersLoading, setEngagementUsersLoading] = useState(false);
+  const [engagementUsersError, setEngagementUsersError] = useState("");
+  const [selectedEngagementUserId, setSelectedEngagementUserId] = useState("");
+  const [engagementProfile, setEngagementProfile] = useState<EngagementUserProfile | null>(null);
+  const [engagementProfileLoading, setEngagementProfileLoading] = useState(false);
+  const [engagementProfileError, setEngagementProfileError] = useState("");
+  const [crmTagInput, setCrmTagInput] = useState("");
+  const [crmTagSaving, setCrmTagSaving] = useState(false);
+  const [crmTagError, setCrmTagError] = useState("");
+  const [crmNoteInput, setCrmNoteInput] = useState("");
+  const [crmNoteSaving, setCrmNoteSaving] = useState(false);
+  const [crmNoteError, setCrmNoteError] = useState("");
+  const [crmTagSearch, setCrmTagSearch] = useState("");
+  const [engagementTimelinePageSize, setEngagementTimelinePageSize] = useState(20);
+  const [engagementTimelinePage, setEngagementTimelinePage] = useState(1);
+  const [engagementTimelineSearch, setEngagementTimelineSearch] = useState("");
+  const [crmCopyFeedback, setCrmCopyFeedback] = useState("");
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState<CampaignStatusFilter>("all");
+  const [campaignSearchQuery, setCampaignSearchQuery] = useState("");
+  const [campaigns, setCampaigns] = useState<EngagementCampaignRecord[]>([]);
+  const [campaignsTotal, setCampaignsTotal] = useState(0);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [campaignsError, setCampaignsError] = useState("");
+  const [campaignOptions, setCampaignOptions] = useState<{ dinners: Array<{ value: string; label: string }>; packages: Array<{ value: string; label: string }> }>({
+    dinners: [],
+    packages: [],
+  });
+  const [campaignComposerOpen, setCampaignComposerOpen] = useState(false);
+  const [campaignComposerLoading, setCampaignComposerLoading] = useState(false);
+  const [campaignComposerSaving, setCampaignComposerSaving] = useState(false);
+  const [campaignComposerError, setCampaignComposerError] = useState("");
+  const [campaignComposer, setCampaignComposer] = useState<CampaignComposerState>(emptyCampaignComposerState);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<EngagementCampaignRecord | null>(null);
+  const [campaignLogs, setCampaignLogs] = useState<EngagementCampaignLog[]>([]);
+  const [campaignLogsLoading, setCampaignLogsLoading] = useState(false);
+  const [campaignLogsError, setCampaignLogsError] = useState("");
+  const [campaignComposerTab, setCampaignComposerTab] = useState<CampaignComposerTab>("content");
+  const [campaignLogSearch, setCampaignLogSearch] = useState("");
+  const [campaignPreviewRating, setCampaignPreviewRating] = useState(0);
+  const [smartSegments, setSmartSegments] = useState<SmartSegmentResult[]>([]);
+  const [segmentsLoading, setSegmentsLoading] = useState(false);
+  const [segmentsError, setSegmentsError] = useState("");
+  const [recommendations, setRecommendations] = useState<AdminRecommendation[]>([]);
   const [usersStatus, setUsersStatus] = useState("all");
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState("");
@@ -1747,6 +2905,235 @@ export default function AdminPanel() {
       setError(err instanceof Error ? err.message : "failed to load dinners");
     } finally {
       setDinnersLoading(false);
+    }
+  };
+
+  const loadEngagementAnalytics = async () => {
+    setEngagementLoading(true);
+    setEngagementError("");
+    try {
+      const previousRange = getPreviousEngagementRange(engagementFilters.startDate, engagementFilters.endDate);
+      const [analytics, previousAnalytics] = await Promise.all([
+        getEngagementAnalytics({
+          startDate: engagementFilters.startDate,
+          endDate: engagementFilters.endDate,
+          source: engagementFilters.source,
+          dinnerId: engagementFilters.dinnerId,
+          package: engagementFilters.package,
+        }),
+        getEngagementAnalytics({
+          startDate: previousRange.startDate,
+          endDate: previousRange.endDate,
+          source: engagementFilters.source,
+          dinnerId: engagementFilters.dinnerId,
+          package: engagementFilters.package,
+        }),
+      ]);
+      setEngagementAnalytics(analytics);
+      setEngagementPreviousAnalytics(previousAnalytics);
+    } catch (err) {
+      setEngagementError(err instanceof Error ? err.message : "failed to load engagement analytics");
+    } finally {
+      setEngagementLoading(false);
+    }
+  };
+
+  const loadEngagementUsers = async () => {
+    setEngagementUsersLoading(true);
+    setEngagementUsersError("");
+    try {
+      const response = await getEngagementUsers({
+        source: engagementUsersSource,
+        search: engagementUsersSearch.trim(),
+        limit: Math.max(20, Math.min(120, (data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE) * 4)),
+        offset: 0,
+      });
+      setEngagementUsers(response.users);
+      setEngagementUsersTotal(response.total);
+      setSelectedEngagementUserId((previous) => {
+        if (previous && response.users.some((item) => item.id === previous)) {
+          return previous;
+        }
+        return response.users[0]?.id ?? "";
+      });
+    } catch (err) {
+      setEngagementUsersError(err instanceof Error ? err.message : "failed to load engagement users");
+    } finally {
+      setEngagementUsersLoading(false);
+    }
+  };
+
+  const loadEngagementUserProfile = async (userId: string, sourceOverride?: EngagementUsersSource) => {
+    if (!userId) {
+      setEngagementProfile(null);
+      return;
+    }
+    setEngagementProfileLoading(true);
+    setEngagementProfileError("");
+    try {
+      const profile = await getEngagementUserProfile(sourceOverride ?? engagementUsersSource, userId);
+      setEngagementProfile(profile);
+    } catch (err) {
+      setEngagementProfileError(err instanceof Error ? err.message : "failed to load engagement profile");
+    } finally {
+      setEngagementProfileLoading(false);
+    }
+  };
+
+  const loadEngagementUserEvents = async (userId: string, sourceOverride?: EngagementUsersSource) => {
+    if (!userId) {
+      return;
+    }
+    try {
+      const eventsPage = await getEngagementUserEvents(sourceOverride ?? engagementUsersSource, userId, {
+        limit: engagementTimelinePageSize,
+        offset: Math.max(0, (engagementTimelinePage - 1) * engagementTimelinePageSize),
+        search: engagementTimelineSearch.trim(),
+      });
+      setEngagementProfile((prev) => prev && prev.overview.id === userId ? { ...prev, eventsPage } : prev);
+    } catch (err) {
+      setEngagementProfileError(err instanceof Error ? err.message : "failed to load engagement events");
+    }
+  };
+
+  const handleAddCrmTag = async () => {
+    if (!engagementProfile || !crmTagInput.trim()) return;
+    setCrmTagSaving(true);
+    setCrmTagError("");
+    try {
+      const tags = await addUserTag(engagementProfile.overview.source, engagementProfile.overview.id, crmTagInput.trim());
+      setEngagementProfile((prev) => prev ? { ...prev, tags } : prev);
+      setCrmTagInput("");
+    } catch (err) {
+      setCrmTagError(err instanceof Error ? err.message : "failed to add tag");
+    } finally {
+      setCrmTagSaving(false);
+    }
+  };
+
+  const handleRemoveCrmTag = async (tag: string) => {
+    if (!engagementProfile) return;
+    try {
+      const tags = await removeUserTag(engagementProfile.overview.source, engagementProfile.overview.id, tag);
+      setEngagementProfile((prev) => prev ? { ...prev, tags } : prev);
+    } catch (err) {
+      setCrmTagError(err instanceof Error ? err.message : "failed to remove tag");
+    }
+  };
+
+  const handleAddCrmNote = async () => {
+    if (!engagementProfile || !crmNoteInput.trim()) return;
+    setCrmNoteSaving(true);
+    setCrmNoteError("");
+    try {
+      const note = await addUserNote(engagementProfile.overview.source, engagementProfile.overview.id, crmNoteInput.trim());
+      setEngagementProfile((prev) => prev ? { ...prev, notes: [note, ...(prev.notes ?? [])] } : prev);
+      setCrmNoteInput("");
+    } catch (err) {
+      setCrmNoteError(err instanceof Error ? err.message : "failed to add note");
+    } finally {
+      setCrmNoteSaving(false);
+    }
+  };
+
+  const handleDeleteCrmNote = async (noteId: number) => {
+    if (!engagementProfile) return;
+    try {
+      await deleteUserNote(engagementProfile.overview.source, engagementProfile.overview.id, noteId);
+      setEngagementProfile((prev) => prev ? { ...prev, notes: (prev.notes ?? []).filter((n) => n.id !== noteId) } : prev);
+    } catch (err) {
+      setCrmNoteError(err instanceof Error ? err.message : "failed to delete note");
+    }
+  };
+
+  const handleCopyCrmField = async (label: string, value?: string | null) => {
+    const normalized = (value ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(normalized);
+      setCrmCopyFeedback(`${label} copied`);
+    } catch {
+      setCrmCopyFeedback(`Failed to copy ${label.toLowerCase()}`);
+    }
+  };
+
+  const openFullEngagementProfile = (userId: string, source: EngagementUsersSource) => {
+    navigate(`/users/${encodeURIComponent(userId)}?source=${source}&tab=overview`);
+  };
+
+  const closeFullEngagementProfile = () => {
+    navigate(`/admin?section=engagement&engagementTab=users&engagementSource=${routeProfileSource}`);
+  };
+
+  useEffect(() => {
+    if (!crmCopyFeedback) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setCrmCopyFeedback(""), 1800);
+    return () => window.clearTimeout(timer);
+  }, [crmCopyFeedback]);
+
+  useEffect(() => {
+    setEngagementTimelinePage(1);
+  }, [selectedEngagementUserId, engagementTimelinePageSize, engagementTimelineSearch]);
+
+  useEffect(() => {
+    if (!selectedEngagementUserId || !engagementProfile) {
+      return;
+    }
+    void loadEngagementUserEvents(selectedEngagementUserId, engagementProfile.overview.source);
+  }, [selectedEngagementUserId, engagementProfile?.overview.source, engagementTimelinePage, engagementTimelinePageSize, engagementTimelineSearch]);
+
+  const loadCampaignOptions = async () => {
+    try {
+      const options = await getEngagementCampaignOptions();
+      setCampaignOptions(options);
+    } catch (err) {
+      setCampaignsError(err instanceof Error ? err.message : "failed to load campaign options");
+    }
+  };
+
+  const loadCampaigns = async () => {
+    setCampaignsLoading(true);
+    setCampaignsError("");
+    try {
+      const response = await getEngagementCampaigns({
+        limit: Math.max(12, Math.min(60, data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE)),
+        offset: 0,
+        search: campaignSearchQuery.trim(),
+        status: campaignStatusFilter,
+      });
+      setCampaigns(response.campaigns);
+      setCampaignsTotal(response.total);
+      setSelectedCampaignId((previous) => {
+        if (previous && response.campaigns.some((item) => item.id === previous)) {
+          return previous;
+        }
+        return response.campaigns[0]?.id ?? null;
+      });
+    } catch (err) {
+      setCampaignsError(err instanceof Error ? err.message : "failed to load campaigns");
+    } finally {
+      setCampaignsLoading(false);
+    }
+  };
+
+  const loadCampaignDetail = async (campaignId: number) => {
+    setCampaignLogsLoading(true);
+    setCampaignLogsError("");
+    try {
+      const [campaign, logsResponse] = await Promise.all([
+        getEngagementCampaign(campaignId),
+        getEngagementCampaignLogs(campaignId, { limit: 40, offset: 0 }),
+      ]);
+      setSelectedCampaign(campaign);
+      setCampaignLogs(logsResponse.logs);
+    } catch (err) {
+      setCampaignLogsError(err instanceof Error ? err.message : "failed to load campaign details");
+    } finally {
+      setCampaignLogsLoading(false);
     }
   };
 
@@ -1915,11 +3302,29 @@ export default function AdminPanel() {
   }, []);
 
   useEffect(() => {
-    const nextSection = getSectionFromSearch(location.search);
+    const nextSection = isEngagementUserProfileRoute ? "engagement" : getSectionFromSearch(location.search);
     setActiveSection((current) => (current === nextSection ? current : nextSection));
-  }, [location.search]);
+  }, [location.search, isEngagementUserProfileRoute]);
 
   useEffect(() => {
+    if (!isEngagementUserProfileRoute) {
+      return;
+    }
+    setEngagementProfileTab(getEngagementProfileTabFromSearch(location.search));
+  }, [isEngagementUserProfileRoute, location.search]);
+
+  useEffect(() => {
+    if (isEngagementUserProfileRoute || getSectionFromSearch(location.search) !== "engagement") {
+      return;
+    }
+    setEngagementTab(getEngagementTabFromSearch(location.search));
+    setEngagementUsersSource(normalizeEngagementUsersSource(new URLSearchParams(location.search).get("engagementSource")));
+  }, [isEngagementUserProfileRoute, location.search]);
+
+  useEffect(() => {
+    if (isEngagementUserProfileRoute) {
+      return;
+    }
     const params = new URLSearchParams(location.search);
     const currentSection = params.get("section")?.trim().toLowerCase() ?? "";
     if (currentSection === activeSection) {
@@ -1933,7 +3338,49 @@ export default function AdminPanel() {
       },
       { replace: true }
     );
-  }, [activeSection, location.pathname, location.search, navigate]);
+  }, [activeSection, location.pathname, location.search, navigate, isEngagementUserProfileRoute]);
+
+  useEffect(() => {
+    if (!isEngagementUserProfileRoute) {
+      return;
+    }
+    const params = new URLSearchParams(location.search);
+    const currentTab = params.get("tab")?.trim().toLowerCase() ?? "";
+    const currentSource = normalizeEngagementUsersSource(params.get("source"));
+    if (currentTab === engagementProfileTab && currentSource === routeProfileSource) {
+      return;
+    }
+    params.set("tab", engagementProfileTab);
+    params.set("source", routeProfileSource);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${params.toString()}`,
+      },
+      { replace: true }
+    );
+  }, [engagementProfileTab, isEngagementUserProfileRoute, location.pathname, location.search, navigate, routeProfileSource]);
+
+  useEffect(() => {
+    if (isEngagementUserProfileRoute || activeSection !== "engagement") {
+      return;
+    }
+    const params = new URLSearchParams(location.search);
+    const currentTab = getEngagementTabFromSearch(location.search);
+    const currentSource = normalizeEngagementUsersSource(params.get("engagementSource"));
+    if (currentTab === engagementTab && currentSource === engagementUsersSource) {
+      return;
+    }
+    params.set("engagementTab", engagementTab);
+    params.set("engagementSource", engagementUsersSource);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${params.toString()}`,
+      },
+      { replace: true }
+    );
+  }, [activeSection, engagementTab, engagementUsersSource, isEngagementUserProfileRoute, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (activeSection === "dinners" || activeSection === "overview" || activeSection === "bookings") {
@@ -2008,6 +3455,64 @@ export default function AdminPanel() {
   }, [activeSection, usersSource, searchQuery, data?.settings?.runtime?.adminUsersPageSize]);
 
   useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "analytics") {
+      return;
+    }
+    void loadEngagementAnalytics();
+  }, [activeSection, engagementTab, engagementFilters.startDate, engagementFilters.endDate, engagementFilters.source, engagementFilters.dinnerId, engagementFilters.package]);
+
+  useEffect(() => {
+    if (isEngagementUserProfileRoute || activeSection !== "engagement" || engagementTab !== "users") {
+      return;
+    }
+    void loadEngagementUsers();
+  }, [activeSection, engagementTab, engagementUsersSource, engagementUsersSearch, data?.settings?.runtime?.adminUsersPageSize, isEngagementUserProfileRoute]);
+
+  useEffect(() => {
+    if (isEngagementUserProfileRoute || activeSection !== "engagement" || engagementTab !== "users" || !selectedEngagementUserId) {
+      return;
+    }
+    setEngagementProfile(null);
+  }, [activeSection, engagementTab, engagementUsersSource, selectedEngagementUserId, isEngagementUserProfileRoute]);
+
+  useEffect(() => {
+    if (!isEngagementUserProfileRoute || !routeUserId) {
+      return;
+    }
+    void loadEngagementUserProfile(routeUserId, routeProfileSource);
+  }, [isEngagementUserProfileRoute, routeUserId, routeProfileSource]);
+
+  useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "campaigns") {
+      return;
+    }
+    void loadCampaignOptions();
+    void loadCampaigns();
+  }, [activeSection, engagementTab, campaignStatusFilter, campaignSearchQuery, data?.settings?.runtime?.adminUsersPageSize]);
+
+  useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "campaigns" || selectedCampaignId == null) {
+      return;
+    }
+    void loadCampaignDetail(selectedCampaignId);
+  }, [activeSection, engagementTab, selectedCampaignId]);
+
+  useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "segments") {
+      return;
+    }
+    setSegmentsLoading(true);
+    setSegmentsError("");
+    Promise.all([getSmartSegments(), getAdminRecommendations()])
+      .then(([segs, recs]) => {
+        setSmartSegments(segs);
+        setRecommendations(recs);
+      })
+      .catch((err) => setSegmentsError(err instanceof Error ? err.message : "failed to load segments"))
+      .finally(() => { setSegmentsLoading(false); });
+  }, [activeSection, engagementTab]);
+
+  useEffect(() => {
     if (activeSection !== "bookings") {
       return;
     }
@@ -2076,6 +3581,25 @@ export default function AdminPanel() {
         void loadTelegramApplications();
         return;
       }
+      if (activeSection === "engagement" && engagementTab === "analytics") {
+        void loadEngagementAnalytics();
+        return;
+      }
+      if (activeSection === "engagement" && engagementTab === "users") {
+        if (isEngagementUserProfileRoute && routeUserId) {
+          void loadEngagementUserProfile(routeUserId, routeProfileSource);
+        } else {
+          void loadEngagementUsers();
+        }
+        return;
+      }
+      if (activeSection === "engagement" && engagementTab === "campaigns") {
+        void loadCampaigns();
+        if (selectedCampaignId != null) {
+          void loadCampaignDetail(selectedCampaignId);
+        }
+        return;
+      }
       if (activeSection === "audit" || activeSection === "operations") {
         void loadAuditLogs();
         return;
@@ -2084,7 +3608,7 @@ export default function AdminPanel() {
     }, intervalSec * 1000);
 
     return () => window.clearInterval(timer);
-  }, [data?.settings.runtime.panelAutoRefreshSeconds, activeSection, usersSource, bookingsSource, usersStatus, searchQuery]);
+  }, [data?.settings.runtime.panelAutoRefreshSeconds, activeSection, usersSource, bookingsSource, usersStatus, searchQuery, engagementTab, engagementFilters.startDate, engagementFilters.endDate, engagementFilters.source, engagementFilters.dinnerId, engagementFilters.package, engagementUsersSource, engagementUsersSearch, selectedEngagementUserId, campaignStatusFilter, campaignSearchQuery, selectedCampaignId, isEngagementUserProfileRoute, routeUserId, routeProfileSource]);
 
   useEffect(() => {
     if (!dinnerDeleteTarget) {
@@ -2127,6 +3651,25 @@ export default function AdminPanel() {
       await loadTelegramApplications();
       return;
     }
+    if (activeSection === "engagement" && engagementTab === "analytics") {
+      await loadEngagementAnalytics();
+      return;
+    }
+    if (activeSection === "engagement" && engagementTab === "users") {
+      if (isEngagementUserProfileRoute && routeUserId) {
+        await loadEngagementUserProfile(routeUserId, routeProfileSource);
+      } else {
+        await loadEngagementUsers();
+      }
+      return;
+    }
+    if (activeSection === "engagement" && engagementTab === "campaigns") {
+      await loadCampaigns();
+      if (selectedCampaignId != null) {
+        await loadCampaignDetail(selectedCampaignId);
+      }
+      return;
+    }
     if (activeSection === "audit" || activeSection === "operations") {
       await loadAuditLogs();
       return;
@@ -2164,6 +3707,97 @@ export default function AdminPanel() {
       return;
     }
     await loadAuditLogs(true);
+  };
+
+  const handleOpenNewCampaign = () => {
+    setCampaignComposerError("");
+    setCampaignComposer(emptyCampaignComposerState);
+    setCampaignComposerTab("content");
+    setCampaignComposerOpen(true);
+  };
+
+  const handleEditCampaign = async (campaignId: number) => {
+    setCampaignComposerLoading(true);
+    setCampaignComposerError("");
+    try {
+      const campaign = await getEngagementCampaign(campaignId);
+      setCampaignComposer(buildCampaignComposerStateFromRecord(campaign));
+      setCampaignComposerTab("content");
+      setCampaignComposerOpen(true);
+    } catch (err) {
+      setCampaignComposerError(err instanceof Error ? err.message : "failed to load campaign");
+    } finally {
+      setCampaignComposerLoading(false);
+    }
+  };
+
+  const handleSaveCampaign = async () => {
+    setCampaignComposerSaving(true);
+    setCampaignComposerError("");
+    try {
+      const payload = buildCampaignPayload(campaignComposer);
+      let saved: EngagementCampaignRecord;
+      if (campaignComposer.id != null) {
+        saved = await updateEngagementCampaign(campaignComposer.id, payload);
+      } else {
+        saved = await createEngagementCampaign(payload);
+      }
+      setCampaignComposerOpen(false);
+      setSelectedCampaignId(saved.id);
+      await loadCampaigns();
+      await loadCampaignDetail(saved.id);
+      setInfoMessage(`Campaign ${saved.title} saved.`);
+    } catch (err) {
+      setCampaignComposerError(err instanceof Error ? err.message : "failed to save campaign");
+    } finally {
+      setCampaignComposerSaving(false);
+    }
+  };
+
+  const handleScheduleCampaign = async (campaignId: number, sendNow = false) => {
+    try {
+      const campaign = await scheduleEngagementCampaign(campaignId, {
+        sendNow,
+        scheduledFor: sendNow ? undefined : campaignComposer.scheduledFor ? new Date(campaignComposer.scheduledFor).toISOString() : undefined,
+      });
+      setSelectedCampaignId(campaign.id);
+      setSelectedCampaign(campaign);
+      await loadCampaigns();
+      await loadCampaignDetail(campaign.id);
+      setInfoMessage(sendNow ? `Campaign ${campaign.title} is now sending.` : `Campaign ${campaign.title} scheduled.`);
+    } catch (err) {
+      setCampaignComposerError(err instanceof Error ? err.message : "failed to schedule campaign");
+    }
+  };
+
+  const handleCancelCampaign = async (campaignId: number) => {
+    if (!window.confirm("Cancel this campaign and stop any remaining queued sends?")) {
+      return;
+    }
+    try {
+      const campaign = await cancelEngagementCampaign(campaignId);
+      setSelectedCampaign(campaign);
+      await loadCampaigns();
+      await loadCampaignDetail(campaign.id);
+      setInfoMessage(`Campaign ${campaign.title} cancelled.`);
+    } catch (err) {
+      setCampaignComposerError(err instanceof Error ? err.message : "failed to cancel campaign");
+    }
+  };
+
+  const handleTestSendCampaign = async (campaignId: number) => {
+    const userId = window.prompt("Telegram user ID for test send");
+    if (!userId) {
+      return;
+    }
+    try {
+      const campaign = await testSendEngagementCampaign(campaignId, userId);
+      setSelectedCampaign(campaign);
+      await loadCampaignDetail(campaign.id);
+      setInfoMessage(`Test send queued for campaign ${campaign.title}.`);
+    } catch (err) {
+      setCampaignComposerError(err instanceof Error ? err.message : "failed to queue test send");
+    }
   };
 
   const handleOpenAuditGroup = (event: AuditTimelineEvent, sourceLogs: AdminAuditLogEntry[]) => {
@@ -3055,12 +4689,12 @@ export default function AdminPanel() {
 
   const dinnersById = useMemo(() => new Map(dinners.map((item) => [item.id, item])), [dinners]);
   const bookingManageSections = useMemo(
-    () => getTelegramBookingActionSections(telegramBookingActionOptions),
-    []
+    () => getTelegramBookingActionSections(telegramBookingActionOptions, bookingManageTarget?.status),
+    [bookingManageTarget?.status]
   );
   const bookingManageDangerOptions = useMemo(
-    () => getTelegramBookingDangerOptions(telegramBookingActionOptions),
-    []
+    () => getTelegramBookingDangerOptions(telegramBookingActionOptions, bookingManageTarget?.status),
+    [bookingManageTarget?.status]
   );
   const bookingManageAuditLogs = useMemo(() => {
     if (!bookingManageTarget) {
@@ -3231,10 +4865,272 @@ export default function AdminPanel() {
     telegramApplicationsSummary.cancelled +
     telegramApplicationsSummary.noShow +
     (telegramStats?.blockedActive ?? 0);
-  const pageTitle = sectionLabels[activeSection];
-  const pageSubtitle = sectionHints[activeSection];
+  const pageTitle = isEngagementUserProfileRoute
+    ? engagementProfile?.overview.name || "User Intelligence Profile"
+    : sectionLabels[activeSection];
+  const pageSubtitle = isEngagementUserProfileRoute
+    ? "Dedicated CRM profile with guest analytics, journey intelligence, notes, and raw event history."
+    : sectionHints[activeSection];
   const lastUpdated = formatDateLabel(meta.generatedAt);
 
+  const engagementSummary = engagementAnalytics?.summary;
+  const selectedEngagementListItem = engagementUsers.find((item) => item.id === selectedEngagementUserId) ?? null;
+  const engagementProfileScoreBreakdown = useMemo(
+    () => (engagementProfile ? buildEngagementScoreBreakdown(engagementProfile) : null),
+    [engagementProfile]
+  );
+  const engagementProfileHeatmapWeeks = useMemo(
+    () => (engagementProfile ? buildEngagementHeatmap(engagementProfile.timeline) : []),
+    [engagementProfile]
+  );
+  const engagementProfileHourActivity = useMemo(
+    () => (engagementProfile ? buildEngagementHourBars(engagementProfile.timeline) : { bestHour: null, bars: [] as Array<{ key: string; label: string; value: number; percent: number }> }),
+    [engagementProfile]
+  );
+  const engagementProfileJourneyStages = useMemo(
+    () => (engagementProfile ? buildEngagementJourneyStages(engagementProfile) : []),
+    [engagementProfile]
+  );
+  const engagementGroupedTimeline = useMemo(
+    () => (engagementProfile ? groupEngagementTimelineItems(engagementProfile.eventsPage?.events ?? []) : []),
+    [engagementProfile]
+  );
+  const engagementTimelineTotalPages = Math.max(1, Math.ceil((engagementProfile?.eventsPage?.total ?? 0) / engagementTimelinePageSize));
+  const engagementTimelineCurrentPage = Math.min(engagementTimelinePage, engagementTimelineTotalPages);
+  const engagementVisibleTimeline = engagementGroupedTimeline;
+  const filteredCrmPresets = useMemo(() => {
+    const presets = ["vip", "influencer", "investor", "partner", "student", "media", "referral_leader", "inactive"];
+    const query = crmTagSearch.trim().toLowerCase();
+    if (!query) {
+      return presets;
+    }
+    return presets.filter((preset) => preset.replace(/_/g, " ").includes(query));
+  }, [crmTagSearch]);
+  useEffect(() => {
+    setEngagementTimelinePage((previous) => Math.min(previous, engagementTimelineTotalPages));
+  }, [engagementTimelineTotalPages]);
+  const engagementDailyActivity = useMemo(
+    () => (engagementProfile ? buildDailyActivityRows(engagementProfile.timeline) : []),
+    [engagementProfile]
+  );
+  const engagementButtonClickRows = useMemo(
+    () => (
+      engagementProfile
+        ? buildTimelineFrequency(engagementProfile.timeline, (item) => {
+            const title = `${item.title} ${item.description}`.toLowerCase();
+            if (!/(click|button|back|profile|invite|apply|package)/.test(title)) {
+              return null;
+            }
+            return item.title.replace(/[_-]+/g, " ").trim() || "Interaction";
+          })
+        : []
+    ),
+    [engagementProfile]
+  );
+  const engagementPackageInterestRows = useMemo(
+    () => (
+      engagementProfile
+        ? buildTimelineFrequency(engagementProfile.timeline, (item) => {
+            const combined = `${item.title} ${item.description}`;
+            if (!/package/i.test(combined)) {
+              return null;
+            }
+            const match = combined.match(/package[^a-z0-9]*([a-z0-9_ -]+)/i);
+            return match?.[1]?.trim() || item.title.trim();
+          }, 6)
+        : []
+    ),
+    [engagementProfile]
+  );
+  const engagementReferralNetworkRows = useMemo(() => {
+    if (!engagementProfile) {
+      return [];
+    }
+    return [
+      { label: "Invited users", value: engagementProfile.referral.invitedUsers, percent: clampPercent((engagementProfile.referral.invitedUsers / Math.max(engagementProfile.referral.invitedUsers, engagementProfile.referral.referralClicks, engagementProfile.referral.referralSuccesses, 1)) * 100) },
+      { label: "Referral clicks", value: engagementProfile.referral.referralClicks, percent: clampPercent((engagementProfile.referral.referralClicks / Math.max(engagementProfile.referral.invitedUsers, engagementProfile.referral.referralClicks, engagementProfile.referral.referralSuccesses, 1)) * 100) },
+      { label: "Successful referrals", value: engagementProfile.referral.referralSuccesses, percent: clampPercent((engagementProfile.referral.referralSuccesses / Math.max(engagementProfile.referral.invitedUsers, engagementProfile.referral.referralClicks, engagementProfile.referral.referralSuccesses, 1)) * 100) },
+    ];
+  }, [engagementProfile]);
+  const engagementProfileTabs: Array<{ key: EngagementProfileTab; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "journey", label: "Journey" },
+    { key: "activity", label: "Activity Analytics" },
+    { key: "referrals", label: "Referrals" },
+    { key: "revenue", label: "Revenue & Attendance" },
+    { key: "notes", label: "Notes & CRM" },
+    { key: "campaigns", label: "Campaign Interactions" },
+    { key: "events", label: "Raw Events" },
+  ];
+  const engagementSourceLabel = engagementSourceOptions.find((option) => option.value === engagementFilters.source)?.label ?? "Telegram + Landing";
+  const engagementDinnerLabel =
+    engagementFilters.dinnerId === "all"
+      ? "All dinners"
+      : engagementAnalytics?.filterOptions.dinners.find((option) => option.value === engagementFilters.dinnerId)?.label ?? "Selected dinner";
+  const engagementPackageLabel =
+    engagementFilters.package === "all"
+      ? "All packages"
+      : engagementAnalytics?.filterOptions.packages.find((option) => option.value === engagementFilters.package)?.label ?? "Selected package";
+  const engagementFilterChips = [
+    engagementSourceLabel,
+    engagementDinnerLabel,
+    engagementPackageLabel,
+    `${engagementFilters.startDate} - ${engagementFilters.endDate}`,
+  ];
+  const previousEngagementSummary = engagementPreviousAnalytics?.summary;
+  const currentFunnel = engagementAnalytics?.funnel ?? [];
+  const previousFunnel = engagementPreviousAnalytics?.funnel ?? [];
+  const engagementConversions = engagementAnalytics?.conversions;
+  const previousEngagementConversions = engagementPreviousAnalytics?.conversions;
+  const submittedApplications = currentFunnel.find((item) => item.key === "submitted_application")?.users ?? 0;
+  const previousSubmittedApplications = previousFunnel.find((item) => item.key === "submitted_application")?.users ?? 0;
+  const paidUsers = currentFunnel.find((item) => item.key === "paid")?.users ?? 0;
+  const previousPaidUsers = previousFunnel.find((item) => item.key === "paid")?.users ?? 0;
+  const currentConversionRate = engagementConversions?.displayRate ?? 0;
+  const previousConversionRate = previousEngagementConversions?.displayRate ?? 0;
+  const sourcePerformance = engagementAnalytics?.sourcePerformance ?? [];
+  const sourceUsersTotal = sourcePerformance.reduce((sum, item) => sum + item.users, 0);
+  const hourlyActivity = engagementAnalytics?.hourlyActivity ?? [];
+  const bestEngagementHour = hourlyActivity.slice().sort((a, b) => {
+    if (b.events !== a.events) return b.events - a.events;
+    return b.activeUsers - a.activeUsers;
+  })[0] ?? null;
+  const dinnerPerformance = engagementAnalytics?.dinnerPerformance ?? [];
+  const packageSelections = engagementAnalytics?.packageSelections ?? [];
+  const buttonPerformance = engagementAnalytics?.buttonPerformance ?? [];
+  const biggestDropOff = currentFunnel
+    .slice(1)
+    .sort((a, b) => b.dropOff - a.dropOff)[0] ?? null;
+
+  const buildEngagementTrendLabel = (currentValue: number, previousValue: number) => {
+    const diff = currentValue - previousValue;
+    if (previousValue <= 0) {
+      if (currentValue <= 0) {
+        return { text: "→ No change", tone: "default" as const };
+      }
+      return { text: "↑ +100%", tone: "emerald" as const };
+    }
+    const percent = (diff / previousValue) * 100;
+    if (Math.abs(percent) < 0.1) {
+      return { text: "→ No change", tone: "default" as const };
+    }
+    return {
+      text: `${percent >= 0 ? "↑" : "↓"} ${percent >= 0 ? "+" : ""}${percent.toFixed(0)}%`,
+      tone: percent >= 0 ? ("emerald" as const) : ("danger" as const),
+    };
+  };
+
+  const buildEngagementKpiNote = (key: string, value: number) => {
+    switch (key) {
+      case "returning-users":
+        return value === 0 ? "No returning users yet" : "Users who came back";
+      case "paid-users":
+        return engagementConversions?.landingPaymentTracked === false
+          ? value === 0
+            ? "0 Telegram paid users"
+            : "Telegram paid users only"
+          : value === 0
+            ? "0 paid users"
+            : "Users who reached payment";
+      case "applications":
+        return value === 0 ? "No applications submitted yet" : "Submitted applications";
+      case "conversion-rate":
+        if (!engagementConversions) {
+          return "No conversion data yet";
+        }
+        if (!engagementConversions.overallAvailable) {
+          return `Landing payment tracking unavailable · Telegram ${engagementConversions.telegramPaidUsers}/${engagementConversions.telegramSubmittedUsers}`;
+        }
+        return `${engagementConversions.overallPaidUsers}/${engagementConversions.overallSubmittedUsers} applications converted`;
+      case "active-users":
+        return value === 0 ? "No active users yet" : "Users with meaningful engagement";
+      case "total-events":
+        return value === 0 ? "No tracked events yet" : "Tracked activity in this window";
+      default:
+        return "No data yet";
+    }
+  };
+
+  const engagementKpiCards = engagementSummary
+    ? [
+        {
+          key: "total-events",
+          label: "Total Events",
+          value: formatCompactNumber(engagementSummary.totalEvents),
+          trend: buildEngagementTrendLabel(engagementSummary.totalEvents, previousEngagementSummary?.totalEvents ?? 0),
+          note: buildEngagementKpiNote("total-events", engagementSummary.totalEvents),
+          sparkline: (engagementAnalytics?.timeline ?? []).map((item) => item.events),
+        },
+        {
+          key: "active-users",
+          label: "Active Users",
+          value: formatCompactNumber(engagementSummary.activeUsers),
+          trend: buildEngagementTrendLabel(engagementSummary.activeUsers, previousEngagementSummary?.activeUsers ?? 0),
+          note: buildEngagementKpiNote("active-users", engagementSummary.activeUsers),
+          sparkline: (engagementAnalytics?.timeline ?? []).map((item) => item.activeUsers),
+        },
+        {
+          key: "returning-users",
+          label: "Returning Users",
+          value: formatCompactNumber(engagementSummary.returningUsers),
+          trend: buildEngagementTrendLabel(engagementSummary.returningUsers, previousEngagementSummary?.returningUsers ?? 0),
+          note: buildEngagementKpiNote("returning-users", engagementSummary.returningUsers),
+          sparkline: (engagementAnalytics?.timeline ?? []).map((item) => item.returningUsers),
+        },
+        {
+          key: "conversion-rate",
+          label: engagementConversions?.displayLabel ?? "Conversion Rate",
+          value: `${currentConversionRate.toFixed(1)}%`,
+          trend: buildEngagementTrendLabel(currentConversionRate, previousConversionRate),
+          note: buildEngagementKpiNote("conversion-rate", currentConversionRate),
+          sparkline: (engagementAnalytics?.timeline ?? []).map((item) => Math.round(item.conversionRate)),
+        },
+        {
+          key: "applications",
+          label: "Applications",
+          value: formatCompactNumber(submittedApplications),
+          trend: buildEngagementTrendLabel(submittedApplications, previousSubmittedApplications),
+          note: buildEngagementKpiNote("applications", submittedApplications),
+          sparkline: (engagementAnalytics?.timeline ?? []).map((item) => item.applications),
+        },
+        {
+          key: "paid-users",
+          label: "Paid Users",
+          value: formatCompactNumber(paidUsers),
+          trend: buildEngagementTrendLabel(paidUsers, previousPaidUsers),
+          note: buildEngagementKpiNote("paid-users", paidUsers),
+          sparkline: (engagementAnalytics?.timeline ?? []).map((item) => item.paidUsers),
+        },
+      ]
+    : [];
+
+  const engagementKeyInsights = [
+    {
+      label: "Top traffic source",
+      value: sourcePerformance[0]?.label ?? "Not enough data yet",
+      detail: sourcePerformance[0] ? `${formatCompactNumber(sourcePerformance[0].users)} users in the selected range` : "Tracking is working, but this slice is still too small.",
+    },
+    {
+      label: "Most popular dinner",
+      value: dinnerPerformance[0]?.label ?? "Not enough data yet",
+      detail: dinnerPerformance[0] ? `${formatCompactNumber(dinnerPerformance[0].views)} views and ${dinnerPerformance[0].conversionRate.toFixed(1)}% conversion` : "Need more dinner view activity to identify demand.",
+    },
+    {
+      label: "Highest package intent",
+      value: packageSelections[0]?.label ?? "Not enough data yet",
+      detail: packageSelections[0] ? `${formatCompactNumber(packageSelections[0].value)} selections in this slice` : "Package intent has not formed yet.",
+    },
+    {
+      label: "Largest drop-off",
+      value: biggestDropOff?.label ?? "Not enough data yet",
+      detail: biggestDropOff ? `${biggestDropOff.dropOff.toFixed(1)}% drop from the previous stage` : "Funnel needs more volume before drop-off patterns are reliable.",
+    },
+    {
+      label: "Best engagement hour",
+      value: bestEngagementHour?.label ?? "Not enough data yet",
+      detail: bestEngagementHour ? `${formatCompactNumber(bestEngagementHour.events)} events from ${formatCompactNumber(bestEngagementHour.activeUsers)} active users` : "Need more hourly activity before the page can highlight a peak.",
+    },
+  ];
   const sectionMetrics: Record<AdminSection, MetricItem[]> = {
     overview: filterItems([
       { label: "Awaiting Approval", value: `${awaitingApprovalCount}`, description: "Telegram applications waiting for admin decision", trend: `${telegramApplicationsSummary.total} total telegram applications`, tone: awaitingApprovalCount > 0 ? "gold" : "emerald", icon: "01" },
@@ -3261,6 +5157,12 @@ export default function AdminPanel() {
       { label: "Paid bookings", value: `${telegramPaidBookings}`, description: "Submitted bookings marked paid", trend: `${telegramPaidConversion.toFixed(1)}% submitted -> paid`, tone: "emerald", icon: "T6" },
       { label: "Referral activity", value: `${telegramReferralActivity}`, description: "Referral records linked to Telegram users", trend: `${(telegramStats?.referralCoveragePct ?? 0).toFixed(1)}% referral coverage`, tone: "default", icon: "T7" },
       { label: "Blocked users", value: `${telegramStats?.blockedActive ?? 0}`, description: "Users currently blocked or throttled", trend: `${(telegramStats?.blockedRatePct ?? 0).toFixed(1)}% block rate`, tone: (telegramStats?.blockedActive ?? 0) > 0 ? "danger" : "emerald", icon: "T8" },
+    ]),
+    engagement: filterItems([
+      { label: "Active users", value: `${engagementSummary?.activeUsers ?? 0}`, description: "Users with deeper engagement in the selected period", trend: `${engagementSummary?.totalEvents ?? 0} tracked events`, tone: "emerald", icon: "E1" },
+      { label: "Passive users", value: `${engagementSummary?.passiveUsers ?? 0}`, description: "Light-touch visitors and low-intent users", trend: "1-2 events in range", tone: "default", icon: "E2" },
+      { label: "New users", value: `${engagementSummary?.newUsers ?? 0}`, description: "First-seen users entering the funnel", trend: `${engagementSummary?.returningUsers ?? 0} returning`, tone: "gold", icon: "E3" },
+      { label: "Returning users", value: `${engagementSummary?.returningUsers ?? 0}`, description: "Known users who came back in the selected period", trend: "Relationship depth and retention signal", tone: "default", icon: "E4" },
     ]),
     revenue: filterItems([
       { label: "Revenue today", value: formatCurrency(telegramStats?.revenue24h ?? 0), description: `${telegramStats?.orders24h ?? 0} paid orders in 24h`, tone: "gold", icon: "R1" },
@@ -3663,6 +5565,11 @@ export default function AdminPanel() {
 
   return (
     <section className="admin-panel admin-dashboard">
+      <SeoHead
+        title="Admin"
+        description="Private admin area."
+        noindex
+      />
       <div className="admin-dashboard__layout">
         <aside className="admin-sidebar">
           <div className="admin-sidebar__brand">
@@ -3679,7 +5586,13 @@ export default function AdminPanel() {
                 key={section}
                 className={`admin-sidebar__item ${activeSection === section ? "admin-sidebar__item--active" : ""}`}
                 type="button"
-                onClick={() => setActiveSection(section)}
+                onClick={() => {
+                  if (isEngagementUserProfileRoute) {
+                    navigate(`/admin?section=${section}`);
+                    return;
+                  }
+                  setActiveSection(section);
+                }}
                 title={sectionHints[section]}
               >
                 <span className="admin-sidebar__item-label">{sectionLabels[section]}</span>
@@ -3699,28 +5612,41 @@ export default function AdminPanel() {
 
         <div className="admin-main">
           <AdminPageHeader
-            eyebrow={sectionEyebrows[activeSection]}
+            eyebrow={isEngagementUserProfileRoute ? "User Intelligence" : sectionEyebrows[activeSection]}
             title={pageTitle}
             subtitle={pageSubtitle}
             meta={
               <>
                 <AdminBadge tone="default">{dashboardDate}</AdminBadge>
                 <AdminBadge tone="gold">Updated {lastUpdated}</AdminBadge>
+                {isEngagementUserProfileRoute && engagementProfile ? (
+                  <AdminBadge tone={getBookingToneByStatus(engagementProfile.overview.status)}>
+                    {formatEngagementUserStatus(engagementProfile.overview.source, engagementProfile.overview.status)}
+                  </AdminBadge>
+                ) : null}
               </>
             }
             actions={
               <>
-                <div className="admin-topbar__search">
-                  <span aria-hidden="true">⌕</span>
-                  <input
-                    type="text"
-                    placeholder={`Search ${sectionLabels[activeSection]}`}
-                    aria-label="Search"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    title="Search inside currently opened section."
-                  />
-                </div>
+                {isEngagementUserProfileRoute ? (
+                  <div className="admin-engagement-profile-header__actions">
+                    <AdminButton type="button" variant="ghost" onClick={closeFullEngagementProfile}>
+                      Back To Users
+                    </AdminButton>
+                  </div>
+                ) : (
+                  <div className="admin-topbar__search">
+                    <span aria-hidden="true">⌕</span>
+                    <input
+                      type="text"
+                      placeholder={`Search ${sectionLabels[activeSection]}`}
+                      aria-label="Search"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      title="Search inside currently opened section."
+                    />
+                  </div>
+                )}
               </>
             }
           />
@@ -4857,6 +6783,2169 @@ export default function AdminPanel() {
                       </>
                     ) : null}
                   </article>
+                </section>
+              ) : null}
+
+              {activeSection === "engagement" ? (
+                <section className="admin-users-layout">
+                  <article className="admin-widget admin-widget--fit">
+                    <AdminFilterBar className="admin-users__controls">
+                      <div className="admin-users__switch" role="tablist" aria-label="Engagement tabs">
+                        {engagementTabOptions.map((tab) => (
+                          <button
+                            key={tab.value}
+                            className={`admin-users__switch-btn ${engagementTab === tab.value ? "admin-users__switch-btn--active" : ""}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={engagementTab === tab.value}
+                            onClick={() => setEngagementTab(tab.value)}
+                            title={tab.description}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="admin-toolbar__meta">
+                        {engagementTab === "analytics"
+                          ? "Read behavioral demand, conversion pressure, and funnel friction across Telegram and Landing."
+                          : engagementTab === "users"
+                            ? "Inspect relationships, activity timelines, and journey quality across channels."
+                            : engagementTab === "campaigns"
+                              ? "Compose Telegram campaigns with targeting, safety controls, delivery logs, and post-send business outcomes."
+                              : engagementTab === "segments"
+                                ? "Auto-computed audience segments and actionable business intelligence recommendations."
+                                : "Data quality report — verify every metric is backed by correct collection logic."}
+                      </span>
+                    </AdminFilterBar>
+                  </article>
+
+                  {isEngagementUserProfileRoute ? (
+                    <section className="admin-engagement-profile-route">
+                      <article className="admin-widget admin-widget--fit">
+                        <div className="admin-users__controls admin-engagement-profile-route__tabs" role="tablist" aria-label="User profile sections">
+                          {engagementProfileTabs.map((tab) => (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              role="tab"
+                              aria-selected={engagementProfileTab === tab.key}
+                              className={`admin-users__switch-btn ${engagementProfileTab === tab.key ? "admin-users__switch-btn--active" : ""}`}
+                              onClick={() => setEngagementProfileTab(tab.key)}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+                        {engagementProfileError ? <p className="admin-auth__error">{engagementProfileError}</p> : null}
+                        {engagementProfileLoading && !engagementProfile ? <p className="admin-dashboard__state">Loading full user profile...</p> : null}
+                        {!engagementProfileLoading && !engagementProfile ? (
+                          <AdminEmptyState
+                            compact
+                            title="User profile not available"
+                            description="This guest profile could not be loaded. Try going back to Users and reopening it."
+                          />
+                        ) : null}
+                        {engagementProfile ? (
+                          <div className="admin-engagement-profile">
+                            <section className="admin-engagement-crm-header">
+                              <div className="admin-engagement-crm-header__identity">
+                                <div className="admin-engagement-crm-header__title-row">
+                                  <p className="admin-modal__eyebrow">{engagementProfile.overview.source === "telegram" ? "Telegram Guest Intelligence" : "Landing Guest Intelligence"}</p>
+                                  <div className="admin-booking-manager__summary">
+                                    <AdminBadge tone={getBookingToneByStatus(engagementProfile.overview.status)}>
+                                      {formatEngagementUserStatus(engagementProfile.overview.source, engagementProfile.overview.status)}
+                                    </AdminBadge>
+                                    <AdminBadge tone={getEngagementScoreTone(engagementProfileScoreBreakdown?.healthScore ?? 0)}>
+                                      Health {engagementProfileScoreBreakdown?.healthScore ?? 0}
+                                    </AdminBadge>
+                                  </div>
+                                </div>
+                                <h3>{engagementProfile.overview.name}</h3>
+                                <div className="admin-engagement-crm-header__contact-line">
+                                  <span>{engagementProfile.overview.username ? formatTelegramUsername(engagementProfile.overview.username) : "No username"}</span>
+                                  <span>{engagementProfile.overview.phone || "No phone"}</span>
+                                  <span>{engagementProfile.overview.language || "No language"}</span>
+                                </div>
+                                <div className="admin-engagement-crm-header__chips">
+                                  <span className="admin-engagement-crm-header__chip">
+                                    <strong>{engagementProfile.overview.source === "telegram" ? "Telegram ID" : "Profile ID"}</strong>
+                                    <span>{engagementProfile.overview.id}</span>
+                                  </span>
+                                  <span className="admin-engagement-crm-header__chip">
+                                    <strong>Referral Code</strong>
+                                    <span>{engagementProfile.referral.referralCode || "—"}</span>
+                                  </span>
+                                  <span className="admin-engagement-crm-header__chip">
+                                    <strong>First Seen</strong>
+                                    <span>{formatDateLabel(engagementProfile.overview.firstSeenAt || engagementProfile.overview.createdAt)}</span>
+                                  </span>
+                                  <span className="admin-engagement-crm-header__chip">
+                                    <strong>Last Activity</strong>
+                                    <span>{formatDateLabel(engagementProfile.overview.lastActivityAt || engagementProfile.overview.createdAt)}</span>
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="admin-engagement-crm-header__actions">
+                                <div className="admin-engagement-crm-header__copy-grid">
+                                  <button type="button" className="admin-engagement-copy-button" onClick={() => void handleCopyCrmField(engagementProfile.overview.source === "telegram" ? "Telegram ID" : "Profile ID", engagementProfile.overview.id)}>
+                                    Copy ID
+                                  </button>
+                                  <button type="button" className="admin-engagement-copy-button" onClick={() => void handleCopyCrmField("Username", engagementProfile.overview.username ? formatTelegramUsername(engagementProfile.overview.username) : "")} disabled={!engagementProfile.overview.username}>
+                                    Copy Username
+                                  </button>
+                                  <button type="button" className="admin-engagement-copy-button" onClick={() => void handleCopyCrmField("Phone", engagementProfile.overview.phone)} disabled={!engagementProfile.overview.phone}>
+                                    Copy Phone
+                                  </button>
+                                  <button type="button" className="admin-engagement-copy-button" onClick={() => void handleCopyCrmField("Referral code", engagementProfile.referral.referralCode)} disabled={!engagementProfile.referral.referralCode}>
+                                    Copy Referral
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="admin-engagement-copy-button"
+                                    onClick={() => {
+                                      if (!engagementProfile.overview.username) return;
+                                      window.open(`https://t.me/${engagementProfile.overview.username}`, "_blank", "noopener,noreferrer");
+                                    }}
+                                    disabled={!engagementProfile.overview.username}
+                                  >
+                                    Open Telegram
+                                  </button>
+                                </div>
+                                <div className="admin-engagement-crm-header__health">
+                                  <span>Guest Health Score</span>
+                                  <strong>{engagementProfileScoreBreakdown?.healthScore ?? 0}</strong>
+                                  <p>{engagementProfile.overview.engagementReason}</p>
+                                  {crmCopyFeedback ? <em>{crmCopyFeedback}</em> : null}
+                                </div>
+                              </div>
+                              <div className="admin-engagement-crm-header__stats">
+                                {[
+                                  { label: "Applications", value: `${engagementProfile.overview.applications}` },
+                                  { label: "Paid Bookings", value: `${engagementProfile.overview.paidBookings}` },
+                                  { label: "Attendance", value: `${engagementProfile.overview.attendanceCount}` },
+                                  { label: "Total Spend", value: formatCurrency(engagementProfile.overview.payments) },
+                                  { label: "Referral Count", value: `${engagementProfile.overview.referrals}` },
+                                  { label: "Account Age", value: formatAccountAgeLabel(engagementProfile.overview.firstSeenAt || engagementProfile.overview.createdAt) },
+                                ].map((item) => (
+                                  <article key={item.label} className="admin-engagement-crm-stat">
+                                    <span>{item.label}</span>
+                                    <strong>{item.value}</strong>
+                                  </article>
+                                ))}
+                              </div>
+                            </section>
+
+                            {engagementProfileTab === "overview" ? (
+                              <section className="admin-engagement-profile__priority-grid">
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--identity admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Identity & Contact</h2>
+                                    <span>Critical identity fields and support shortcuts</span>
+                                  </div>
+                                  <div className="admin-engagement-detail-grid">
+                                    {[
+                                      { label: engagementProfile.overview.source === "telegram" ? "Telegram ID" : "Profile ID", value: engagementProfile.overview.id, copyable: true },
+                                      { label: "Username", value: engagementProfile.overview.username ? formatTelegramUsername(engagementProfile.overview.username) : "—", copyable: Boolean(engagementProfile.overview.username) },
+                                      { label: "Full Name", value: engagementProfile.overview.name || "—", copyable: Boolean(engagementProfile.overview.name) },
+                                      { label: "Phone", value: engagementProfile.overview.phone || "—", copyable: Boolean(engagementProfile.overview.phone) },
+                                      { label: "Language", value: engagementProfile.overview.language || "—" },
+                                      { label: "Referral Code", value: engagementProfile.referral.referralCode || "—", copyable: Boolean(engagementProfile.referral.referralCode) },
+                                      { label: "First Seen", value: formatDateLabel(engagementProfile.overview.firstSeenAt || engagementProfile.overview.createdAt) },
+                                      { label: "Last Seen", value: formatDateLabel(engagementProfile.behavioral.lastSeenAt || engagementProfile.overview.lastActivityAt || engagementProfile.overview.createdAt) },
+                                      { label: "Account Age", value: formatAccountAgeLabel(engagementProfile.overview.firstSeenAt || engagementProfile.overview.createdAt) },
+                                      { label: "Legal", value: engagementProfile.overview.termsAccepted ? `Accepted${engagementProfile.overview.legalVersion ? ` · ${engagementProfile.overview.legalVersion}` : ""}` : "Not accepted" },
+                                    ].map((field) => (
+                                      <article key={field.label} className="admin-engagement-detail-row">
+                                        <div>
+                                          <span>{field.label}</span>
+                                          <strong>{field.value}</strong>
+                                        </div>
+                                        {field.copyable ? <button type="button" className="admin-engagement-inline-copy" onClick={() => void handleCopyCrmField(field.label, field.value)}>Copy</button> : null}
+                                      </article>
+                                    ))}
+                                  </div>
+                                </article>
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementJourneyCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Overview</h2>
+                                    <span>Business performance snapshot</span>
+                                  </div>
+                                  <div className="admin-engagement-kpi-grid">
+                                    {[
+                                      { label: "Applications", value: `${engagementProfile.overview.applications}`, hint: `${engagementProfile.behavioral.applicationsSent} submitted events tracked` },
+                                      { label: "Approved", value: engagementProfileJourneyStages.find((item) => item.key === "approved")?.completed ? "Yes" : "No", hint: "Current progression checkpoint" },
+                                      { label: "Paid", value: `${engagementProfile.overview.paidBookings}`, hint: formatCurrency(engagementProfile.revenue.totalPayments) },
+                                      { label: "Attended", value: `${engagementProfile.attendance.attendanceCount}`, hint: engagementProfile.attendance.attendanceQuality },
+                                      { label: "No-shows", value: `${engagementProfile.attendance.noShowCount}`, hint: "Reliability signal" },
+                                      { label: "Avg booking", value: formatCurrency(engagementProfile.revenue.averageBooking), hint: "Average paid booking value" },
+                                    ].map((item) => (
+                                      <article key={item.label} className="admin-engagement-kpi-tile">
+                                        <span>{item.label}</span>
+                                        <strong>{item.value}</strong>
+                                        <small>{item.hint}</small>
+                                      </article>
+                                    ))}
+                                  </div>
+                                </article>
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementHealthCardTone(engagementProfileScoreBreakdown?.healthScore ?? 0))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Guest Health</h2>
+                                    <span>How healthy and valuable this relationship looks</span>
+                                  </div>
+                                  <div className="admin-engagement-score-panel">
+                                    <div className="admin-engagement-score-panel__hero">
+                                      <strong>{engagementProfileScoreBreakdown?.healthScore ?? 0}</strong>
+                                      <span>Overall health</span>
+                                    </div>
+                                    <div className="admin-engagement-score-panel__bars">
+                                      {engagementProfileScoreBreakdown?.items.map((item) => (
+                                        <article key={item.key} className="admin-engagement-score-bar">
+                                          <div className="admin-engagement-score-bar__head">
+                                            <span>{item.label}</span>
+                                            <strong>{Math.round(item.value)}/100</strong>
+                                          </div>
+                                          <div className="admin-engagement-score-bar__track">
+                                            <span style={{ width: `${Math.max(item.value, 4)}%` }} />
+                                          </div>
+                                          <small>{item.hint}</small>
+                                        </article>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </article>
+                              </section>
+                            ) : null}
+
+                            {engagementProfileTab === "journey" ? (
+                              <section className="admin-engagement-profile__main-grid">
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--journey ${getEngagementCardToneClass(getEngagementJourneyCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Guest Journey</h2>
+                                    <span>How guests move from interest to attendance</span>
+                                  </div>
+                                  <div className="admin-engagement-journey-flow">
+                                    {engagementProfileJourneyStages.map((item) => (
+                                      <article key={item.key} className={`admin-engagement-journey-step ${item.completed ? "admin-engagement-journey-step--done" : ""}`}>
+                                        <div className="admin-engagement-journey-step__index"><span>{item.label.slice(0, 1)}</span></div>
+                                        <div className="admin-engagement-journey-step__copy">
+                                          <div className="admin-engagement-journey-step__head">
+                                            <strong>{item.label}</strong>
+                                            <AdminBadge tone={item.completed ? "emerald" : "default"}>{item.completed ? "Completed" : "Waiting"}</AdminBadge>
+                                          </div>
+                                          <span>{item.detail}</span>
+                                          <div className="admin-engagement-journey-step__meta">
+                                            <b>{item.occurredAt ? formatDateLabel(item.occurredAt) : "No timestamp yet"}</b>
+                                            <span>{item.delayLabel}</span>
+                                            {item.inferred ? <em>Inferred from later activity</em> : null}
+                                          </div>
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                </article>
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Dinner Interest</h2>
+                                    <span>Viewed dinners, applied dinners, and strongest preference signals</span>
+                                  </div>
+                                  {engagementProfile.dinnerInterest.length > 0 ? (
+                                    <div className="admin-engagement-interest-list">
+                                      {engagementProfile.dinnerInterest.slice().sort((a, b) => b.viewCount - a.viewCount).map((item, _index, list) => {
+                                        const maxViews = Math.max(...list.map((row) => row.viewCount), 1);
+                                        return (
+                                          <article key={item.dinnerId} className="admin-engagement-interest-item">
+                                            <div className="admin-engagement-interest-item__head">
+                                              <strong>{item.dinnerName}</strong>
+                                              <span>{item.viewCount} views{item.applied ? " · applied" : ""}</span>
+                                            </div>
+                                            <div className="admin-engagement-interest-item__track">
+                                              <span style={{ width: `${Math.max(clampPercent((item.viewCount / maxViews) * 100), 6)}%` }} />
+                                            </div>
+                                            <small>Last touched {formatDateLabel(item.lastViewAt)}</small>
+                                          </article>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : <AdminEmptyState compact title="No dinner interest tracked" description="Dinner interest will appear here once the guest browses or applies." />}
+                                </article>
+                              </section>
+                            ) : null}
+
+                            {engagementProfileTab === "activity" ? (
+                              <section className="admin-engagement-profile__secondary-grid">
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Activity Heatmap</h2>
+                                    <span>Active days and session density</span>
+                                  </div>
+                                  <div className="admin-engagement-heatmap">
+                                    {engagementProfileHeatmapWeeks.map((week) => (
+                                      <div key={week.key} className="admin-engagement-heatmap__week">
+                                        {week.cells.map((cell) => (
+                                          <span key={cell.key} className={`admin-engagement-heatmap__cell admin-engagement-heatmap__cell--${cell.intensity}`} title={cell.fullLabel} />
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="admin-engagement-heatmap__legend">
+                                    <span>Less active</span>
+                                    <div>{[0, 1, 2, 3, 4].map((level) => <i key={level} className={`admin-engagement-heatmap__cell admin-engagement-heatmap__cell--${level}`} />)}</div>
+                                    <span>More active</span>
+                                  </div>
+                                </article>
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Hourly Activity</h2>
+                                    <span>When this guest engages most</span>
+                                  </div>
+                                  <div className="admin-engagement-hour-bars">
+                                    {engagementProfileHourActivity.bars.length > 0 ? engagementProfileHourActivity.bars.map((item) => (
+                                      <article key={item.key} className="admin-engagement-hour-bar">
+                                        <div className="admin-engagement-hour-bar__head">
+                                          <span>{item.label}</span>
+                                          <strong>{item.value}</strong>
+                                        </div>
+                                        <div className="admin-engagement-hour-bar__track"><span style={{ width: `${Math.max(item.percent, 8)}%` }} /></div>
+                                      </article>
+                                    )) : <AdminEmptyState compact title="No hourly pattern yet" description="More tracked activity is needed before hourly behavior becomes readable." />}
+                                  </div>
+                                </article>
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Daily Activity</h2>
+                                    <span>Recent activity volume by day</span>
+                                  </div>
+                                  <div className="admin-engagement-interest-list">
+                                    {engagementDailyActivity.map((item) => (
+                                      <article key={item.key} className="admin-engagement-interest-item">
+                                        <div className="admin-engagement-interest-item__head">
+                                          <strong>{item.label}</strong>
+                                          <span>{item.value} events</span>
+                                        </div>
+                                        <div className="admin-engagement-interest-item__track"><span style={{ width: `${Math.max(item.percent, 6)}%` }} /></div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                </article>
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Button Clicks</h2>
+                                    <span>Most repeated interaction patterns</span>
+                                  </div>
+                                  <div className="admin-engagement-interest-list">
+                                    {engagementButtonClickRows.length > 0 ? engagementButtonClickRows.map((item) => (
+                                      <article key={item.label} className="admin-engagement-interest-item">
+                                        <div className="admin-engagement-interest-item__head">
+                                          <strong>{item.label}</strong>
+                                          <span>{item.value} clicks</span>
+                                        </div>
+                                        <div className="admin-engagement-interest-item__track"><span style={{ width: `${Math.max(item.percent, 6)}%` }} /></div>
+                                      </article>
+                                    )) : <AdminEmptyState compact title="No click clusters yet" description="Button click patterns will appear when enough interactive actions are captured." />}
+                                  </div>
+                                </article>
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementReferralCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Package Interest</h2>
+                                    <span>Observed package-related interactions</span>
+                                  </div>
+                                  <div className="admin-engagement-interest-list">
+                                    {engagementPackageInterestRows.length > 0 ? engagementPackageInterestRows.map((item) => (
+                                      <article key={item.label} className="admin-engagement-interest-item">
+                                        <div className="admin-engagement-interest-item__head">
+                                          <strong>{item.label}</strong>
+                                          <span>{item.value} interactions</span>
+                                        </div>
+                                        <div className="admin-engagement-interest-item__track"><span style={{ width: `${Math.max(item.percent, 6)}%` }} /></div>
+                                      </article>
+                                    )) : <AdminEmptyState compact title="No package pattern yet" description="Package intent needs more interactions before it can be charted." />}
+                                  </div>
+                                </article>
+                              </section>
+                            ) : null}
+
+                            {engagementProfileTab === "referrals" ? (
+                              <section className="admin-engagement-profile__secondary-grid">
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementReferralCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Referral Analytics</h2>
+                                    <span>Invitation performance and network value</span>
+                                  </div>
+                                  <div className="admin-engagement-kpi-grid admin-engagement-kpi-grid--compact">
+                                    {[
+                                      { label: "Invited Users", value: `${engagementProfile.referral.invitedUsers}` },
+                                      { label: "Referral Events", value: `${engagementProfile.referral.referralEvents}` },
+                                      { label: "Referral Clicks", value: `${engagementProfile.referral.referralClicks}` },
+                                      { label: "Successful Referrals", value: `${engagementProfile.referral.referralSuccesses}` },
+                                    ].map((item) => (
+                                      <article key={item.label} className="admin-engagement-kpi-tile">
+                                        <span>{item.label}</span>
+                                        <strong>{item.value}</strong>
+                                      </article>
+                                    ))}
+                                  </div>
+                                  <ul className="admin-metric-list">
+                                    <li><span>Referral code</span><b>{engagementProfile.referral.referralCode || "—"}</b></li>
+                                    <li><span>Used referral</span><b>{engagementProfile.referral.usedReferralCode || "—"}</b></li>
+                                    <li><span>Referral score</span><b>{engagementProfile.referralScore}/100</b></li>
+                                  </ul>
+                                </article>
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementRevenueCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Referral Network</h2>
+                                    <span>Simple performance ladder for this guest’s network effect</span>
+                                  </div>
+                                  <div className="admin-engagement-interest-list">
+                                    {engagementReferralNetworkRows.map((item) => (
+                                      <article key={item.label} className="admin-engagement-interest-item">
+                                        <div className="admin-engagement-interest-item__head">
+                                          <strong>{item.label}</strong>
+                                          <span>{item.value}</span>
+                                        </div>
+                                        <div className="admin-engagement-interest-item__track"><span style={{ width: `${Math.max(item.percent, 6)}%` }} /></div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                </article>
+                              </section>
+                            ) : null}
+
+                            {engagementProfileTab === "revenue" ? (
+                              !engagementProfile.revenue.tracked && !engagementProfile.attendance.tracked ? (
+                                <section className="admin-engagement-profile__secondary-grid">
+                                  <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info" style={{ gridColumn: "1 / -1" }}>
+                                    <div className="admin-widget__header">
+                                      <h2>Revenue &amp; Attendance</h2>
+                                      <span>Not available for this guest</span>
+                                    </div>
+                                    <AdminEmptyState
+                                      title="Revenue and attendance are not tracked for Landing users"
+                                      description="Payment and attendance data is only available for Telegram guests who have completed a booking. This guest was sourced from the landing form and has no associated payment or event records."
+                                    />
+                                  </article>
+                                </section>
+                              ) : (
+                                <section className="admin-engagement-profile__secondary-grid">
+                                  <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementRevenueCardTone(engagementProfile))}`}>
+                                    <div className="admin-widget__header">
+                                      <h2>Revenue Analytics</h2>
+                                      <span>Commercial value, booking outcomes, and payment depth</span>
+                                    </div>
+                                    <div className="admin-engagement-dual-metrics">
+                                      <article className="admin-engagement-dual-metrics__card">
+                                        <span>Lifetime value</span>
+                                        <strong>{formatCurrency(engagementProfile.revenue.totalPayments)}</strong>
+                                        <small>{engagementProfile.revenue.paidBookings} paid bookings · latest {formatDateLabel(engagementProfile.revenue.latestPaymentAt)}</small>
+                                      </article>
+                                      <article className="admin-engagement-dual-metrics__card">
+                                        <span>Attendance rate</span>
+                                        <strong>
+                                          {engagementProfile.attendance.attendanceCount + engagementProfile.attendance.noShowCount > 0
+                                            ? `${Math.round((engagementProfile.attendance.attendanceCount / (engagementProfile.attendance.attendanceCount + engagementProfile.attendance.noShowCount)) * 100)}%`
+                                            : "—"}
+                                        </strong>
+                                        <small>{engagementProfile.attendance.attendanceCount} attended · {engagementProfile.attendance.noShowCount} no-shows</small>
+                                      </article>
+                                    </div>
+                                    <ul className="admin-metric-list">
+                                      <li><span>Average booking value</span><b>{formatCurrency(engagementProfile.revenue.averageBooking)}</b></li>
+                                      <li><span>Cancelled bookings</span><b>{engagementProfile.revenue.cancelledBookings}</b></li>
+                                      <li><span>Paid bookings</span><b>{engagementProfile.revenue.paidBookings}</b></li>
+                                    </ul>
+                                  </article>
+                                  <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementAttendanceCardTone(engagementProfile))}`}>
+                                    <div className="admin-widget__header">
+                                      <h2>Attendance Analytics</h2>
+                                      <span>Reliability, no-show patterns, and attendance quality</span>
+                                    </div>
+                                    <ul className="admin-metric-list">
+                                      <li><span>Attendance count</span><b>{engagementProfile.attendance.attendanceCount}</b></li>
+                                      <li><span>No-show count</span><b>{engagementProfile.attendance.noShowCount}</b></li>
+                                      <li><span>Last attendance</span><b>{formatDateLabel(engagementProfile.attendance.lastAttendance)}</b></li>
+                                      <li><span>Reliability</span><b>{engagementProfile.attendance.attendanceQuality}</b></li>
+                                      <li><span>Loyalty score</span><b>{engagementProfile.loyaltyScore}/100</b></li>
+                                    </ul>
+                                  </article>
+                                </section>
+                              )
+                            ) : null}
+
+                            {engagementProfileTab === "notes" ? (
+                              <section className="admin-engagement-profile__workspace-grid">
+                                <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--info">
+                                  <div className="admin-widget__header">
+                                    <h2>Admin Tags</h2>
+                                    <span>Searchable tags for workflow and segmentation</span>
+                                  </div>
+                                  <input type="text" className="admin-crm-tag-input" placeholder="Search preset tags..." value={crmTagSearch} onChange={(event) => setCrmTagSearch(event.target.value)} />
+                                  <div className="admin-crm-tags">
+                                    {(engagementProfile.tags ?? []).map((item) => (
+                                      <span key={item.tag} className="admin-crm-tag">
+                                        {item.tag}
+                                        <button type="button" className="admin-crm-tag__remove" onClick={() => void handleRemoveCrmTag(item.tag)} aria-label={`Remove tag ${item.tag}`}>×</button>
+                                      </span>
+                                    ))}
+                                    {(engagementProfile.tags ?? []).length === 0 && <span className="admin-crm-tags__empty">No tags yet</span>}
+                                  </div>
+                                  <div className="admin-crm-tags__presets">
+                                    {filteredCrmPresets.map((preset) => {
+                                      const hasTag = (engagementProfile.tags ?? []).some((t) => t.tag === preset);
+                                      return (
+                                        <button
+                                          key={preset}
+                                          type="button"
+                                          className={`admin-crm-preset-tag ${hasTag ? "admin-crm-preset-tag--active" : ""}`}
+                                          onClick={() => {
+                                            if (hasTag) { void handleRemoveCrmTag(preset); return; }
+                                            if (!engagementProfile || crmTagSaving) return;
+                                            setCrmTagSaving(true);
+                                            setCrmTagError("");
+                                            addUserTag(engagementProfile.overview.source, engagementProfile.overview.id, preset)
+                                              .then((tags) => setEngagementProfile((prev) => prev ? { ...prev, tags } : prev))
+                                              .catch((err) => setCrmTagError(err instanceof Error ? err.message : "failed to add tag"))
+                                              .finally(() => setCrmTagSaving(false));
+                                          }}
+                                          disabled={crmTagSaving}
+                                        >
+                                          {preset.replace(/_/g, " ")}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="admin-crm-tags__add">
+                                    <input type="text" className="admin-crm-tag-input" placeholder="Custom tag..." value={crmTagInput} onChange={(e) => setCrmTagInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void handleAddCrmTag(); }} maxLength={60} />
+                                    <AdminButton type="button" variant="secondary" onClick={() => void handleAddCrmTag()} disabled={!crmTagInput.trim() || crmTagSaving}>Add</AdminButton>
+                                  </div>
+                                  {crmTagError ? <p className="admin-auth__error">{crmTagError}</p> : null}
+                                </article>
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementCampaignCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Internal Notes</h2>
+                                    <span>Newest notes first with author and audit context</span>
+                                  </div>
+                                  <div className="admin-crm-notes">
+                                    {(engagementProfile.notes ?? []).map((note) => (
+                                      <article key={note.id} className="admin-crm-note">
+                                        <div className="admin-crm-note__head">
+                                          <strong>{note.createdBy || "Admin"}</strong>
+                                          <span>{formatDateLabel(note.createdAt)}</span>
+                                          <button type="button" className="admin-crm-note__delete" onClick={() => void handleDeleteCrmNote(note.id)} aria-label="Delete note">Delete</button>
+                                        </div>
+                                        <p>{note.noteText}</p>
+                                      </article>
+                                    ))}
+                                    {(engagementProfile.notes ?? []).length === 0 && <AdminEmptyState compact title="No notes yet" description="Add the first internal note about this guest." />}
+                                  </div>
+                                  <div className="admin-crm-notes__add">
+                                    <textarea className="admin-crm-note-input" placeholder="Write an internal note..." value={crmNoteInput} onChange={(e) => setCrmNoteInput(e.target.value)} rows={4} maxLength={2000} />
+                                    <AdminButton type="button" variant="secondary" onClick={() => void handleAddCrmNote()} disabled={!crmNoteInput.trim() || crmNoteSaving}>{crmNoteSaving ? "Saving..." : "Add Note"}</AdminButton>
+                                  </div>
+                                  {crmNoteError ? <p className="admin-auth__error">{crmNoteError}</p> : null}
+                                </article>
+                              </section>
+                            ) : null}
+
+                            {engagementProfileTab === "campaigns" ? (
+                              <section className="admin-info-grid admin-info-grid--single">
+                                <article className={`admin-widget admin-widget--fit admin-engagement-card ${getEngagementCardToneClass(getEngagementCampaignCardTone(engagementProfile))}`}>
+                                  <div className="admin-widget__header">
+                                    <h2>Campaign Interactions</h2>
+                                    <span>Polls, quizzes, ratings, and other stored campaign responses</span>
+                                  </div>
+                                  {engagementProfile.campaignResponses.length > 0 ? (
+                                    <ul className="admin-metric-list">
+                                      {engagementProfile.campaignResponses.map((resp, idx) => (
+                                        <li key={idx}>
+                                          <span>
+                                            <b>{resp.campaignTitle}</b>
+                                            {resp.question ? <> · {resp.question}</> : null}
+                                            {resp.choiceLabel ? <> → {resp.choiceLabel}</> : null}
+                                            {resp.messageType === "quiz" ? (
+                                              <AdminBadge tone={getCampaignResponseTone(resp.correct, resp.messageType)}>{resp.correct ? "Correct" : "Wrong"}</AdminBadge>
+                                            ) : null}
+                                          </span>
+                                          <b><AdminBadge tone="default">{resp.messageType}</AdminBadge></b>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : <AdminEmptyState compact title="No campaign interactions yet" description="This guest has not responded to tracked campaigns yet." />}
+                                </article>
+                              </section>
+                            ) : null}
+
+                            {engagementProfileTab === "events" ? (
+                              <article className="admin-widget admin-widget--fit admin-engagement-card admin-engagement-card--timeline admin-engagement-card--info">
+                                <div className="admin-widget__header">
+                                  <h2>Raw Events</h2>
+                                  <span>Paginated, searchable raw event feed for verification and support</span>
+                                </div>
+                                <div className="admin-engagement-timeline__toolbar">
+                                  <div className="admin-topbar__search admin-engagement-users__search">
+                                    <span aria-hidden="true">⌕</span>
+                                    <input type="search" value={engagementTimelineSearch} onChange={(event) => setEngagementTimelineSearch(event.target.value)} placeholder="Search event name or detail" />
+                                  </div>
+                                  <label className="admin-engagement-timeline__page-size">
+                                    <span>Page size</span>
+                                    <select value={engagementTimelinePageSize} onChange={(event) => setEngagementTimelinePageSize(Number(event.target.value))}>
+                                      {[20, 50, 100].map((size) => <option key={size} value={size}>{size} / page</option>)}
+                                    </select>
+                                  </label>
+                                  <div className="admin-engagement-timeline__meta">
+                                    <span>{engagementProfile.eventsPage?.total ?? 0} total events</span>
+                                    <span>{engagementVisibleTimeline.length} loaded</span>
+                                    <span>Page {engagementTimelineCurrentPage} of {engagementTimelineTotalPages}</span>
+                                  </div>
+                                </div>
+                                {engagementVisibleTimeline.length > 0 ? (
+                                  <div className="admin-engagement-profile__timeline">
+                                    {engagementVisibleTimeline.map((item) => (
+                                      <article key={item.key} className="admin-engagement-timeline__item">
+                                        <div className="admin-engagement-timeline__head">
+                                          <div className="admin-engagement-timeline__title">
+                                            <strong>{item.title}</strong>
+                                            {item.itemCount > 1 ? <AdminBadge tone="gold">{item.itemCount} grouped</AdminBadge> : null}
+                                            <AdminBadge tone="default">{engagementProfile.overview.source === "telegram" ? "Telegram" : "Landing"}</AdminBadge>
+                                          </div>
+                                          <AdminBadge tone={getTimelineToneBadge(item.tone)}>{formatDateLabel(item.occurredAt)}</AdminBadge>
+                                        </div>
+                                        <p>{item.description}</p>
+                                      </article>
+                                    ))}
+                                  </div>
+                                ) : <AdminEmptyState compact title="No raw events yet" description="Once tracked events land for this guest, the feed will appear here." />}
+                                <div className="admin-engagement-timeline__pagination">
+                                  <AdminButton type="button" variant="ghost" onClick={() => setEngagementTimelinePage((previous) => Math.max(1, previous - 1))} disabled={engagementTimelineCurrentPage <= 1 || engagementProfileLoading}>Previous</AdminButton>
+                                  <AdminButton type="button" variant="ghost" onClick={() => setEngagementTimelinePage((previous) => Math.min(engagementTimelineTotalPages, previous + 1))} disabled={engagementTimelineCurrentPage >= engagementTimelineTotalPages || engagementProfileLoading}>Next</AdminButton>
+                                </div>
+                              </article>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </article>
+                    </section>
+                  ) : engagementTab === "analytics" ? (
+                    <>
+                      <article className="admin-widget admin-widget--fit admin-engagement__filters-card">
+                        <AdminFilterBar className="admin-users__controls admin-engagement__filters">
+                          <TextField
+                            label="Start date"
+                            type="date"
+                            value={engagementFilters.startDate}
+                            onChange={(event) => setEngagementFilters((prev) => ({ ...prev, startDate: event.target.value }))}
+                            InputLabelProps={{ shrink: true }}
+                            className="admin-engagement__field"
+                            sx={engagementFieldSx}
+                          />
+                          <TextField
+                            label="End date"
+                            type="date"
+                            value={engagementFilters.endDate}
+                            onChange={(event) => setEngagementFilters((prev) => ({ ...prev, endDate: event.target.value }))}
+                            InputLabelProps={{ shrink: true }}
+                            className="admin-engagement__field"
+                            sx={engagementFieldSx}
+                          />
+                          <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                            <Select
+                              value={engagementFilters.source}
+                              onChange={(event) => setEngagementFilters((prev) => ({ ...prev, source: event.target.value as EngagementFilterState["source"] }))}
+                              displayEmpty
+                            >
+                              {engagementSourceOptions.map((option) => (
+                                <MenuItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                          <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                            <Select
+                              value={engagementFilters.dinnerId}
+                              onChange={(event) => setEngagementFilters((prev) => ({ ...prev, dinnerId: event.target.value }))}
+                              displayEmpty
+                            >
+                              <MenuItem value="all">All dinners</MenuItem>
+                              {(engagementAnalytics?.filterOptions.dinners ?? []).map((option) => (
+                                <MenuItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                          <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                            <Select
+                              value={engagementFilters.package}
+                              onChange={(event) => setEngagementFilters((prev) => ({ ...prev, package: event.target.value }))}
+                              displayEmpty
+                            >
+                              <MenuItem value="all">All packages</MenuItem>
+                              {(engagementAnalytics?.filterOptions.packages ?? []).map((option) => (
+                                <MenuItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </AdminFilterBar>
+                        <div className="admin-engagement__filter-meta">
+                          <div className="admin-engagement__filter-copy">
+                            <strong>Analytics scope</strong>
+                            <span>Filter by time, source, dinner, or package to isolate demand and conversion patterns.</span>
+                          </div>
+                          <div className="admin-engagement__filter-chips" aria-label="Active engagement filters">
+                            {engagementFilterChips.map((chip) => (
+                              <span key={chip} className="admin-engagement__filter-chip" title={chip}>
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {engagementError ? <p className="admin-auth__error">{engagementError}</p> : null}
+                      </article>
+
+                      {engagementLoading && !engagementAnalytics ? (
+                        <p className="admin-dashboard__state">Loading engagement analytics...</p>
+                      ) : null}
+
+                      {!engagementLoading && !engagementAnalytics ? (
+                        <AdminEmptyState
+                          title="No engagement analytics yet"
+                          description="Start tracking more visitor and bot activity to unlock dinner demand, package intent, button behavior, and funnel conversion insights."
+                        />
+                      ) : null}
+
+                      {engagementAnalytics ? (
+                        <>
+                          {engagementKpiCards.length > 0 ? (
+                            <section className="admin-engagement__summary-grid">
+                              {engagementKpiCards.map((card) => (
+                                <article key={card.key} className="admin-engagement__summary-card admin-engagement-kpi">
+                                  <div className="admin-engagement-kpi__top">
+                                    <span className="admin-engagement__summary-label">{card.label}</span>
+                                    <span className={`admin-engagement-kpi__trend admin-engagement-kpi__trend--${card.trend.tone}`}>
+                                      {card.trend.text}
+                                    </span>
+                                  </div>
+                                  <strong className="admin-engagement-kpi__value">{card.value}</strong>
+                                  <span className="admin-engagement-kpi__note">{card.note}</span>
+                                  <CustomMiniSparkline
+                                    values={card.sparkline}
+                                    color={card.trend.tone === "danger" ? "#b45d5d" : card.trend.tone === "emerald" ? "#4c9f87" : "#c9a34a"}
+                                  />
+                                </article>
+                              ))}
+                            </section>
+                          ) : null}
+
+                          <section className="admin-engagement-grid">
+                            <article className="admin-widget admin-engagement-chart admin-engagement-chart--source">
+                              <div className="admin-widget__header admin-engagement-chart__header">
+                                <div>
+                                  <p className="admin-engagement-chart__eyebrow">Source Mix</p>
+                                  <h2>Telegram vs Landing</h2>
+                                </div>
+                                <span>{formatCompactNumber(sourceUsersTotal)} tracked users</span>
+                              </div>
+                              <div className="admin-engagement-chart__frame admin-engagement-chart__frame--compact">
+                                {sourcePerformance.length > 0 ? (
+                                  <div className="admin-engagement-source">
+                                    <CustomStackedSourceBar
+                                      items={sourcePerformance.map((item) => ({
+                                        key: item.key,
+                                        label: item.label,
+                                        value: item.users,
+                                        color: item.key === "telegram" ? "#4c9f87" : "#c9a34a",
+                                      }))}
+                                    />
+                                    <div className="admin-engagement-source__stats">
+                                      {sourcePerformance.map((item) => (
+                                        <article key={item.key} className="admin-engagement-source__card">
+                                          <div className="admin-engagement-source__title-row">
+                                            <span className="admin-engagement-source__title">{item.label}</span>
+                                            <span className={`admin-badge ${item.key === "telegram" ? "admin-badge--emerald" : "admin-badge--gold"}`}>
+                                              {sourceUsersTotal > 0 ? `${Math.round((item.users / sourceUsersTotal) * 100)}% share` : "0% share"}
+                                            </span>
+                                          </div>
+                                          <div className="admin-engagement-source__metrics">
+                                            <div><span>Users</span><strong>{formatCompactNumber(item.users)}</strong></div>
+                                            <div><span>Applications</span><strong>{formatCompactNumber(item.applications)}</strong></div>
+                                            <div><span>Payments</span><strong>{formatCompactNumber(item.paidUsers)}</strong></div>
+                                            <div>
+                                              <span title={item.conversionBase}>Conversion</span>
+                                              <strong title={item.conversionBase}>{item.conversionRate.toFixed(1)}%</strong>
+                                            </div>
+                                          </div>
+                                        </article>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <AdminEmptyState compact title="Not enough data yet" description="Tracking is working, but this slice needs more users before source performance becomes useful." />
+                                )}
+                              </div>
+                            </article>
+
+                            <article className="admin-widget admin-engagement-chart">
+                              <div className="admin-widget__header admin-engagement-chart__header">
+                                <div>
+                                  <p className="admin-engagement-chart__eyebrow">Timing</p>
+                                  <h2>Peak Hours</h2>
+                                </div>
+                                <span>{bestEngagementHour ? `Best hour: ${bestEngagementHour.label}` : "Hourly engagement density"}</span>
+                              </div>
+                              <div className="admin-engagement-chart__frame">
+                                {hourlyActivity.length >= 3 && hourlyActivity.reduce((sum, item) => sum + item.events, 0) >= 6 ? (
+                                  <div className="admin-engagement-peak">
+                                    <CustomGroupedHistogram
+                                      points={hourlyActivity.map((item) => ({
+                                        key: item.key,
+                                        label: item.label,
+                                        firstValue: item.events,
+                                        secondValue: item.activeUsers,
+                                      }))}
+                                      firstLabel="Events"
+                                      secondLabel="Active Users"
+                                      firstColor="#c9a34a"
+                                      secondColor="#4c9f87"
+                                    />
+                                    {bestEngagementHour ? (
+                                      <div className="admin-engagement-peak__summary">
+                                        <span className="admin-badge admin-badge--gold">Best hour</span>
+                                        <strong>{bestEngagementHour.label}</strong>
+                                        <span>{formatCompactNumber(bestEngagementHour.events)} events and {formatCompactNumber(bestEngagementHour.activeUsers)} active users</span>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <AdminEmptyState compact title="Not enough activity data yet" description="Tracking is working. This view needs more hourly event volume before a histogram becomes reliable." />
+                                )}
+                              </div>
+                            </article>
+
+                            <article className="admin-widget admin-engagement-chart">
+                              <div className="admin-widget__header admin-engagement-chart__header">
+                                <div>
+                                  <p className="admin-engagement-chart__eyebrow">Demand</p>
+                                  <h2>Most Viewed Dinners</h2>
+                                </div>
+                                <span>Views, applications, and conversion by dinner</span>
+                              </div>
+                              <div className="admin-engagement-chart__frame">
+                                {dinnerPerformance.length > 0 ? (
+                                  <div className="admin-engagement-list">
+                                    {dinnerPerformance.map((item) => (
+                                      <article key={item.key} className="admin-engagement-list__row">
+                                        <div className="admin-engagement-list__main">
+                                          <strong title={item.label}>{item.label}</strong>
+                                          <div className="admin-engagement-list__meta">
+                                            <span>{formatCompactNumber(item.views)} views</span>
+                                            <span>{formatCompactNumber(item.applications)} applications</span>
+                                            <span>{item.conversionRate.toFixed(1)}% conversion</span>
+                                          </div>
+                                        </div>
+                                        <div className="admin-engagement-list__progress">
+                                          <span style={{ width: `${Math.max(item.conversionRate, 4)}%` }} />
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <AdminEmptyState compact title="Not enough data yet" description="Need more dinner views before this page can rank demand and conversion by dinner." />
+                                )}
+                              </div>
+                            </article>
+
+                            <article className="admin-widget admin-engagement-chart">
+                              <div className="admin-widget__header admin-engagement-chart__header">
+                                <div>
+                                  <p className="admin-engagement-chart__eyebrow">Intent</p>
+                                  <h2>Most Selected Packages</h2>
+                                </div>
+                                <span>Package share across the selected audience</span>
+                              </div>
+                              <div className="admin-engagement-chart__frame">
+                                {packageSelections.length > 0 ? (
+                                  <div className="admin-engagement-list">
+                                    {packageSelections.map((item) => {
+                                      const totalSelections = packageSelections.reduce((sum, entry) => sum + entry.value, 0);
+                                      const share = totalSelections > 0 ? (item.value / totalSelections) * 100 : 0;
+                                      return (
+                                        <article key={item.key} className="admin-engagement-list__row">
+                                          <div className="admin-engagement-list__main">
+                                            <strong title={item.label}>{item.label}</strong>
+                                            <div className="admin-engagement-list__meta">
+                                              <span>{formatCompactNumber(item.value)} selections</span>
+                                              <span>{share.toFixed(1)}% share</span>
+                                            </div>
+                                          </div>
+                                          <div className="admin-engagement-list__progress admin-engagement-list__progress--gold">
+                                            <span style={{ width: `${Math.max(share, 4)}%` }} />
+                                          </div>
+                                        </article>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <AdminEmptyState compact title="Not enough data yet" description="Package intent will appear here once guests start comparing and selecting offers." />
+                                )}
+                              </div>
+                            </article>
+
+                            <article className="admin-widget admin-engagement-chart">
+                              <div className="admin-widget__header admin-engagement-chart__header">
+                                <div>
+                                  <p className="admin-engagement-chart__eyebrow">Friction</p>
+                                  <h2>Most Clicked Buttons</h2>
+                                </div>
+                                <span>High-friction and high-intent interaction points</span>
+                              </div>
+                              <div className="admin-engagement-chart__frame">
+                                {buttonPerformance.length > 0 ? (
+                                  <div className="admin-engagement-list">
+                                    {buttonPerformance.map((item) => (
+                                      <article key={item.key} className="admin-engagement-list__row">
+                                        <div className="admin-engagement-list__main">
+                                          <strong title={item.label}>{item.label}</strong>
+                                          <div className="admin-engagement-list__meta">
+                                            <span>{formatCompactNumber(item.clicks)} clicks</span>
+                                            <span>{formatCompactNumber(item.uniqueUsers)} users</span>
+                                            <span>{formatCompactNumber(item.applicantOverlap)} later applied</span>
+                                            <span>{item.applicantOverlapRate.toFixed(1)}% applicant overlap</span>
+                                          </div>
+                                        </div>
+                                        <div className="admin-engagement-list__progress admin-engagement-list__progress--neutral">
+                                          <span style={{ width: `${Math.max(item.applicantOverlapRate, 4)}%` }} />
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <AdminEmptyState compact title="Not enough data yet" description="Useful click patterns will appear here once more buttons are used across the journey." />
+                                )}
+                              </div>
+                            </article>
+
+                            <article className="admin-widget admin-engagement-chart admin-engagement-chart--funnel">
+                              <div className="admin-widget__header admin-engagement-chart__header">
+                                <div>
+                                  <p className="admin-engagement-chart__eyebrow">Progression</p>
+                                  <h2>Guest Journey</h2>
+                                </div>
+                                <span>How guests move from interest to attendance</span>
+                              </div>
+                              {currentFunnel.length > 0 && currentFunnel[0]?.users > 0 ? (
+                                <div className="admin-engagement-chart__frame">
+                                  <div className="admin-engagement-funnel">
+                                    {currentFunnel.map((item, index) => (
+                                      <article key={item.key} className="admin-engagement-funnel__step">
+                                        <div className="admin-engagement-funnel__head">
+                                          <span>{index + 1}</span>
+                                          <strong>{item.label}</strong>
+                                        </div>
+                                        <div className="admin-engagement-funnel__metrics">
+                                          <b>{formatCompactNumber(item.users)} users</b>
+                                          <span>{`${formatCompactNumber(item.users)} of ${formatCompactNumber(currentFunnel[0]?.users ?? item.users)} viewers`}</span>
+                                          <span>{index === 0 ? "Dinner Viewers" : `${item.dropOff.toFixed(1)}% guests lost at this step`}</span>
+                                        </div>
+                                        <div className="admin-engagement-funnel__track">
+                                          <span style={{ width: `${Math.max(item.percent, 4)}%` }} />
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <AdminEmptyState compact title="Not enough data yet" description="Need more tracked guest journey events before this view can show reliable step-to-step movement." />
+                              )}
+                            </article>
+                          </section>
+
+                          <section className="admin-info-grid admin-info-grid--single">
+                            <article className="admin-widget admin-widget--fit">
+                              <div className="admin-widget__header">
+                                <h2>Key Insights</h2>
+                                <span>What deserves attention next</span>
+                              </div>
+                              <div className="admin-engagement-insights">
+                                {engagementKeyInsights.map((item) => (
+                                  <article key={item.label} className="admin-engagement-insights__item">
+                                    <span>{item.label}</span>
+                                    <strong>{item.value}</strong>
+                                    <p>{item.detail}</p>
+                                  </article>
+                                ))}
+                              </div>
+                            </article>
+                          </section>
+                        </>
+                      ) : null}
+
+                    </>
+                  ) : engagementTab === "users" ? (
+                    <section className="admin-engagement-users">
+                      <article className="admin-widget admin-widget--fit">
+                        <AdminFilterBar className="admin-users__controls admin-engagement__filters">
+                          <div className="admin-users__switch" role="tablist" aria-label="Engagement user source">
+                            {engagementUsersSourceOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                className={`admin-users__switch-btn ${option.value === "telegram" ? "admin-users__switch-btn--telegram" : "admin-users__switch-btn--landing"} ${engagementUsersSource === option.value ? "admin-users__switch-btn--active" : ""}`}
+                                type="button"
+                                onClick={() => setEngagementUsersSource(option.value)}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="admin-topbar__search admin-engagement-users__search">
+                            <span aria-hidden="true">⌕</span>
+                            <input
+                              type="search"
+                              value={engagementUsersSearch}
+                              onChange={(event) => setEngagementUsersSearch(event.target.value)}
+                              placeholder="Search name, username, or phone"
+                            />
+                          </div>
+                          <span className="admin-toolbar__meta">{engagementUsersTotal} users loaded for CRM review</span>
+                        </AdminFilterBar>
+                        {engagementUsersError ? <p className="admin-auth__error">{engagementUsersError}</p> : null}
+                      </article>
+
+                      <section className="admin-engagement-users__layout">
+                        <article className="admin-widget admin-widget--fit">
+                          <div className="admin-widget__header">
+                            <h2>User List</h2>
+                            <span>Relationship health, commercial value, and latest activity</span>
+                          </div>
+                          {engagementUsersLoading && engagementUsers.length === 0 ? (
+                            <p className="admin-dashboard__state">Loading engagement users...</p>
+                          ) : null}
+                          {!engagementUsersLoading && engagementUsers.length === 0 ? (
+                            <AdminEmptyState
+                              compact
+                              title="No users match this slice"
+                              description="Try another source or search term to surface a different relationship segment."
+                            />
+                          ) : null}
+                          <div className="admin-engagement-users__list" role="list" aria-label="Engagement users">
+                            {engagementUsers.map((item) => {
+                              const isSelected = item.id === selectedEngagementUserId;
+                              return (
+                                <button
+                                  key={`${item.source}-${item.id}`}
+                                  type="button"
+                                  className={`admin-engagement-user-card ${isSelected ? "admin-engagement-user-card--active" : ""}`}
+                                  onClick={() => setSelectedEngagementUserId(item.id)}
+                                >
+                                  <div className="admin-engagement-user-card__head">
+                                    <div className="admin-engagement-user-card__identity">
+                                      <strong>{item.name}</strong>
+                                      <span>{item.username ? formatTelegramUsername(item.username) : item.phone || "No contact"}</span>
+                                    </div>
+                                    <AdminBadge tone={getEngagementScoreTone(item.engagementScore)}>
+                                      Score {item.engagementScore}
+                                    </AdminBadge>
+                                  </div>
+                                  <div className="admin-engagement-user-card__meta">
+                                    <span>{item.phone || "No phone"}</span>
+                                    <AdminBadge tone={getBookingToneByStatus(item.status)}>{formatEngagementUserStatus(item.source, item.status)}</AdminBadge>
+                                  </div>
+                                  <div className="admin-engagement-user-card__stats">
+                                    <span>{item.applications} apps</span>
+                                    <span>{formatCurrency(item.payments)} paid</span>
+                                    <span>{item.referrals} referrals</span>
+                                    <span>{item.points} points</span>
+                                  </div>
+                                  <div className="admin-engagement-user-card__foot">
+                                    <span>Last activity</span>
+                                    <strong>{formatDateLabel(item.lastActivityAt || item.createdAt)}</strong>
+                                  </div>
+                                  <div className="admin-engagement-user-card__actions">
+                                    <button
+                                      type="button"
+                                      className="admin-engagement-inline-copy"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openFullEngagementProfile(item.id, item.source);
+                                      }}
+                                    >
+                                      Open Full Profile
+                                    </button>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </article>
+
+                        <article className="admin-widget admin-widget--fit">
+                          <div className="admin-widget__header">
+                            <h2>User Preview</h2>
+                            <span>{selectedEngagementListItem ? "Quick relationship snapshot before opening the full profile" : "Select a user to preview key signals"}</span>
+                          </div>
+                          {!selectedEngagementListItem ? (
+                            <AdminEmptyState
+                              compact
+                              title="No user selected"
+                              description="Choose a user from the list to see the preview card and open the full CRM profile."
+                            />
+                          ) : (
+                            <div className="admin-engagement-user-preview">
+                              <div className="admin-engagement-user-preview__hero">
+                                <div className="admin-engagement-user-preview__copy">
+                                  <p className="admin-modal__eyebrow">{selectedEngagementListItem.source === "telegram" ? "Telegram User" : "Landing User"}</p>
+                                  <h3>{selectedEngagementListItem.name}</h3>
+                                  <p>{selectedEngagementListItem.username ? formatTelegramUsername(selectedEngagementListItem.username) : selectedEngagementListItem.phone || "No contact on file"}</p>
+                                </div>
+                                <div className="admin-booking-manager__summary">
+                                  <AdminBadge tone={getBookingToneByStatus(selectedEngagementListItem.status)}>
+                                    {formatEngagementUserStatus(selectedEngagementListItem.source, selectedEngagementListItem.status)}
+                                  </AdminBadge>
+                                  <AdminBadge tone={getEngagementScoreTone(selectedEngagementListItem.engagementScore)}>
+                                    Score {selectedEngagementListItem.engagementScore}
+                                  </AdminBadge>
+                                </div>
+                              </div>
+                              <div className="admin-engagement-kpi-grid admin-engagement-kpi-grid--compact">
+                                {[
+                                  { label: "Applications", value: `${selectedEngagementListItem.applications}` },
+                                  { label: "Payments", value: formatCurrency(selectedEngagementListItem.payments) },
+                                  { label: "Referrals", value: `${selectedEngagementListItem.referrals}` },
+                                  { label: "Points", value: `${selectedEngagementListItem.points}` },
+                                ].map((item) => (
+                                  <article key={item.label} className="admin-engagement-kpi-tile">
+                                    <span>{item.label}</span>
+                                    <strong>{item.value}</strong>
+                                  </article>
+                                ))}
+                              </div>
+                              <div className="admin-engagement-user-preview__meta">
+                                <span>Phone</span>
+                                <strong>{selectedEngagementListItem.phone || "—"}</strong>
+                                <span>Last activity</span>
+                                <strong>{formatDateLabel(selectedEngagementListItem.lastActivityAt || selectedEngagementListItem.createdAt)}</strong>
+                              </div>
+                              <AdminButton
+                                type="button"
+                                variant="primary"
+                                onClick={() => openFullEngagementProfile(selectedEngagementListItem.id, selectedEngagementListItem.source)}
+                              >
+                                Open Full Profile
+                              </AdminButton>
+                            </div>
+                          )}
+                        </article>
+                      </section>
+                    </section>
+                  ) : engagementTab === "campaigns" ? (
+                    <section className="admin-engagement-users">
+                      {/* Marketing Center summary KPI bar */}
+                      {campaigns.length > 0 ? (
+                        <article className="admin-widget admin-widget--fit">
+                          <div className="admin-widget__header">
+                            <h2>Marketing Center</h2>
+                            <span>Aggregate performance · {campaignsTotal} campaigns</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "4px 0 8px" }}>
+                            {[
+                              { label: "Total Sent", value: campaigns.reduce((s, c) => s + c.metrics.sent, 0).toLocaleString() },
+                              { label: "Clicks", value: campaigns.reduce((s, c) => s + c.metrics.buttonClicks, 0).toLocaleString() },
+                              { label: "Applications", value: campaigns.reduce((s, c) => s + c.metrics.applicationsAfter, 0).toLocaleString() },
+                              { label: "Payments", value: campaigns.reduce((s, c) => s + c.metrics.paymentsAfter, 0).toLocaleString() },
+                              { label: "Revenue", value: formatCurrency(campaigns.reduce((s, c) => s + c.metrics.revenueAfter, 0)) },
+                            ].map((kpi) => (
+                              <div key={kpi.label} style={{ flex: "1 1 120px", background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.15)", borderRadius: 12, padding: "10px 16px" }}>
+                                <div style={{ fontSize: 11, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.06em" }}>{kpi.label}</div>
+                                <div style={{ fontSize: 20, fontWeight: 700, color: "#d4af37", marginTop: 2 }}>{kpi.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ) : null}
+
+                      <article className="admin-widget admin-widget--fit">
+                        <AdminFilterBar className="admin-users__controls admin-engagement__filters">
+                          <div className="admin-users__switch" role="tablist" aria-label="Campaign status filter">
+                            {[
+                              { value: "all", label: "All" },
+                              { value: "draft", label: "Draft" },
+                              { value: "scheduled", label: "Scheduled" },
+                              { value: "sending", label: "Sending" },
+                              { value: "completed", label: "Completed" },
+                              { value: "cancelled", label: "Cancelled" },
+                            ].map((option) => (
+                              <button
+                                key={option.value}
+                                className={`admin-users__switch-btn ${campaignStatusFilter === option.value ? "admin-users__switch-btn--active" : ""}`}
+                                type="button"
+                                onClick={() => setCampaignStatusFilter(option.value as CampaignStatusFilter)}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="admin-topbar__search admin-engagement-users__search">
+                            <span aria-hidden="true">⌕</span>
+                            <input
+                              type="search"
+                              value={campaignSearchQuery}
+                              onChange={(event) => setCampaignSearchQuery(event.target.value)}
+                              placeholder="Search campaigns"
+                            />
+                          </div>
+                          <AdminButton type="button" variant="secondary" onClick={handleOpenNewCampaign}>
+                            New Campaign
+                          </AdminButton>
+                          <span className="admin-toolbar__meta">{campaignsTotal} campaigns</span>
+                        </AdminFilterBar>
+                        {campaignsError ? <p className="admin-auth__error">{campaignsError}</p> : null}
+                        {campaignComposerError ? <p className="admin-auth__error">{campaignComposerError}</p> : null}
+                      </article>
+
+                      <section className="admin-engagement-users__layout">
+                        {/* Campaign list */}
+                        <article className="admin-widget admin-widget--fit">
+                          <div className="admin-widget__header">
+                            <h2>Queue</h2>
+                            <span>Select to open detail or composer</span>
+                          </div>
+                          {campaignsLoading && campaigns.length === 0 ? (
+                            <p className="admin-dashboard__state">Loading campaigns...</p>
+                          ) : null}
+                          {!campaignsLoading && campaigns.length === 0 ? (
+                            <AdminEmptyState compact title="No campaigns yet" description="Create the first Telegram engagement campaign to start building a reusable outreach library." />
+                          ) : null}
+                          <div className="admin-engagement-users__list" role="list" aria-label="Campaigns">
+                            {campaigns.map((item) => {
+                              const isSelected = item.id === selectedCampaignId;
+                              const sentRate = item.metrics.total > 0 ? Math.round((item.metrics.sent / item.metrics.total) * 100) : 0;
+                              const clickRate = item.metrics.sent > 0 ? Math.round((item.metrics.buttonClicks / item.metrics.sent) * 100) : 0;
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  className={`admin-engagement-user-card${isSelected ? " admin-engagement-user-card--active" : ""}`}
+                                  onClick={() => setSelectedCampaignId(item.id)}
+                                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title}</div>
+                                    <div style={{ fontSize: 11, opacity: 0.5, marginTop: 1 }}>{humanizeLabel(item.messageType)} · {humanizeLabel(item.audience.audienceType)} · {item.targetUsers} users</div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: 8, fontSize: 11, opacity: 0.75, flexShrink: 0 }}>
+                                    <span>{sentRate}%</span>
+                                    <span>{clickRate}% clk</span>
+                                    <span>{item.metrics.applicationsAfter} app</span>
+                                    <span style={{ color: "#d4af37" }}>{formatCurrency(item.metrics.revenueAfter)}</span>
+                                  </div>
+                                  <AdminBadge tone={getBookingToneByStatus(item.status)}>{humanizeLabel(item.status)}</AdminBadge>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </article>
+
+                        {/* Right panel */}
+                        <article className="admin-widget admin-widget--fit">
+                          {campaignComposerLoading ? <p className="admin-dashboard__state">Loading composer...</p> : null}
+                          {campaignComposerOpen ? (
+                            <div className="admin-campaign-composer">
+                              {/* Composer header + tab bar */}
+                              <div className="admin-widget__header admin-campaign-composer__header">
+                                <h2>{campaignComposer.id != null ? "Edit Campaign" : "New Campaign"}</h2>
+                                <div className="admin-users__switch" role="tablist" aria-label="Composer section">
+                                  {(["content", "audience", "schedule", "preview"] as CampaignComposerTab[]).map((tab) => (
+                                    <button
+                                      key={tab}
+                                      className={`admin-users__switch-btn${campaignComposerTab === tab ? " admin-users__switch-btn--active" : ""}`}
+                                      type="button"
+                                      onClick={() => setCampaignComposerTab(tab)}
+                                    >
+                                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Templates quick-start (content tab, new campaign only) */}
+                              {campaignComposerTab === "content" && campaignComposer.id == null ? (
+                                <div className="admin-campaign-composer__templates">
+                                  <span className="admin-campaign-composer__section-label admin-campaign-composer__section-label--inline">Templates</span>
+                                  {[
+                                    { id: "reactivation", icon: "↩", label: "Re-engagement", audienceType: "passive_users", messageType: "text" as const, objective: "retention" as CampaignObjective, text: "We miss you at Secret Dinner! 🍽️ Our next exclusive gathering is almost full — reserve your seat before it's gone." },
+                                    { id: "vip", icon: "⭐", label: "VIP Invite", audienceType: "vip_users", messageType: "text" as const, objective: "conversion" as CampaignObjective, text: "As a VIP member, you have exclusive early access to our upcoming dinner. Tap below to claim your spot." },
+                                    { id: "rating", icon: "📊", label: "Post-event Rating", audienceType: "paid_users", messageType: "rating" as const, objective: "engagement" as CampaignObjective, pollQuestion: "How would you rate your experience at our last dinner?" },
+                                    { id: "referral", icon: "🔗", label: "Referral Push", audienceType: "referral_users", messageType: "text" as const, objective: "awareness" as CampaignObjective, text: "You've been an amazing ambassador! 🙌 Know someone who'd love Secret Dinner? Share your invite and earn rewards." },
+                                  ].map((tpl) => (
+                                    <button
+                                      key={tpl.id}
+                                      type="button"
+                                      style={{ display: "flex", gap: 4, alignItems: "center", padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(212,175,55,0.2)", background: "rgba(212,175,55,0.06)", color: "#f5f1e8", cursor: "pointer", fontSize: 12 }}
+                                      onClick={() => setCampaignComposer((prev) => ({
+                                        ...prev,
+                                        audienceType: tpl.audienceType,
+                                        messageType: tpl.messageType,
+                                        objective: tpl.objective,
+                                        text: (tpl as { text?: string }).text ?? prev.text,
+                                        pollQuestion: (tpl as { pollQuestion?: string }).pollQuestion ?? prev.pollQuestion,
+                                        title: prev.title || tpl.label,
+                                      }))}
+                                    >
+                                      <span>{tpl.icon}</span>
+                                      <span>{tpl.label}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              {/* Content tab */}
+                              {campaignComposerTab === "content" ? (
+                                <div className="admin-campaign-composer__stack">
+
+                                  {/* — Basic info — */}
+                                  <div className="admin-campaign-composer__section">
+                                    <div className="admin-campaign-composer__section-label">Campaign Info</div>
+                                    <TextField label="Campaign title" value={campaignComposer.title} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, title: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                    <TextField label="Internal description" value={campaignComposer.description} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, description: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                  </div>
+
+                                  {/* — Message type grid picker — */}
+                                  <div className="admin-campaign-composer__section">
+                                    <div className="admin-campaign-composer__section-label">Message Type</div>
+                                    <div className="admin-campaign-composer__message-grid">
+                                      {([
+                                        { value: "text",     icon: "📝", label: "Text" },
+                                        { value: "photo",    icon: "📷", label: "Photo" },
+                                        { value: "video",    icon: "🎬", label: "Video" },
+                                        { value: "document", icon: "📄", label: "Document" },
+                                        { value: "audio",    icon: "🎵", label: "Audio" },
+                                        { value: "voice",    icon: "🎤", label: "Voice" },
+                                        { value: "location", icon: "📍", label: "Location" },
+                                        { value: "contact",  icon: "👤", label: "Contact" },
+                                        { value: "poll",     icon: "📊", label: "Poll" },
+                                        { value: "quiz",     icon: "🧠", label: "Quiz" },
+                                        { value: "rating",   icon: "⭐", label: "Rating" },
+                                        { value: "image",    icon: "🖼️",  label: "Image" },
+                                      ] as Array<{ value: CampaignComposerState["messageType"]; icon: string; label: string }>).map((type) => {
+                                        const active = campaignComposer.messageType === type.value;
+                                        return (
+                                          <button
+                                            key={type.value}
+                                            type="button"
+                                            onClick={() => setCampaignComposer((prev) => ({ ...prev, messageType: type.value }))}
+                                            style={{
+                                              display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                                              padding: "6px 4px", borderRadius: 8,
+                                              border: active ? "1.5px solid #d4af37" : "1px solid rgba(255,255,255,0.07)",
+                                              background: active ? "rgba(212,175,55,0.13)" : "rgba(255,255,255,0.03)",
+                                              color: active ? "#d4af37" : "rgba(245,241,232,0.65)",
+                                              cursor: "pointer", fontSize: 10, fontWeight: active ? 600 : 400,
+                                              transition: "all 0.12s",
+                                            }}
+                                          >
+                                            <span style={{ fontSize: 15, lineHeight: 1 }}>{type.icon}</span>
+                                            <span>{type.label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* — Message body — */}
+                                  <div className="admin-campaign-composer__section">
+                                    <div className="admin-campaign-composer__section-label">Message Content</div>
+                                    {!["poll", "quiz", "rating"].includes(campaignComposer.messageType) ? (
+                                      <TextField label="Message text" multiline minRows={4} value={campaignComposer.text} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, text: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                    ) : null}
+                                    {!["text", "poll", "quiz", "rating"].includes(campaignComposer.messageType) ? (
+                                      <>
+                                        <TextField label="Caption" multiline minRows={2} value={campaignComposer.caption} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, caption: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                        <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                          <Select value={campaignComposer.mediaKind} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaKind: event.target.value as CampaignComposerState["mediaKind"] }))}>
+                                            <MenuItem value="url">URL</MenuItem>
+                                            <MenuItem value="file_id">Telegram file_id</MenuItem>
+                                            <MenuItem value="data_url">Base64</MenuItem>
+                                          </Select>
+                                        </FormControl>
+                                        <TextField label="Media value" value={campaignComposer.mediaValue} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaValue: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                        <TextField label="Filename" value={campaignComposer.mediaFileName} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaFileName: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                      </>
+                                    ) : null}
+
+                                    {/* Rating */}
+                                    {campaignComposer.messageType === "rating" ? (
+                                      <>
+                                        <TextField label="Rating question" value={campaignComposer.pollQuestion} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, pollQuestion: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} helperText="Users see 5 star buttons (1 ★ – 5 ★★★★★)" />
+                                        <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "8px 12px", borderRadius: 10, background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.12)", fontSize: 12, opacity: 0.6 }}>
+                                          <span>⭐</span><span>Preview stars in the Preview tab</span>
+                                        </div>
+                                      </>
+                                    ) : null}
+
+                                    {/* Poll / Quiz */}
+                                    {(campaignComposer.messageType === "poll" || campaignComposer.messageType === "quiz") ? (() => {
+                                      const opts = campaignComposer.pollOptions.split("\n").filter(Boolean);
+                                      const correctIdx = parseInt(campaignComposer.correctOptionIndex, 10);
+                                      return (
+                                        <>
+                                          <TextField label="Question" value={campaignComposer.pollQuestion} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, pollQuestion: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+
+                                          {/* Individual option inputs */}
+                                          <div className="admin-campaign-composer__subsection">
+                                            <div className="admin-campaign-composer__section-label">Poll Options</div>
+                                            {opts.map((opt, i) => (
+                                              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                                {campaignComposer.messageType === "quiz" ? (
+                                                  <button
+                                                    type="button"
+                                                    title="Mark as correct answer"
+                                                    onClick={() => setCampaignComposer((prev) => ({ ...prev, correctOptionIndex: i === correctIdx ? "" : String(i) }))}
+                                                    style={{
+                                                      flexShrink: 0, width: 26, height: 26, borderRadius: "50%",
+                                                      border: i === correctIdx ? "2px solid #52d98c" : "1.5px solid rgba(255,255,255,0.15)",
+                                                      background: i === correctIdx ? "rgba(82,217,140,0.15)" : "rgba(255,255,255,0.04)",
+                                                      color: i === correctIdx ? "#52d98c" : "rgba(245,241,232,0.4)",
+                                                      cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+                                                    }}
+                                                  >
+                                                    {i === correctIdx ? "✓" : i + 1}
+                                                  </button>
+                                                ) : (
+                                                  <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", border: "1.5px solid rgba(212,175,55,0.3)", background: "rgba(212,175,55,0.08)", color: "#d4af37", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
+                                                )}
+                                                <TextField
+                                                  value={opt}
+                                                  onChange={(event) => {
+                                                    const next = [...opts];
+                                                    next[i] = event.target.value;
+                                                    setCampaignComposer((prev) => ({ ...prev, pollOptions: next.join("\n") }));
+                                                  }}
+                                                  placeholder={`Option ${i + 1}`}
+                                                  className="admin-engagement__field"
+                                                  sx={{ ...engagementFieldSx, flex: 1, minWidth: 0 }}
+                                                />
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const next = opts.filter((_, j) => j !== i);
+                                                    setCampaignComposer((prev) => ({ ...prev, pollOptions: next.join("\n") }));
+                                                  }}
+                                                  style={{ flexShrink: 0, background: "none", border: "none", color: "rgba(245,241,232,0.35)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px" }}
+                                                  title="Remove option"
+                                                >✕</button>
+                                              </div>
+                                            ))}
+                                            {opts.length < 10 ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => setCampaignComposer((prev) => ({ ...prev, pollOptions: prev.pollOptions ? prev.pollOptions + "\nNew option" : "New option" }))}
+                                                style={{ alignSelf: "flex-start", display: "flex", gap: 6, alignItems: "center", padding: "6px 14px", borderRadius: 8, border: "1px dashed rgba(212,175,55,0.3)", background: "rgba(212,175,55,0.04)", color: "#d4af37", cursor: "pointer", fontSize: 12 }}
+                                              >
+                                                <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                                                <span>Add option</span>
+                                              </button>
+                                            ) : null}
+                                            {campaignComposer.messageType === "quiz" ? (
+                                              <div style={{ fontSize: 11, opacity: 0.5, padding: "4px 0" }}>Click the circle to mark correct answer · Currently: {Number.isNaN(correctIdx) ? "none" : `option ${correctIdx + 1}`}</div>
+                                            ) : null}
+                                          </div>
+
+                                          <TextField label="Explanation (shown after answer)" value={campaignComposer.pollExplanation} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, pollExplanation: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                        </>
+                                      );
+                                    })() : null}
+                                  </div>
+
+                                  {/* — Inline buttons — */}
+                                  <div className="admin-campaign-composer__section">
+                                    <div className="admin-campaign-composer__section-label">Inline Buttons</div>
+                                    <div className="admin-campaign-composer__subsection">
+                                      {campaignComposer.buttons.map((button, index) => (
+                                        <div key={button.id} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", gap: 6 }}>
+                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.6 }}>Button {index + 1}</span>
+                                            <button type="button" onClick={() => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.filter((b) => b.id !== button.id) }))} style={{ background: "none", border: "none", color: "rgba(245,241,232,0.35)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 2 }} title="Remove">✕</button>
+                                          </div>
+                                          <div className="admin-engagement__filters" style={{ gap: 8 }}>
+                                            <TextField label="Label" value={button.label} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, label: event.target.value } : item) }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                            <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                              <Select value={button.kind} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, kind: event.target.value as CampaignComposerState["buttons"][number]["kind"] } : item) }))}>
+                                                <MenuItem value="callback">Callback</MenuItem>
+                                                <MenuItem value="link">Link</MenuItem>
+                                                <MenuItem value="cta">CTA deep link</MenuItem>
+                                              </Select>
+                                            </FormControl>
+                                            {button.kind === "link" ? (
+                                              <TextField label="URL" value={button.url} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, url: event.target.value } : item) }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                            ) : (
+                                              <TextField label="Action" value={button.action} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, action: event.target.value } : item) }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        onClick={() => setCampaignComposer((prev) => ({ ...prev, buttons: [...prev.buttons, buildCampaignButtonState()] }))}
+                                        style={{ alignSelf: "flex-start", display: "flex", gap: 6, alignItems: "center", padding: "6px 14px", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.03)", color: "rgba(245,241,232,0.55)", cursor: "pointer", fontSize: 12 }}
+                                      >
+                                        <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                                        <span>Add button</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : campaignComposerTab === "audience" ? (
+                                <div className="admin-engagement__filters admin-campaign-composer__section">
+                                  <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                    <Select value={campaignComposer.audienceType} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, audienceType: event.target.value }))}>
+                                      {[
+                                        ["all_users", "All users"],
+                                        ["active_users", "Active users"],
+                                        ["passive_users", "Passive users"],
+                                        ["paid_users", "Paid users"],
+                                        ["unpaid_users", "Unpaid users"],
+                                        ["vip_users", "VIP users"],
+                                        ["referral_users", "Referral users"],
+                                        ["selected_users", "Selected users"],
+                                        ["users_by_dinner", "Users by dinner"],
+                                        ["users_by_package", "Users by package"],
+                                        ["custom", "Custom filters"],
+                                      ].map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                                    </Select>
+                                  </FormControl>
+                                  {campaignComposer.audienceType === "users_by_dinner" ? (
+                                    <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                      <Select value={campaignComposer.dinnerId} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, dinnerId: event.target.value }))}>
+                                        <MenuItem value="all">All dinners</MenuItem>
+                                        {campaignOptions.dinners.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+                                      </Select>
+                                    </FormControl>
+                                  ) : null}
+                                  {campaignComposer.audienceType === "users_by_package" ? (
+                                    <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                      <Select value={campaignComposer.packageValue} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, packageValue: event.target.value }))}>
+                                        <MenuItem value="all">All packages</MenuItem>
+                                        {campaignOptions.packages.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+                                      </Select>
+                                    </FormControl>
+                                  ) : null}
+                                  {campaignComposer.audienceType === "selected_users" ? (
+                                    <TextField label="User IDs (one per line)" multiline minRows={3} value={campaignComposer.selectedUsers} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, selectedUsers: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} helperText="Telegram user IDs" />
+                                  ) : null}
+                                  {campaignComposer.audienceType === "custom" ? (
+                                    <>
+                                      <TextField label="Language filter" value={campaignComposer.language} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, language: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} helperText="e.g. en, ru, hy" />
+                                      <TextField label="Name / username search" value={campaignComposer.search} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, search: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                    </>
+                                  ) : null}
+                                  {/* Audience estimator */}
+                                  <div style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.14)", borderRadius: 12, padding: "12px 16px", marginTop: 2 }}>
+                                    <div className="admin-campaign-composer__section-label" style={{ marginBottom: 8 }}>Audience Estimator</div>
+                                    {campaignComposer.id != null && selectedCampaign != null ? (
+                                      <>
+                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                          <span style={{ fontSize: 13 }}>Estimated reach</span>
+                                          <strong style={{ color: "#d4af37" }}>{selectedCampaign.targetUsers.toLocaleString()} users</strong>
+                                        </div>
+                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                          <span style={{ fontSize: 13 }}>Audience segment</span>
+                                          <strong>{humanizeLabel(campaignComposer.audienceType)}</strong>
+                                        </div>
+                                        <p style={{ fontSize: 11, opacity: 0.45, marginTop: 8, marginBottom: 0 }}>Audience is resolved dynamically at send time. Count above reflects last saved snapshot.</p>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                          <span style={{ fontSize: 13 }}>Segment</span>
+                                          <strong>{humanizeLabel(campaignComposer.audienceType)}</strong>
+                                        </div>
+                                        <p style={{ fontSize: 11, opacity: 0.45, marginTop: 8, marginBottom: 0 }}>Save the campaign to see the resolved audience count before sending.</p>
+                                      </>
+                                    )}
+                                  </div>
+                                  {/* Smart segment shortcuts */}
+                                  {smartSegments.length > 0 ? (
+                                    <div style={{ marginTop: 6 }}>
+                                      <div className="admin-campaign-composer__section-label" style={{ marginBottom: 6 }}>Smart Segments</div>
+                                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                        {smartSegments.slice(0, 5).map((seg) => (
+                                          <button
+                                            key={seg.key}
+                                            type="button"
+                                            style={{ padding: "4px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#f5f1e8", cursor: "pointer", fontSize: 12 }}
+                                            onClick={() => setCampaignComposer((prev) => ({ ...prev, audienceType: "custom" }))}
+                                          >
+                                            {seg.label} · {seg.count}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : campaignComposerTab === "schedule" ? (
+                                <div className="admin-engagement__filters admin-campaign-composer__section">
+                                  <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                    <Select value={campaignComposer.objective} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, objective: event.target.value as CampaignObjective }))}>
+                                      <MenuItem value="awareness">Awareness — broaden reach</MenuItem>
+                                      <MenuItem value="engagement">Engagement — drive interactions</MenuItem>
+                                      <MenuItem value="conversion">Conversion — generate bookings</MenuItem>
+                                      <MenuItem value="retention">Retention — re-engage past guests</MenuItem>
+                                    </Select>
+                                  </FormControl>
+                                  <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                    <Select value={campaignComposer.status} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, status: event.target.value as CampaignComposerState["status"] }))}>
+                                      <MenuItem value="draft">Draft</MenuItem>
+                                      <MenuItem value="scheduled">Scheduled</MenuItem>
+                                    </Select>
+                                  </FormControl>
+                                  <TextField label="Scheduled for" type="datetime-local" value={campaignComposer.scheduledFor} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, scheduledFor: event.target.value }))} InputLabelProps={{ shrink: true }} className="admin-engagement__field" sx={engagementFieldSx} />
+                                  <TextField label="Rate limit / min" value={campaignComposer.rateLimitPerMinute} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, rateLimitPerMinute: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} helperText="Messages per minute (max 60)" />
+                                  <TextField label="Max retries" value={campaignComposer.maxRetries} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, maxRetries: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                </div>
+                              ) : (
+                                <div className="admin-campaign-composer__preview">
+                                  <div style={{ background: "#212b36", borderRadius: 14, padding: 16, maxWidth: 380 }}>
+                                    {/* Chat header */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#d4af37,#b8960e)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#1a1f26" }}>SD</div>
+                                      <div>
+                                        <div style={{ fontWeight: 600, fontSize: 14, color: "#f5f1e8" }}>Secret Dinner</div>
+                                        <div style={{ fontSize: 11, opacity: 0.45 }}>Channel</div>
+                                      </div>
+                                    </div>
+                                    {/* Message bubble */}
+                                    <div style={{ background: "#2b3a4a", borderRadius: "4px 14px 14px 14px", padding: "10px 14px", maxWidth: 320, position: "relative" }}>
+                                      {/* Media preview */}
+                                      {campaignComposer.mediaValue && !["poll", "quiz", "rating", "text"].includes(campaignComposer.messageType) ? (
+                                        <div style={{ marginBottom: 8, borderRadius: 8, overflow: "hidden" }}>
+                                          {["photo", "image"].includes(campaignComposer.messageType) && campaignComposer.mediaKind === "url" ? (
+                                            <img src={campaignComposer.mediaValue} alt="preview" style={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                          ) : (
+                                            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: "rgba(255,255,255,0.06)", borderRadius: 8 }}>
+                                              <span style={{ fontSize: 20 }}>📎</span>
+                                              <span style={{ fontSize: 12, opacity: 0.7 }}>{campaignComposer.mediaFileName || campaignComposer.mediaValue.split("/").pop() || "attachment"}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : null}
+                                      {/* Poll/Quiz/Rating */}
+                                      {campaignComposer.messageType === "poll" || campaignComposer.messageType === "quiz" ? (
+                                        <div style={{ marginBottom: 6 }}>
+                                          <div style={{ fontWeight: 600, fontSize: 14, color: "#f5f1e8", marginBottom: 8 }}>{campaignComposer.pollQuestion || "Enter a question…"}</div>
+                                          {campaignComposer.pollOptions.split("\n").filter(Boolean).map((opt, i) => (
+                                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                                              <div style={{ width: 16, height: 16, borderRadius: "50%", border: "1.5px solid rgba(212,175,55,0.5)", flexShrink: 0 }} />
+                                              <span style={{ fontSize: 13 }}>{opt}</span>
+                                            </div>
+                                          ))}
+                                          <div style={{ fontSize: 11, opacity: 0.4, marginTop: 6 }}>{campaignComposer.messageType === "quiz" ? "Quiz · Correct answer hidden" : "Poll · Anonymous"}</div>
+                                        </div>
+                                      ) : campaignComposer.messageType === "rating" ? (
+                                        <div style={{ marginBottom: 6 }}>
+                                          <div style={{ fontWeight: 600, fontSize: 14, color: "#f5f1e8", marginBottom: 12 }}>{campaignComposer.pollQuestion || "How would you rate your experience?"}</div>
+                                          <div style={{ display: "flex", gap: 8 }}>
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                              <button
+                                                key={star}
+                                                type="button"
+                                                onClick={() => setCampaignPreviewRating(campaignPreviewRating === star ? 0 : star)}
+                                                style={{
+                                                  background: "none", border: "none", cursor: "pointer", padding: 0,
+                                                  fontSize: 22, lineHeight: 1,
+                                                  filter: star <= campaignPreviewRating ? "none" : "grayscale(1) opacity(0.3)",
+                                                  transform: star <= campaignPreviewRating ? "scale(1.1)" : "scale(1)",
+                                                  transition: "all 0.12s",
+                                                }}
+                                                title={`Rate ${star}`}
+                                              >⭐</button>
+                                            ))}
+                                          </div>
+                                          {campaignPreviewRating > 0 ? (
+                                            <div style={{ fontSize: 11, color: "#d4af37", marginTop: 8, fontWeight: 500 }}>
+                                              {"★".repeat(campaignPreviewRating)}{"☆".repeat(5 - campaignPreviewRating)} · You rated {campaignPreviewRating} star{campaignPreviewRating !== 1 ? "s" : ""}
+                                            </div>
+                                          ) : (
+                                            <div style={{ fontSize: 11, opacity: 0.4, marginTop: 8 }}>Tap a star to preview · Rating poll</div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <p style={{ margin: 0, fontSize: 14, color: campaignComposer.text || campaignComposer.caption ? "#f5f1e8" : "rgba(245,241,232,0.35)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                                          {campaignComposer.text || campaignComposer.caption || "Your message will appear here…"}
+                                        </p>
+                                      )}
+                                      {/* Inline buttons */}
+                                      {campaignComposer.buttons.filter((b) => b.label).length > 0 ? (
+                                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                                          {campaignComposer.buttons.filter((b) => b.label).map((btn) => (
+                                            <div key={btn.id} style={{ textAlign: "center", padding: "7px 12px", borderRadius: 8, background: "rgba(212,175,55,0.14)", color: "#d4af37", fontSize: 13, fontWeight: 500 }}>
+                                              {btn.label}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                      <div style={{ textAlign: "right", fontSize: 10, opacity: 0.35, marginTop: 6 }}>12:00</div>
+                                    </div>
+                                  </div>
+                                  <p style={{ fontSize: 12, opacity: 0.4, margin: 0 }}>Preview is approximate. Actual rendering depends on Telegram client version and platform.</p>
+                                </div>
+                              )}
+
+                              <div className="admin-toolbar" style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                                <AdminButton type="button" variant="ghost" onClick={() => setCampaignComposerOpen(false)}>Close</AdminButton>
+                                <AdminButton type="button" variant="primary" onClick={handleSaveCampaign} disabled={campaignComposerSaving}>
+                                  {campaignComposerSaving ? "Saving…" : "Save Campaign"}
+                                </AdminButton>
+                              </div>
+                            </div>
+
+                          ) : selectedCampaign ? (
+                            <div className="admin-engagement-profile">
+                              {/* Hero */}
+                              <section className="admin-engagement-profile__hero">
+                                <div className="admin-engagement-profile__hero-copy">
+                                  <p className="admin-modal__eyebrow">{humanizeLabel(selectedCampaign.messageType)} Campaign</p>
+                                  <h3>{selectedCampaign.title}</h3>
+                                  <p>{selectedCampaign.description || "No description."}</p>
+                                  <div className="admin-booking-manager__summary">
+                                    <AdminBadge tone={getBookingToneByStatus(selectedCampaign.status)}>{humanizeLabel(selectedCampaign.status)}</AdminBadge>
+                                    <AdminBadge tone="gold">{humanizeLabel(selectedCampaign.audience.audienceType)}</AdminBadge>
+                                    <AdminBadge tone="emerald">{selectedCampaign.targetUsers} targets</AdminBadge>
+                                  </div>
+                                </div>
+                                <div className="admin-engagement-profile__hero-note">
+                                  <span>Updated {formatDateLabel(selectedCampaign.updatedAt)}</span>
+                                  {selectedCampaign.scheduledFor ? <span>Scheduled {formatDateLabel(selectedCampaign.scheduledFor)}</span> : null}
+                                </div>
+                              </section>
+
+                              {/* KPI bar */}
+                              {(() => {
+                                const total = Math.max(selectedCampaign.metrics.total, 1);
+                                const sent = selectedCampaign.metrics.sent;
+                                const kpis = [
+                                  { label: "Delivery", value: `${Math.round((sent / total) * 100)}%`, sub: `${sent} of ${selectedCampaign.metrics.total}` },
+                                  { label: "Click rate", value: sent > 0 ? `${Math.round((selectedCampaign.metrics.buttonClicks / sent) * 100)}%` : "—", sub: `${selectedCampaign.metrics.buttonClicks} clicks` },
+                                  { label: "Conv. rate", value: sent > 0 ? `${Math.round((selectedCampaign.metrics.applicationsAfter / sent) * 100)}%` : "—", sub: `${selectedCampaign.metrics.applicationsAfter} apps` },
+                                  { label: "Revenue", value: formatCurrency(selectedCampaign.metrics.revenueAfter), sub: `${selectedCampaign.metrics.paymentsAfter} payments` },
+                                ];
+                                return (
+                                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "4px 0 12px" }}>
+                                    {kpis.map((kpi) => (
+                                      <div key={kpi.label} style={{ flex: "1 1 100px", background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.14)", borderRadius: 10, padding: "8px 14px" }}>
+                                        <div style={{ fontSize: 10, opacity: 0.45, textTransform: "uppercase", letterSpacing: "0.06em" }}>{kpi.label}</div>
+                                        <div style={{ fontSize: 20, fontWeight: 700, color: "#d4af37" }}>{kpi.value}</div>
+                                        <div style={{ fontSize: 11, opacity: 0.5 }}>{kpi.sub}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Actions */}
+                              <div className="admin-toolbar" style={{ marginBottom: 12 }}>
+                                <AdminButton type="button" variant="secondary" onClick={() => void handleEditCampaign(selectedCampaign.id)}>Edit</AdminButton>
+                                <AdminButton type="button" variant="secondary" onClick={() => void handleTestSendCampaign(selectedCampaign.id)}>Test Send</AdminButton>
+                                <AdminButton type="button" variant="primary" onClick={() => void handleScheduleCampaign(selectedCampaign.id, true)} disabled={selectedCampaign.status === "sending" || selectedCampaign.status === "completed" || selectedCampaign.status === "cancelled"}>Send Now</AdminButton>
+                                <AdminButton type="button" variant="ghost" onClick={() => void handleScheduleCampaign(selectedCampaign.id, false)} disabled={selectedCampaign.status === "completed" || selectedCampaign.status === "cancelled"}>Schedule</AdminButton>
+                                <AdminButton type="button" variant="danger" onClick={() => void handleCancelCampaign(selectedCampaign.id)} disabled={selectedCampaign.status === "completed" || selectedCampaign.status === "cancelled"}>Cancel</AdminButton>
+                              </div>
+
+                              <section className="admin-info-grid">
+                                {/* Delivery funnel */}
+                                {selectedCampaign.metrics.total > 0 ? (
+                                  <article className="admin-widget admin-widget--fit">
+                                    <div className="admin-widget__header">
+                                      <h2>Delivery Funnel</h2>
+                                      <span>Message flow from queue to conversion</span>
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                      {(() => {
+                                        const total = Math.max(selectedCampaign.metrics.total, 1);
+                                        const sent = selectedCampaign.metrics.sent;
+                                        return [
+                                          { label: "Queued", value: selectedCampaign.metrics.total, pct: 100, color: "#6b7c93" },
+                                          { label: "Sent", value: sent, pct: Math.round((sent / total) * 100), color: "#4da6ff" },
+                                          { label: "Failed / Blocked", value: selectedCampaign.metrics.failed + selectedCampaign.metrics.blocked, pct: Math.round(((selectedCampaign.metrics.failed + selectedCampaign.metrics.blocked) / total) * 100), color: "#e05c5c" },
+                                          { label: "Clicked", value: selectedCampaign.metrics.buttonClicks, pct: sent > 0 ? Math.round((selectedCampaign.metrics.buttonClicks / sent) * 100) : 0, color: "#d4af37" },
+                                          { label: "Applied", value: selectedCampaign.metrics.applicationsAfter, pct: sent > 0 ? Math.round((selectedCampaign.metrics.applicationsAfter / sent) * 100) : 0, color: "#52d98c" },
+                                          { label: "Paid", value: selectedCampaign.metrics.paymentsAfter, pct: sent > 0 ? Math.round((selectedCampaign.metrics.paymentsAfter / sent) * 100) : 0, color: "#d4af37" },
+                                        ].map((step) => (
+                                          <div key={step.label}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                                              <span>{step.label}</span>
+                                              <span style={{ fontWeight: 600 }}>{step.value.toLocaleString()} <span style={{ opacity: 0.45 }}>({step.pct}%)</span></span>
+                                            </div>
+                                            <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.07)" }}>
+                                              <div style={{ height: "100%", borderRadius: 3, background: step.color, width: `${step.pct}%`, transition: "width 0.4s" }} />
+                                            </div>
+                                          </div>
+                                        ));
+                                      })()}
+                                    </div>
+                                  </article>
+                                ) : null}
+
+                                {/* Revenue attribution */}
+                                <article className="admin-widget admin-widget--fit">
+                                  <div className="admin-widget__header">
+                                    <h2>Revenue Attribution</h2>
+                                    <span>Business outcomes after campaign delivery</span>
+                                  </div>
+                                  <ul className="admin-metric-list">
+                                    <li><span>Applications after send</span><b>{selectedCampaign.metrics.applicationsAfter}</b></li>
+                                    <li><span>Payments after send</span><b>{selectedCampaign.metrics.paymentsAfter}</b></li>
+                                    <li><span>Revenue after send</span><b>{formatCurrency(selectedCampaign.metrics.revenueAfter)}</b></li>
+                                    <li><span>Revenue per send</span><b>{selectedCampaign.metrics.sent > 0 ? formatCurrency(selectedCampaign.metrics.revenueAfter / selectedCampaign.metrics.sent) : "—"}</b></li>
+                                    <li><span>Poll votes</span><b>{selectedCampaign.metrics.pollVotes}</b></li>
+                                    <li><span>Quiz correct answers</span><b>{selectedCampaign.metrics.quizCorrect}</b></li>
+                                    <li><span>Pending in queue</span><b>{selectedCampaign.metrics.pending}</b></li>
+                                    <li><span>Skipped</span><b>{selectedCampaign.metrics.skipped}</b></li>
+                                  </ul>
+                                </article>
+                              </section>
+
+                              {/* Audience sample */}
+                              {selectedCampaign.previewUsers.length > 0 ? (
+                                <article className="admin-widget admin-widget--fit">
+                                  <div className="admin-widget__header">
+                                    <h2>Audience Sample</h2>
+                                    <span>{selectedCampaign.previewUsers.length} shown of {selectedCampaign.targetUsers} resolved</span>
+                                  </div>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {selectedCampaign.previewUsers.map((user) => (
+                                      <div key={`${selectedCampaign.id}-${user.userId}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12 }}>
+                                        <span>{user.name || user.username || `ID ${user.userId}`}</span>
+                                        <AdminBadge tone={getBookingToneByStatus(user.status)}>{formatEngagementUserStatus("telegram", user.status)}</AdminBadge>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </article>
+                              ) : null}
+
+                              {/* Delivery log with search */}
+                              <article className="admin-widget admin-widget--fit">
+                                <div className="admin-widget__header">
+                                  <h2>Delivery Log</h2>
+                                  <span>{campaignLogs.length} events</span>
+                                </div>
+                                <div className="admin-topbar__search" style={{ marginBottom: 10 }}>
+                                  <span aria-hidden="true">⌕</span>
+                                  <input
+                                    type="search"
+                                    value={campaignLogSearch}
+                                    onChange={(event) => setCampaignLogSearch(event.target.value)}
+                                    placeholder="Filter by user, event type, or status"
+                                  />
+                                </div>
+                                {campaignLogsError ? <p className="admin-auth__error">{campaignLogsError}</p> : null}
+                                {campaignLogsLoading ? <p className="admin-dashboard__state">Loading logs…</p> : null}
+                                {!campaignLogsLoading && campaignLogs.length === 0 ? (
+                                  <AdminEmptyState compact title="No delivery log yet" description="Logs appear after the campaign is tested, scheduled, or sent." />
+                                ) : null}
+                                {campaignLogs.length > 0 ? (() => {
+                                  const q = campaignLogSearch.toLowerCase().trim();
+                                  const filtered = q
+                                    ? campaignLogs.filter((item) =>
+                                        item.eventType.toLowerCase().includes(q) ||
+                                        item.status.toLowerCase().includes(q) ||
+                                        (item.username || "").toLowerCase().includes(q) ||
+                                        (item.message || "").toLowerCase().includes(q) ||
+                                        item.userId.toLowerCase().includes(q)
+                                      )
+                                    : campaignLogs;
+                                  return (
+                                    <div className="admin-engagement-profile__timeline">
+                                      {filtered.length === 0 ? (
+                                        <p className="admin-dashboard__state">No logs match "{campaignLogSearch}"</p>
+                                      ) : filtered.map((item) => (
+                                        <article key={item.id} className="admin-engagement-timeline__item">
+                                          <div className="admin-engagement-timeline__head">
+                                            <strong>{humanizeLabel(item.eventType)}</strong>
+                                            <AdminBadge tone={getBookingToneByStatus(item.status)}>{humanizeLabel(item.status)}</AdminBadge>
+                                          </div>
+                                          <p>{item.username ? formatTelegramUsername(item.username) : `User ${item.userId}`} · {item.message || "No message"}</p>
+                                          <p style={{ opacity: 0.5, fontSize: 12 }}>{formatDateLabel(item.occurredAt)}{item.attempt > 1 ? ` · attempt ${item.attempt}` : ""}</p>
+                                        </article>
+                                      ))}
+                                    </div>
+                                  );
+                                })() : null}
+                              </article>
+                            </div>
+                          ) : (
+                            <AdminEmptyState compact title="No campaign selected" description="Choose a campaign from the list or create a new one." />
+                          )}
+                        </article>
+                      </section>
+                    </section>
+                  ) : engagementTab === "segments" ? (
+                    <section className="admin-engagement-users">
+                      {segmentsError ? (
+                        <article className="admin-widget admin-widget--fit">
+                          <p className="admin-auth__error">{segmentsError}</p>
+                        </article>
+                      ) : segmentsLoading ? (
+                        <article className="admin-widget admin-widget--fit">
+                          <p className="admin-dashboard__state">Computing segments...</p>
+                        </article>
+                      ) : (
+                        <>
+                          {recommendations.length > 0 ? (
+                            <article className="admin-widget admin-widget--fit">
+                              <div className="admin-widget__header">
+                                <h2>BI Recommendations</h2>
+                                <span>Actionable insights based on current user data</span>
+                              </div>
+                              <ul className="admin-metric-list">
+                                {recommendations.map((rec, idx) => (
+                                  <li key={idx} style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                                    <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
+                                      <AdminBadge tone={getRecommendationTone(rec.priority)}>{rec.priority}</AdminBadge>
+                                      <AdminBadge tone="default">{rec.type}</AdminBadge>
+                                      <b style={{ flex: 1 }}>{rec.title}</b>
+                                      <span style={{ fontSize: 12, opacity: 0.6 }}>{rec.count} users</span>
+                                    </div>
+                                    <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>{rec.message}</p>
+                                    <p style={{ margin: 0, fontSize: 12, opacity: 0.55 }}>Action: {rec.action}</p>
+                                  </li>
+                                ))}
+                              </ul>
+                            </article>
+                          ) : null}
+                          <section className="admin-engagement-users__layout">
+                            {smartSegments.map((seg) => (
+                              <article key={seg.key} className="admin-widget admin-widget--fit">
+                                <div className="admin-widget__header">
+                                  <h2>{seg.label}</h2>
+                                  <span>{seg.description}</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                                  <AdminBadge tone={getSegmentCountTone(seg.count)}>{seg.count} users</AdminBadge>
+                                </div>
+                                {seg.users.length > 0 ? (
+                                  <ul className="admin-metric-list">
+                                    {seg.users.slice(0, 10).map((u) => (
+                                      <li key={u.id}>
+                                        <span
+                                          style={{ cursor: "pointer", textDecoration: "underline dotted" }}
+                                          onClick={() => {
+                                            setEngagementTab("users");
+                                            setEngagementUsersSource(u.source as "telegram" | "landing");
+                                            setSelectedEngagementUserId(u.id);
+                                          }}
+                                        >
+                                          {u.name || `User #${u.id}`}
+                                        </span>
+                                        <b>{u.value > 0 ? u.value.toFixed(u.value % 1 === 0 ? 0 : 2) : ""}</b>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <AdminEmptyState compact title="No users in this segment" description="Segment criteria not met by any user yet." />
+                                )}
+                              </article>
+                            ))}
+                            {smartSegments.length === 0 ? (
+                              <article className="admin-widget admin-widget--fit">
+                                <AdminEmptyState compact title="No segments computed" description="Segment data requires Telegram users in the database." />
+                              </article>
+                            ) : null}
+                          </section>
+                        </>
+                      )}
+                    </section>
+                  ) : (
+                    <section className="admin-engagement-users">
+                      <article className="admin-widget admin-widget--fit">
+                        <div className="admin-widget__header">
+                          <h2>Analytics Debug — Data Quality Report</h2>
+                          <span>Backend-generated validation checks for the currently loaded analytics slice.</span>
+                        </div>
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
+                            <thead>
+                              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600, width: 200 }}>Metric / Widget</th>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600, width: 70 }}>Status</th>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600, width: 180 }}>Metric value</th>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Details</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(engagementAnalytics?.debug.checks ?? []).map((row) => (
+                                <tr key={row.key} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                                  <td style={{ padding: "8px 12px", fontWeight: 500 }}>{row.label}</td>
+                                  <td style={{ padding: "8px 12px" }}>
+                                    <span style={{
+                                      display: "inline-block",
+                                      padding: "2px 8px",
+                                      borderRadius: 6,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      background: row.status === "PASS" ? "rgba(74,222,128,0.15)" : row.status === "WARN" ? "rgba(251,191,36,0.15)" : "rgba(239,68,68,0.15)",
+                                      color: row.status === "PASS" ? "#4ade80" : row.status === "WARN" ? "#fbbf24" : "#ef4444",
+                                    }}>
+                                      {row.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: "8px 12px", color: "#a6afa8", fontSize: 12, fontFamily: "monospace" }}>{row.metricValue}</td>
+                                  <td style={{ padding: "8px 12px", color: "#c8c4bc", fontSize: 12 }}>{row.details}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </article>
+
+                      {engagementAnalytics ? (
+                        <article className="admin-widget admin-widget--fit">
+                          <div className="admin-widget__header">
+                            <h2>Live Data Snapshot</h2>
+                            <span>Raw numbers from the currently loaded analytics response.</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+                            {([
+                              { label: "Total events", value: engagementAnalytics.summary.totalEvents },
+                              { label: "Active users (meaningful events)", value: engagementAnalytics.summary.activeUsers },
+                              { label: "Passive users (1–2 events)", value: engagementAnalytics.summary.passiveUsers },
+                              { label: "New users", value: engagementAnalytics.summary.newUsers },
+                              { label: "Returning users", value: engagementAnalytics.summary.returningUsers },
+                              { label: "Journey steps with data", value: engagementAnalytics.funnel.filter((s) => s.users > 0).length },
+                              { label: "Dinner views tracked", value: engagementAnalytics.dinnerViews.reduce((a, b) => a + b.value, 0) },
+                              { label: "Package selection events", value: engagementAnalytics.packageSelections.reduce((a, b) => a + b.value, 0) },
+                              { label: "Button click events", value: engagementAnalytics.buttonClicks.reduce((a, b) => a + b.value, 0) },
+                              { label: "Timeline days loaded", value: engagementAnalytics.timeline.length },
+                              { label: "Hourly buckets loaded", value: engagementAnalytics.hourlyActivity.length },
+                              { label: "Dinner perf rows", value: engagementAnalytics.dinnerPerformance.length },
+                            ] as Array<{ label: string; value: number }>).map((item) => (
+                              <div key={item.label} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 16px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div style={{ fontSize: 11, color: "#a6afa8", marginBottom: 4 }}>{item.label}</div>
+                                <div style={{ fontSize: 22, fontWeight: 700, color: "#f5f1e8" }}>{item.value.toLocaleString()}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ) : null}
+
+                      {engagementAnalytics?.debug ? (
+                        <article className="admin-widget admin-widget--fit">
+                          <div className="admin-widget__header">
+                            <h2>Guest Journey Debug</h2>
+                            <span>Raw stage reach, ordered guest counts, inference, and data quality warnings.</span>
+                          </div>
+                          <div style={{ display: "grid", gap: 16 }}>
+                            <div style={{ overflowX: "auto" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
+                                <thead>
+                                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
+                                    <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Stage</th>
+                                    <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Raw</th>
+                                    <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Ordered</th>
+                                    <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Inferred</th>
+                                    <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Excluded</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {engagementAnalytics.debug.orderedStageCounts.map((step) => (
+                                    <tr key={step.key} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                                      <td style={{ padding: "8px 12px", fontWeight: 500 }}>{step.label}</td>
+                                      <td style={{ padding: "8px 12px" }}>{formatCompactNumber(step.rawUsers)}</td>
+                                      <td style={{ padding: "8px 12px" }}>{formatCompactNumber(step.orderedUsers)}</td>
+                                      <td style={{ padding: "8px 12px" }}>{formatCompactNumber(step.inferredUsers)}</td>
+                                      <td style={{ padding: "8px 12px" }}>{formatCompactNumber(step.excludedUsers)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+                              <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div style={{ fontSize: 12, color: "#a6afa8", marginBottom: 6 }}>Data quality warnings</div>
+                                {engagementAnalytics.debug.dataQualityWarnings.length > 0 ? (
+                                  <ul style={{ margin: 0, paddingLeft: 18, color: "#d8d1c3", fontSize: 12, lineHeight: 1.7 }}>
+                                    {engagementAnalytics.debug.dataQualityWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+                                  </ul>
+                                ) : (
+                                  <p style={{ margin: 0, fontSize: 12, color: "#d8d1c3" }}>No warnings in this slice.</p>
+                                )}
+                              </div>
+                              <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div style={{ fontSize: 12, color: "#a6afa8", marginBottom: 6 }}>Inferred stages</div>
+                                {engagementAnalytics.debug.inferredStages.length > 0 ? (
+                                  <ul style={{ margin: 0, paddingLeft: 18, color: "#d8d1c3", fontSize: 12, lineHeight: 1.7 }}>
+                                    {engagementAnalytics.debug.inferredStages.slice(0, 12).map((item) => <li key={item}>{item}</li>)}
+                                  </ul>
+                                ) : (
+                                  <p style={{ margin: 0, fontSize: 12, color: "#d8d1c3" }}>No inferred stages in this slice.</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      ) : null}
+
+                      <article className="admin-widget admin-widget--fit">
+                        <div className="admin-widget__header">
+                          <h2>Guest Journey Step Definitions</h2>
+                          <span>Ordered guest journey steps with inference and warnings for incomplete stage tracking.</span>
+                        </div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
+                          <thead>
+                            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
+                              <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Journey step</th>
+                              <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Source events</th>
+                              <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Current guests</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(engagementAnalytics?.funnel ?? [
+                              { key: "viewed_dinner", label: "Viewed Dinner", users: 0 },
+                              { key: "selected_package", label: "Selected Package", users: 0 },
+                              { key: "started_application", label: "Started Application", users: 0 },
+                              { key: "submitted_application", label: "Submitted Application", users: 0 },
+                              { key: "approved", label: "Approved", users: 0 },
+                              { key: "paid", label: "Paid", users: 0 },
+                              { key: "attended", label: "Attended", users: 0 },
+                            ]).map((step) => {
+                              const eventMap: Record<string, string> = {
+                                viewed_dinner: "viewed_dinner, landing_dinner_viewed, opened_tickets",
+                                selected_package: "selected_package, landing_package_selected",
+                                started_application: "clicked_apply, landing_form_started, join_form_started",
+                                submitted_application: "join_form_submitted, submitted_application, landing_dinner_selection_saved, landing_form_submitted",
+                                approved: "inferred from current approved booking statuses",
+                                paid: "telegram_payment_success + inferred paid statuses",
+                                attended: "not yet tracked as an explicit event",
+                              };
+                              return (
+                                <tr key={step.key} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                                  <td style={{ padding: "8px 12px", fontWeight: 500 }}>{step.label}</td>
+                                  <td style={{ padding: "8px 12px", color: "#a6afa8", fontSize: 12, fontFamily: "monospace" }}>{eventMap[step.key] ?? "—"}</td>
+                                  <td style={{ padding: "8px 12px", fontWeight: 600, color: "#f5f1e8" }}>{step.users.toLocaleString()}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </article>
+
+                      <article className="admin-widget admin-widget--fit">
+                        <div className="admin-widget__header">
+                          <h2>Collection Layer Status</h2>
+                          <span>Known gaps in event collection across Telegram bot and Landing page.</span>
+                        </div>
+                        <ul style={{ margin: 0, padding: "0 0 0 18px", color: "#c8c4bc", fontSize: 13, lineHeight: 1.9 }}>
+                          <li><strong style={{ color: "#4ade80" }}>Landing UTM</strong> — captured from entry URL, session-persisted. All landing events carry utm_source, utm_medium, utm_campaign, utm_content, utm_term.</li>
+                          <li><strong style={{ color: "#4ade80" }}>Landing user identity</strong> — anonymous: session_key per tab. Identified: user_key set after join form submit.</li>
+                          <li><strong style={{ color: "#fbbf24" }}>Telegram event_key</strong> — never set. Every Telegram event bypasses the (source, event_key) UNIQUE deduplication index. Bot restarts can produce duplicate rows.</li>
+                          <li><strong style={{ color: "#fbbf24" }}>Cross-channel identity</strong> — same person using both Telegram and Landing appears as two separate actors (different user_key formats). No stitching implemented.</li>
+                          <li><strong style={{ color: "#fbbf24" }}>Payment events</strong> — only <code style={{ background: "rgba(255,255,255,0.05)", borderRadius: 4, padding: "0 4px" }}>telegram_payment_success</code> is tracked. Landing has no payment event. Conversion rate cross-mixes Telegram payments with cross-source applications.</li>
+                          <li><strong style={{ color: "#ef4444" }}>Telegram event queue</strong> — capacity 512. Events silently dropped on overflow (warning logged). High-volume campaign delivery can exhaust the queue.</li>
+                          <li><strong style={{ color: "#a6afa8" }}>Journey ordering</strong> — historically this was not enforced. Older data may still contain guests who appear at a later step without a recorded dinner view event.</li>
+                        </ul>
+                      </article>
+                    </section>
+                  )}
                 </section>
               ) : null}
 
