@@ -102,6 +102,7 @@ type TelegramDashboardStats struct {
 	ReferralsTotal      int64               `json:"referralsTotal"`
 	BlockedActive       int64               `json:"blockedActive"`
 	RevenueTotal        float64             `json:"revenueTotal"`
+	PaidBookingsCount   int64               `json:"paidBookingsCount"`
 	TermsAcceptancePct  float64             `json:"termsAcceptancePct"`
 	PhoneCoveragePct    float64             `json:"phoneCoveragePct"`
 	ReferralCoveragePct float64             `json:"referralCoveragePct"`
@@ -206,6 +207,8 @@ type TelegramUserRecord struct {
 	Points                int        `json:"points"`
 	Discount              int        `json:"discount"`
 	OrdersCount           int64      `json:"ordersCount"`
+	PaidBookingsCount     int64      `json:"paidBookingsCount"`
+	NoShowCount           int64      `json:"noShowCount"`
 	BlockedActive         bool       `json:"blockedActive"`
 	LastRegisteredAt      *time.Time `json:"lastRegisteredAt,omitempty"`
 	LastApplicationStatus string     `json:"lastApplicationStatus"`
@@ -274,14 +277,18 @@ type TelegramApplicationRecord struct {
 }
 
 type TelegramApplicationsSummary struct {
-	Total              int64 `json:"total"`
-	PendingApplication int64 `json:"pendingApplication"`
-	Approved           int64 `json:"approved"`
-	WaitingPayment     int64 `json:"waitingPayment"`
-	Paid               int64 `json:"paid"`
-	Cancelled          int64 `json:"cancelled"`
-	Rejected           int64 `json:"rejected"`
-	NoShow             int64 `json:"noShow"`
+	Total                int64 `json:"total"`
+	PendingApplication   int64 `json:"pendingApplication"`
+	Approved             int64 `json:"approved"`
+	WaitingPayment       int64 `json:"waitingPayment"`
+	Paid                 int64 `json:"paid"`
+	Cancelled            int64 `json:"cancelled"`
+	Rejected             int64 `json:"rejected"`
+	NoShow               int64 `json:"noShow"`
+	VIPApplicationsCount int64 `json:"vipApplicationsCount"`
+	GoldApplicationsCount int64 `json:"goldApplicationsCount"`
+	TotalGuestCount      int64 `json:"totalGuestCount"`
+	ReferralSourcedCount int64 `json:"referralSourcedCount"`
 }
 
 type AdminBookingsDB interface {
@@ -865,6 +872,11 @@ type EngagementCampaignDeliveryLog struct {
 	Status     string    `json:"status"`
 	Message    string    `json:"message"`
 	Metadata   string    `json:"metadata"`
+	MessageType string   `json:"messageType"`
+	Question    string   `json:"question"`
+	ChoiceIndex *int     `json:"choiceIndex,omitempty"`
+	ChoiceLabel string   `json:"choiceLabel"`
+	Correct     *bool    `json:"correct,omitempty"`
 	OccurredAt time.Time `json:"occurredAt"`
 	Attempt    int       `json:"attempt"`
 	MessageID  int       `json:"messageId"`

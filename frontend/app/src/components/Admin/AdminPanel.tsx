@@ -170,6 +170,7 @@ type GuestCrmRow = {
   applicationsCount: number | null;
   paidBookingsCount: number | null;
   attendanceCount: number | null;
+  noShowCount: number | null;
   totalPayments: number | null;
   referralCount: number | null;
   points: number | null;
@@ -180,7 +181,7 @@ type GuestCrmRow = {
   paidStatusLabel?: string;
   detailTitle?: string;
   detailLines: string[];
-  timelineLines: string[];
+  snapshotLines: string[];
 };
 type DinnerCapacityState = "low" | "healthy" | "almost-full" | "full" | "overbooked" | "unknown";
 type DinnerCapacitySummary = {
@@ -1453,7 +1454,7 @@ function getTelegramStatusSummary(status?: string): BookingStatusSummaryBadge[] 
       ];
     case "cancelled":
       return [
-        { key: "application", shortLabel: "App", fullLabel: "Application", value: "Approved", tone: "emerald", description: "Application was previously approved before the booking was cancelled." },
+        { key: "application", shortLabel: "App", fullLabel: "Application", value: "Cancelled", tone: "danger", description: "Booking was cancelled." },
         { key: "payment", shortLabel: "Pay", fullLabel: "Payment", value: "Cancelled", tone: "danger", description: "Payment or booking flow was cancelled." },
         { key: "attendance", shortLabel: "Attend", fullLabel: "Attendance", value: "Not Scheduled", tone: "default", description: "Attendance is no longer scheduled." },
       ];
@@ -1464,9 +1465,11 @@ function getTelegramStatusSummary(status?: string): BookingStatusSummaryBadge[] 
         { key: "attendance", shortLabel: "Attend", fullLabel: "Attendance", value: "Not Scheduled", tone: "default", description: "Attendance is not scheduled." },
       ];
     case "no_show":
+      // no_show is only reachable from paid (enforced by backend transition rules),
+      // so Payment: Paid is always accurate here.
       return [
         { key: "application", shortLabel: "App", fullLabel: "Application", value: "Approved", tone: "emerald", description: "Application had been approved." },
-        { key: "payment", shortLabel: "Pay", fullLabel: "Payment", value: "Paid", tone: "emerald", description: "Payment had been completed." },
+        { key: "payment", shortLabel: "Pay", fullLabel: "Payment", value: "Paid", tone: "emerald", description: "Payment was confirmed before the event." },
         { key: "attendance", shortLabel: "Attend", fullLabel: "Attendance", value: "No-show", tone: "danger", description: "Guest did not attend the event." },
       ];
     case "draft":
@@ -1948,9 +1951,10 @@ function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
     telegramUsername: "—",
     source: "landing",
     rawStatus: item.adminStatus,
-    applicationsCount: 1,
+    applicationsCount: null,
     paidBookingsCount: null,
     attendanceCount: null,
+    noShowCount: null,
     totalPayments: null,
     referralCount: null,
     points: null,
@@ -1969,62 +1973,29 @@ function buildGuestCrmRowFromLandingUser(item: AdminLandingUser): GuestCrmRow {
       `Hobbies: ${item.hobbies || "—"}`,
       `Allergies: ${item.allergies || "—"}`,
     ],
-    timelineLines: [
-      `Created ${formatDateLabel(item.createdAt)}`,
-      `Last updated ${formatDateLabel(item.updatedAt)}`,
-      item.dinnerTitle ? `Dinner selected: ${item.dinnerTitle}` : "Dinner not selected yet",
-      item.chosenPackage ? `Package selected: ${item.chosenPackage}` : "Package not selected yet",
-      `Review status: ${formatLandingAdminStatus(item.adminStatus)}`,
+    snapshotLines: [
+      `Created: ${formatDateLabel(item.createdAt)}`,
+      `Last updated: ${formatDateLabel(item.updatedAt)}`,
+      item.dinnerTitle ? `Dinner: ${item.dinnerTitle}` : "Dinner: not selected",
+      item.chosenPackage ? `Package: ${item.chosenPackage}` : "Package: not selected",
+      `Review: ${formatLandingAdminStatus(item.adminStatus)}`,
+      `Selection: ${formatLandingSelectionStatus(item.selectionStatus)}`,
     ],
   };
 }
 
-function buildTelegramGuestCounts(
-  user: AdminTelegramUser,
-  applications: AdminTelegramApplication[]
-) {
-  const guestApplications = applications.filter((item) => item.userId === user.id);
-  if (guestApplications.length === 0) {
-    return {
-      applicationsCount: user.ordersCount ?? 0,
-      paidBookingsCount: user.totalPayments > 0 ? null : 0,
-      attendanceCount: user.attendanceCount ?? 0,
-      lastActivityAt: user.lastRegisteredAt || user.updatedAt || user.createdAt,
-    };
-  }
-
-  let paidBookingsCount = 0;
-  let attendanceCount = 0;
-  let lastActivityAt = user.lastRegisteredAt || user.updatedAt || user.createdAt;
-
-  guestApplications.forEach((item) => {
-    const status = (item.status ?? "").trim().toLowerCase();
-    if (status === "paid" || status === "no_show") {
-      paidBookingsCount += 1;
-    }
-    if (status === "no_show") {
-      attendanceCount += 1;
-    }
-    const updatedAt = item.updatedAt || item.createdAt;
-    if (updatedAt && (!lastActivityAt || new Date(updatedAt).getTime() > new Date(lastActivityAt).getTime())) {
-      lastActivityAt = updatedAt;
-    }
-  });
-
-  return {
-    applicationsCount: guestApplications.length,
-    paidBookingsCount,
-    attendanceCount,
-    lastActivityAt,
-  };
+function buildTelegramGuestLastActivity(user: AdminTelegramUser): string {
+  const candidates = [user.lastRegisteredAt, user.updatedAt, user.createdAt].filter(Boolean) as string[];
+  return candidates.reduce((best, ts) => {
+    if (!best) return ts;
+    return new Date(ts).getTime() > new Date(best).getTime() ? ts : best;
+  }, "");
 }
 
-function buildGuestCrmRowFromTelegramUser(
-  item: AdminTelegramUser,
-  applications: AdminTelegramApplication[]
-): GuestCrmRow {
-  const counts = buildTelegramGuestCounts(item, applications);
+function buildGuestCrmRowFromTelegramUser(item: AdminTelegramUser): GuestCrmRow {
   const fullName = [item.name, item.surname].filter(Boolean).join(" ").trim() || formatTelegramUsername(item.username);
+  const lastActivityAt = buildTelegramGuestLastActivity(item);
+  const paidCount = item.paidBookingsCount ?? 0;
 
   return {
     key: `telegram-${item.id}`,
@@ -2033,35 +2004,41 @@ function buildGuestCrmRowFromTelegramUser(
     telegramUsername: formatTelegramUsername(item.username),
     source: "telegram",
     rawStatus: item.lastApplicationStatus,
-    applicationsCount: counts.applicationsCount,
-    paidBookingsCount: counts.paidBookingsCount,
-    attendanceCount: counts.attendanceCount,
+    applicationsCount: item.ordersCount ?? 0,
+    paidBookingsCount: paidCount,
+    attendanceCount: item.attendanceCount ?? 0,
+    noShowCount: item.noShowCount ?? 0,
     totalPayments: item.totalPayments ?? 0,
     referralCount: item.friendsInvited ?? 0,
     points: item.points ?? 0,
-    lastActivityAt: counts.lastActivityAt,
+    lastActivityAt,
     createdAt: item.createdAt,
     statusLabel: formatApplicationStatus(item.lastApplicationStatus),
     packageLabel: item.lastApplicationStatus ? formatApplicationStatus(item.lastApplicationStatus) : "No status",
-    paidStatusLabel: counts.paidBookingsCount && counts.paidBookingsCount > 0 ? `Paid ${counts.paidBookingsCount}` : "Unpaid",
+    paidStatusLabel: paidCount > 0 ? `${paidCount} paid` : "Unpaid",
     detailTitle: item.lastApplicationStatus ? `Last status: ${formatApplicationStatus(item.lastApplicationStatus)}` : "No recent status",
     detailLines: [
+      `Phone: ${item.phone || "—"}`,
+      `Telegram: ${formatTelegramUsername(item.username)}`,
       `Language: ${item.language || "—"}`,
       `Terms: ${item.termsAccepted ? "Accepted" : "Pending"}`,
-      `Legal version: ${item.legalVersion || "—"}`,
-      `Payments total: ${formatCurrency(item.totalPayments ?? 0)}`,
-      `Attendance: ${formatNullableCount(counts.attendanceCount)}`,
-      `Referrals: ${formatNullableCount(item.friendsInvited ?? 0)}`,
-      `Points: ${formatNullableCount(item.points ?? 0)}`,
+      `Table preference: ${formatTablePreference(item.lastTablePreference)}`,
       `Referral code: ${item.referralCode || "—"}`,
       `Used referral: ${item.referralUsedCode || "—"}`,
-      `Table preference: ${formatTablePreference(item.lastTablePreference)}`,
+      `Points: ${item.points ?? 0}`,
+      `Referrals sent: ${item.friendsInvited ?? 0}`,
+      `Discount: ${item.discount ?? 0}%`,
     ],
-    timelineLines: [
-      `Created ${formatDateLabel(item.createdAt)}`,
-      `Last updated ${formatDateLabel(item.updatedAt)}`,
-      `Last registration ${formatDateLabel(item.lastRegisteredAt)}`,
-      item.acceptedAt ? `Terms accepted ${formatDateLabel(item.acceptedAt)}` : "Terms acceptance not recorded",
+    snapshotLines: [
+      `Created: ${formatDateLabel(item.createdAt)}`,
+      `Last updated: ${formatDateLabel(item.updatedAt)}`,
+      `Last registration: ${formatDateLabel(item.lastRegisteredAt)}`,
+      item.acceptedAt ? `Terms accepted: ${formatDateLabel(item.acceptedAt)}` : "Terms: not yet accepted",
+      `Applications: ${item.ordersCount ?? 0}`,
+      `Paid bookings: ${paidCount}`,
+      `No-shows: ${item.noShowCount ?? 0}`,
+      `Attendance (bot): ${item.attendanceCount ?? 0}`,
+      `Revenue: ${formatCurrency(item.totalPayments ?? 0)}`,
     ],
   };
 }
@@ -2827,6 +2804,10 @@ export default function AdminPanel() {
     cancelled: 0,
     rejected: 0,
     noShow: 0,
+    vipApplicationsCount: 0,
+    goldApplicationsCount: 0,
+    totalGuestCount: 0,
+    referralSourcedCount: 0,
   });
   const [auditLogs, setAuditLogs] = useState<AdminAuditLogEntry[]>([]);
   const [auditSearchQuery, setAuditSearchQuery] = useState("");
@@ -2860,7 +2841,6 @@ export default function AdminPanel() {
   const [expandedTelegramBookingId, setExpandedTelegramBookingId] = useState<number | null>(null);
   const [expandedLandingBookingId, setExpandedLandingBookingId] = useState<string | null>(null);
   const [expandedGuestKey, setExpandedGuestKey] = useState<string | null>(null);
-  const [guestTelegramApplications, setGuestTelegramApplications] = useState<AdminTelegramApplication[]>([]);
   const [telegramRecentApplications, setTelegramRecentApplications] = useState<AdminTelegramApplication[]>([]);
   const bookingManagerRef = useRef<HTMLElement | null>(null);
   const bookingManagerCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -3178,19 +3158,6 @@ export default function AdminPanel() {
     }
   };
 
-  const loadGuestTelegramApplications = async () => {
-    try {
-      const response = await getAdminTelegramApplications({
-        search: searchQuery.trim(),
-        status: "",
-        limit: Math.max(100, Math.min(500, (data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE) * 10)),
-        offset: 0,
-      });
-      setGuestTelegramApplications(response.applications);
-    } catch {
-      setGuestTelegramApplications([]);
-    }
-  };
 
   const loadTelegramRecentActivity = async () => {
     try {
@@ -3448,13 +3415,6 @@ export default function AdminPanel() {
   }, [activeSection, usersSource, usersStatus, searchQuery]);
 
   useEffect(() => {
-    if (activeSection !== "guests" || usersSource !== "telegram") {
-      return;
-    }
-    void loadGuestTelegramApplications();
-  }, [activeSection, usersSource, searchQuery, data?.settings?.runtime?.adminUsersPageSize]);
-
-  useEffect(() => {
     if (activeSection !== "engagement" || engagementTab !== "analytics") {
       return;
     }
@@ -3679,6 +3639,10 @@ export default function AdminPanel() {
       if (dishType) {
         await loadDishes(dishType);
       }
+      return;
+    }
+    if (activeSection === "overview") {
+      await Promise.all([loadPanel(true), loadOverviewOperations(), loadDinners()]);
       return;
     }
     await loadPanel(true);
@@ -3971,9 +3935,6 @@ export default function AdminPanel() {
           });
         return nextItems;
       });
-      setGuestTelegramApplications((prev) =>
-        prev.map((item) => (item.packageInfoId === updated.packageInfoId ? updated : item))
-      );
       setTelegramRecentApplications((prev) =>
         prev.map((item) => (item.packageInfoId === updated.packageInfoId ? updated : item))
       );
@@ -3988,7 +3949,12 @@ export default function AdminPanel() {
       }
       setInfoMessage(`Application ${updated.publicCode || `#${updated.packageInfoId}`} updated`);
       window.setTimeout(() => setInfoMessage(""), 1800);
-      const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
+      // Reload dinners/capacity and audit logs after every status change so that
+      // the capacity bars and summary cards reflect the new booking state.
+      const [logs] = await Promise.all([
+        getAdminAuditLogs({ limit: 12, offset: 0 }),
+        loadDinners(),
+      ]);
       setAuditLogs(logs);
       return true;
     } catch (err) {
@@ -4645,7 +4611,9 @@ export default function AdminPanel() {
         ]
       : [
           { value: "all", label: "All" },
+          { value: "draft", label: "Draft" },
           { value: "pending_application", label: "Pending" },
+          { value: "contacted", label: "Contacted" },
           { value: "approved", label: "Approved" },
           { value: "waiting_payment", label: "Waiting payment" },
           { value: "paid", label: "Paid" },
@@ -4666,13 +4634,22 @@ export default function AdminPanel() {
           { label: "Paying users", value: `${telegramUsersSummary.payingUsers}` },
           { label: "Blocked active", value: `${telegramUsersSummary.blockedActive}` },
         ];
+  const landingSelectionFilterOptions = [
+    { value: "all", label: "All" },
+    { value: "open", label: "Open" },
+    { value: "completed", label: "Completed" },
+  ];
+  const landingReviewFilterOptions = [
+    { value: "all", label: "All" },
+    { value: "new", label: "New" },
+    { value: "review", label: "In review" },
+    { value: "contacted", label: "Contacted" },
+    { value: "approved", label: "Approved" },
+    { value: "rejected", label: "Rejected" },
+  ];
   const userStatusOptions =
     usersSource === "landing"
-      ? [
-          { value: "all", label: "All" },
-          { value: "open", label: "Open" },
-          { value: "completed", label: "Completed" },
-        ]
+      ? landingSelectionStatusOptions
       : [
           { value: "all", label: "All" },
           { value: "paying", label: "Paying" },
@@ -4684,8 +4661,8 @@ export default function AdminPanel() {
     if (usersSource === "landing") {
       return landingUsers.map((item) => buildGuestCrmRowFromLandingUser(item));
     }
-    return telegramUsers.map((item) => buildGuestCrmRowFromTelegramUser(item, guestTelegramApplications));
-  }, [usersSource, landingUsers, telegramUsers, guestTelegramApplications]);
+    return telegramUsers.map((item) => buildGuestCrmRowFromTelegramUser(item));
+  }, [usersSource, landingUsers, telegramUsers]);
 
   const dinnersById = useMemo(() => new Map(dinners.map((item) => [item.id, item])), [dinners]);
   const bookingManageSections = useMemo(
@@ -4853,7 +4830,7 @@ export default function AdminPanel() {
   const topRevenuePackage = packageRevenueRows[0]?.label ?? "—";
   const awaitingApprovalCount = telegramApplicationsSummary.pendingApplication;
   const awaitingPaymentCount = telegramApplicationsSummary.approved + telegramApplicationsSummary.waitingPayment;
-  const paidGuestsCount = telegramStats?.usersWithPayments ?? telegramApplicationsSummary.paid;
+  const paidGuestsCount = telegramApplicationsSummary.paid;
   const upcomingDinnerCapacity = dinners
     .filter((item) => !item.expired)
     .reduce((sum, item) => sum + Math.max(item.places - item.alreadyRegistered, 0), 0);
@@ -4861,9 +4838,6 @@ export default function AdminPanel() {
     awaitingApprovalCount +
     awaitingPaymentCount +
     pendingSelections +
-    telegramApplicationsSummary.rejected +
-    telegramApplicationsSummary.cancelled +
-    telegramApplicationsSummary.noShow +
     (telegramStats?.blockedActive ?? 0);
   const pageTitle = isEngagementUserProfileRoute
     ? engagementProfile?.overview.name || "User Intelligence Profile"
@@ -5134,11 +5108,11 @@ export default function AdminPanel() {
   const sectionMetrics: Record<AdminSection, MetricItem[]> = {
     overview: filterItems([
       { label: "Awaiting Approval", value: `${awaitingApprovalCount}`, description: "Telegram applications waiting for admin decision", trend: `${telegramApplicationsSummary.total} total telegram applications`, tone: awaitingApprovalCount > 0 ? "gold" : "emerald", icon: "01" },
-      { label: "Awaiting Payment", value: `${awaitingPaymentCount}`, description: "Approved bookings still not fully settled", trend: `${telegramApplicationsSummary.waitingPayment} marked waiting payment`, tone: awaitingPaymentCount > 0 ? "gold" : "emerald", icon: "02" },
-      { label: "Paid Guests", value: `${paidGuestsCount}`, description: "Guests or users with collected payment recorded", trend: `${telegramStats?.orders24h ?? 0} paid orders in 24h`, tone: "emerald", icon: "03" },
-      { label: "Upcoming Dinner Capacity", value: `${upcomingDinnerCapacity}`, description: `${activeDinnersCount || landing?.activeDinners || 0} active dinners with seats remaining`, trend: `${dinnerRegistrationsTotal} booked seats synced`, tone: upcomingDinnerCapacity > 0 ? "default" : "danger", icon: "04" },
-      { label: "Collected Revenue", value: formatCurrency(telegramStats?.revenueTotal ?? 0), description: "Revenue collected from Telegram bookings", trend: `${formatCurrency(telegramStats?.revenue24h ?? 0)} in last 24h`, tone: "gold", icon: "05" },
-      { label: "Attention Needed", value: `${attentionNeededCount}`, description: "Queues, blocks, open landing work, or failed attendance states", trend: `${pendingSelections} landing package selection still open`, tone: attentionNeededCount > 0 ? "danger" : "emerald", icon: "06" },
+      { label: "Awaiting Payment", value: `${awaitingPaymentCount}`, description: "Approved + waiting-payment bookings not yet settled", trend: `${telegramApplicationsSummary.waitingPayment} marked waiting payment`, tone: awaitingPaymentCount > 0 ? "gold" : "emerald", icon: "02" },
+      { label: "Paid Bookings", value: `${paidGuestsCount}`, description: "Telegram bookings confirmed as paid", trend: `${telegramStats?.orders24h ?? 0} new bookings in last 24h`, tone: "emerald", icon: "03" },
+      { label: "Available Seats", value: `${upcomingDinnerCapacity}`, description: "Remaining open seats across upcoming dinners", trend: `${dinnerRegistrationsTotal} seats currently booked`, tone: upcomingDinnerCapacity > 0 ? "default" : "danger", icon: "04" },
+      { label: "Paid Revenue", value: formatCurrency(telegramStats?.revenueTotal ?? 0), description: "Total revenue from paid Telegram bookings only", trend: `${formatCurrency(telegramStats?.revenue24h ?? 0)} paid in last 24h`, tone: "gold", icon: "05" },
+      { label: "Attention Needed", value: `${attentionNeededCount}`, description: "Pending approvals, unsettled payments, open landing selections, and blocked users", trend: `${pendingSelections} landing package selections still open`, tone: attentionNeededCount > 0 ? "danger" : "emerald", icon: "06" },
     ]),
     analytics: filterItems([
       { label: "Applications", value: formatCompactNumber(landing?.totalUsers ?? 0), description: `${landing?.recent24h ?? 0} new today`, trend: `${(landing?.conversionPercent ?? 0).toFixed(1)}% application -> package rate`, tone: "gold", icon: "L1" },
@@ -5178,8 +5152,8 @@ export default function AdminPanel() {
       { label: "Paid bookings", value: `${telegramApplicationsSummary.paid}`, description: "Confirmed paid reservations", trend: `${telegramApplicationsSummary.waitingPayment} waiting payment`, tone: "emerald", icon: "B2" },
       { label: "Approved", value: `${telegramApplicationsSummary.approved}`, description: "Accepted but not yet paid or completed", trend: `${telegramApplicationsSummary.rejected} rejected`, tone: "default", icon: "B3" },
       { label: "Cancelled / no-show", value: `${telegramApplicationsSummary.cancelled + telegramApplicationsSummary.noShow}`, description: "Operational churn and attendance loss", trend: `${telegramApplicationsSummary.noShow} no-show`, tone: "danger", icon: "B4" },
-      { label: "VIP share", value: `${telegramApplications.filter((item) => item.packageCode === "vip").length}`, description: "Applications with VIP as top package", trend: `${telegramApplications.filter((item) => item.packageCode === "gold").length} Gold`, tone: "gold", icon: "B5" },
-      { label: "Guest count", value: `${telegramApplications.reduce((sum, item) => sum + item.guestCount, 0)}`, description: "Combined guests across visible applications", trend: `${telegramApplications.filter((item) => item.referralUsedCode).length} referral-sourced`, tone: "default", icon: "B6" },
+      { label: "VIP share", value: `${telegramApplicationsSummary.vipApplicationsCount}`, description: "All applications with VIP as top package", trend: `${telegramApplicationsSummary.goldApplicationsCount} Gold`, tone: "gold", icon: "B5" },
+      { label: "Guest count", value: `${telegramApplicationsSummary.totalGuestCount}`, description: "Combined guests across all applications", trend: `${telegramApplicationsSummary.referralSourcedCount} referral-sourced`, tone: "default", icon: "B6" },
     ]),
     audit: filterItems([
       { label: "Audit entries", value: `${auditLogs.length}`, description: "Recent admin actions loaded into the panel", tone: "gold", icon: "A1" },
@@ -5618,7 +5592,6 @@ export default function AdminPanel() {
             meta={
               <>
                 <AdminBadge tone="default">{dashboardDate}</AdminBadge>
-                <AdminBadge tone="gold">Updated {lastUpdated}</AdminBadge>
                 {isEngagementUserProfileRoute && engagementProfile ? (
                   <AdminBadge tone={getBookingToneByStatus(engagementProfile.overview.status)}>
                     {formatEngagementUserStatus(engagementProfile.overview.source, engagementProfile.overview.status)}
@@ -5694,7 +5667,6 @@ export default function AdminPanel() {
                 </AdminButton>
               </>
             ) : null}
-            <span className="admin-toolbar__meta">Generated: {lastUpdated}</span>
             {infoMessage ? <span className="admin-toolbar__meta admin-toolbar__meta--info">{infoMessage}</span> : null}
           </div>
 
@@ -6381,9 +6353,17 @@ export default function AdminPanel() {
                           Open landing package selection
                           <b>{pendingSelections}</b>
                         </li>
-                        <li>
-                          Rejected / cancelled / no-show
-                          <b>{telegramApplicationsSummary.rejected + telegramApplicationsSummary.cancelled + telegramApplicationsSummary.noShow}</b>
+                        <li style={{ opacity: 0.55, fontSize: "0.85em" }}>
+                          Rejected (closed)
+                          <b>{telegramApplicationsSummary.rejected}</b>
+                        </li>
+                        <li style={{ opacity: 0.55, fontSize: "0.85em" }}>
+                          Cancelled (closed)
+                          <b>{telegramApplicationsSummary.cancelled}</b>
+                        </li>
+                        <li style={{ opacity: 0.55, fontSize: "0.85em" }}>
+                          No-show (closed)
+                          <b>{telegramApplicationsSummary.noShow}</b>
                         </li>
                       </ul>
                     </article>
@@ -6395,19 +6375,19 @@ export default function AdminPanel() {
                       </div>
                       <ul className="admin-metric-list">
                         <li>
-                          Collected revenue
+                          Paid revenue
                           <b>{formatCurrency(telegramStats?.revenueTotal ?? 0)}</b>
                         </li>
                         <li>
-                          Revenue 24h
+                          Paid revenue 24h
                           <b>{formatCurrency(telegramStats?.revenue24h ?? 0)}</b>
                         </li>
                         <li>
-                          Paid guests
+                          Paid bookings
                           <b>{paidGuestsCount}</b>
                         </li>
                         <li>
-                          Avg order value
+                          Avg paid order value
                           <b>{formatCurrency(telegramStats?.avgOrderValue ?? 0)}</b>
                         </li>
                       </ul>
@@ -6426,22 +6406,22 @@ export default function AdminPanel() {
                           title="No active dinners loaded"
                           description="Upcoming dinner capacity will appear here once active dinners are available."
                         />
-                      ) : (
-                        <AdminTable className="admin-table-wrap">
-                          <table className="admin-table">
-                            <thead>
-                              <tr>
-                                <th>Dinner</th>
-                                <th>Date</th>
-                                <th colSpan={3}>Capacity Snapshot</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {dinners
-                                .filter((item) => !item.expired)
-                                .slice(0, 6)
-                                .map((item) => {
-                                  return (
+                      ) : (() => {
+                        const upcomingDinners = dinners.filter((item) => !item.expired);
+                        const shown = upcomingDinners.slice(0, 6);
+                        return (
+                          <>
+                            <AdminTable className="admin-table-wrap">
+                              <table className="admin-table">
+                                <thead>
+                                  <tr>
+                                    <th>Dinner</th>
+                                    <th>Date</th>
+                                    <th colSpan={3}>Capacity Snapshot</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {shown.map((item) => (
                                     <tr key={`overview-dinner-${item.id}`}>
                                       <td>{item.description}</td>
                                       <td>{formatDateLabel(item.dinnerDate)}</td>
@@ -6449,12 +6429,18 @@ export default function AdminPanel() {
                                         <DinnerCapacityInline registered={item.alreadyRegistered} places={item.places} compact />
                                       </td>
                                     </tr>
-                                  );
-                                })}
-                            </tbody>
-                          </table>
-                        </AdminTable>
-                      )}
+                                  ))}
+                                </tbody>
+                              </table>
+                            </AdminTable>
+                            {upcomingDinners.length > 6 ? (
+                              <p style={{ margin: "6px 0 0", fontSize: "0.78em", opacity: 0.5, textAlign: "right" }}>
+                                Showing 6 of {upcomingDinners.length} — view all in Dinners section
+                              </p>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                     </article>
 
                     <AdminAuditLogCard
@@ -8650,6 +8636,8 @@ export default function AdminPanel() {
                                         item.status.toLowerCase().includes(q) ||
                                         (item.username || "").toLowerCase().includes(q) ||
                                         (item.message || "").toLowerCase().includes(q) ||
+                                        (item.question || "").toLowerCase().includes(q) ||
+                                        (item.choiceLabel || "").toLowerCase().includes(q) ||
                                         item.userId.toLowerCase().includes(q)
                                       )
                                     : campaignLogs;
@@ -8664,6 +8652,16 @@ export default function AdminPanel() {
                                             <AdminBadge tone={getBookingToneByStatus(item.status)}>{humanizeLabel(item.status)}</AdminBadge>
                                           </div>
                                           <p>{item.username ? formatTelegramUsername(item.username) : `User ${item.userId}`} · {item.message || "No message"}</p>
+                                          {item.eventType === "poll_answer" && (item.choiceLabel || item.question) ? (
+                                            <p>
+                                              {item.question ? <><b>Question:</b> {item.question}</> : null}
+                                              {item.question && item.choiceLabel ? " · " : null}
+                                              {item.choiceLabel ? <><b>Answer:</b> {item.choiceLabel}</> : null}
+                                              {item.messageType === "quiz" && typeof item.correct === "boolean" ? (
+                                                <> · <AdminBadge tone={getCampaignResponseTone(item.correct, item.messageType)}>{item.correct ? "Correct" : "Wrong"}</AdminBadge></>
+                                              ) : null}
+                                            </p>
+                                          ) : null}
                                           <p style={{ opacity: 0.5, fontSize: 12 }}>{formatDateLabel(item.occurredAt)}{item.attempt > 1 ? ` · attempt ${item.attempt}` : ""}</p>
                                         </article>
                                       ))}
@@ -8976,21 +8974,56 @@ export default function AdminPanel() {
                         </button>
                       </div>
 
-                      <div className="admin-users__filter-group" role="group" aria-label="Users status filter">
-                        <span className="admin-users__filter-group-label">Status</span>
-                        <div className="admin-users__filter-buttons">
-                          {userStatusOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              className={`admin-users__filter-btn admin-users__filter-btn--${option.value} ${usersStatus === option.value ? "admin-users__filter-btn--active" : ""}`}
-                              onClick={() => setUsersStatus(option.value)}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
+                      {usersSource === "landing" ? (
+                        <>
+                          <div className="admin-users__filter-group" role="group" aria-label="Selection status filter">
+                            <span className="admin-users__filter-group-label">Selection</span>
+                            <div className="admin-users__filter-buttons">
+                              {landingSelectionFilterOptions.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={`admin-users__filter-btn admin-users__filter-btn--${option.value} ${usersStatus === option.value ? "admin-users__filter-btn--active" : ""}`}
+                                  onClick={() => setUsersStatus(option.value)}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="admin-users__filter-group" role="group" aria-label="Review status filter">
+                            <span className="admin-users__filter-group-label">Review</span>
+                            <div className="admin-users__filter-buttons">
+                              {landingReviewFilterOptions.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={`admin-users__filter-btn admin-users__filter-btn--${option.value} ${usersStatus === option.value ? "admin-users__filter-btn--active" : ""}`}
+                                  onClick={() => setUsersStatus(option.value)}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="admin-users__filter-group" role="group" aria-label="Users status filter">
+                          <span className="admin-users__filter-group-label">Status</span>
+                          <div className="admin-users__filter-buttons">
+                            {userStatusOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`admin-users__filter-btn admin-users__filter-btn--${option.value} ${usersStatus === option.value ? "admin-users__filter-btn--active" : ""}`}
+                                onClick={() => setUsersStatus(option.value)}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </AdminFilterBar>
                     {usersError ? <p className="admin-auth__error">{usersError}</p> : null}
                   </article>
@@ -8998,7 +9031,12 @@ export default function AdminPanel() {
                   <article className="admin-widget admin-widget--full">
                     <div className="admin-widget__header">
                       <h2>{usersSource === "landing" ? "Landing Guest CRM" : "Telegram Guest CRM"}</h2>
-                      <span>{guestCrmRows.length} guests loaded</span>
+                      <span>
+                        {guestCrmRows.length} loaded
+                        {usersSource === "landing"
+                          ? ` of ${landingUsersSummary.total} total`
+                          : ` of ${telegramUsersSummary.total} total`}
+                      </span>
                     </div>
 
                     {usersLoading && currentUsers.length === 0 ? (
@@ -9037,13 +9075,13 @@ export default function AdminPanel() {
                                     <AdminBadge tone={item.statusLabel === "Completed" ? "emerald" : "gold"}>{item.statusLabel || "Open"}</AdminBadge>
                                   </div>
                                   <div className="admin-landing-crm-card__metric">
-                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Payments">Payments</span>
-                                    <AdminBadge>{item.paidStatusLabel || "Not tracked"}</AdminBadge>
+                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Payments — not tracked for landing users">Payments</span>
+                                    <span style={{ opacity: 0.5 }}><AdminBadge>{item.paidStatusLabel || "Not tracked"}</AdminBadge></span>
                                   </div>
                                 </div>
 
                                 <div className="admin-landing-crm-card__activity">
-                                  <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Last Activity">Last Activity</span>
+                                  <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Last record update — includes admin edits">Last Updated</span>
                                   <strong>{formatDateLabel(item.lastActivityAt)}</strong>
                                   {item.createdAt ? <span className="admin-users__cell-sub">Created {formatDateLabel(item.createdAt)}</span> : null}
                                 </div>
@@ -9074,9 +9112,9 @@ export default function AdminPanel() {
                                       </div>
                                     </section>
                                     <section className="admin-guest-crm__detail-card admin-guest-crm__detail-card--timeline">
-                                      <h3>Timeline</h3>
+                                      <h3>Status Snapshot</h3>
                                       <div className="admin-guest-crm__detail-list admin-guest-crm__detail-list--timeline">
-                                        {item.timelineLines.map((line) => (
+                                        {item.snapshotLines.map((line) => (
                                           <p key={line} className="admin-guest-crm__detail-copy">{line}</p>
                                         ))}
                                       </div>
@@ -9096,30 +9134,22 @@ export default function AdminPanel() {
                         <table className="admin-table admin-table--guest-crm">
                           <colgroup>
                             <col style={{ width: "220px" }} />
-                            <col style={{ width: "156px" }} />
-                            <col style={{ width: "164px" }} />
-                            <col style={{ width: "118px" }} />
-                            <col style={{ width: "88px" }} />
-                            <col style={{ width: "116px" }} />
-                            <col style={{ width: "132px" }} />
-                            <col style={{ width: "104px" }} />
-                            <col style={{ width: "82px" }} />
-                            <col style={{ width: "188px" }} />
-                            <col style={{ width: "148px" }} />
+                            <col style={{ width: "130px" }} />
+                            <col style={{ width: "72px" }} />
+                            <col style={{ width: "72px" }} />
+                            <col style={{ width: "86px" }} />
+                            <col style={{ width: "130px" }} />
+                            <col style={{ width: "110px" }} />
                           </colgroup>
                           <thead>
                             <tr>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--guest admin-tooltip-target" data-tooltip="Guest">Guest</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--phone admin-tooltip-target" data-tooltip="Phone">Phone</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--username admin-tooltip-target" data-tooltip="Telegram Username">Telegram</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-guest-crm__col--applications admin-tooltip-target" data-tooltip="Applications">Applications</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-tooltip-target" data-tooltip="Paid Bookings">Paid</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-guest-crm__col--attendance admin-tooltip-target" data-tooltip="Attendance">Attendance</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--payments admin-tooltip-target" data-tooltip="Total Payments">Payments</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-guest-crm__col--referrals admin-tooltip-target" data-tooltip="Referrals">Referrals</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-tooltip-target" data-tooltip="Points">Points</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--activity admin-tooltip-target" data-tooltip="Last Activity">Last Activity</th>
-                              <th className="admin-guest-crm__col admin-guest-crm__col--actions admin-tooltip-target" data-tooltip="View Timeline">Timeline</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--guest admin-tooltip-target" data-tooltip="Guest name and last booking status">Guest</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--payments admin-tooltip-target" data-tooltip="Total payments from bot counter">Payments</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-tooltip-target" data-tooltip="Total applications (all statuses)">Apps</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-tooltip-target" data-tooltip="Confirmed paid bookings (live from package_info)">Paid</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--metric admin-guest-crm__col--attendance admin-tooltip-target" data-tooltip="Bot-maintained attendance counter">Attended</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--activity admin-tooltip-target" data-tooltip="Most recent registration or record update">Last Updated</th>
+                              <th className="admin-guest-crm__col admin-guest-crm__col--actions admin-tooltip-target" data-tooltip="View full guest detail">Detail</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -9133,26 +9163,18 @@ export default function AdminPanel() {
                                     <div className="admin-users__cell-title">{item.name}</div>
                                   </div>
                                   {item.statusLabel ? <div className="admin-users__cell-sub">{item.statusLabel}</div> : null}
+                                  {item.phone !== "—" ? <div className="admin-users__cell-sub">{item.phone}</div> : null}
                                 </td>
-                                <td className="admin-guest-crm__cell admin-guest-crm__cell--phone" data-label="Phone">
-                                  <div className="admin-users__cell-title">{item.phone}</div>
-                                </td>
-                                <td className="admin-guest-crm__cell admin-guest-crm__cell--username" data-label="Telegram">
-                                  <div className="admin-users__cell-title">{item.telegramUsername}</div>
-                                </td>
-                                <td className="admin-guest-crm__cell" data-label="Applications">{formatNullableCount(item.applicationsCount)}</td>
-                                <td className="admin-guest-crm__cell" data-label="Paid">{formatNullableCount(item.paidBookingsCount)}</td>
-                                <td className="admin-guest-crm__cell" data-label="Attendance">{formatNullableCount(item.attendanceCount)}</td>
                                 <td className="admin-guest-crm__cell" data-label="Payments">
                                   {item.totalPayments === null ? "—" : formatCurrency(item.totalPayments)}
                                 </td>
-                                <td className="admin-guest-crm__cell" data-label="Referrals">{formatNullableCount(item.referralCount)}</td>
-                                <td className="admin-guest-crm__cell" data-label="Points">{formatNullableCount(item.points)}</td>
-                                <td className="admin-guest-crm__cell admin-guest-crm__cell--activity" data-label="Last Activity">
+                                <td className="admin-guest-crm__cell" data-label="Apps">{formatNullableCount(item.applicationsCount)}</td>
+                                <td className="admin-guest-crm__cell" data-label="Paid">{formatNullableCount(item.paidBookingsCount)}</td>
+                                <td className="admin-guest-crm__cell admin-guest-crm__cell--attendance" data-label="Attended">{formatNullableCount(item.attendanceCount)}</td>
+                                <td className="admin-guest-crm__cell admin-guest-crm__cell--activity" data-label="Last Updated">
                                   <div className="admin-users__cell-title">{formatDateLabel(item.lastActivityAt)}</div>
-                                  {item.createdAt ? <div className="admin-users__cell-sub">Created {formatDateLabel(item.createdAt)}</div> : null}
                                 </td>
-                                <td className="admin-guest-crm__cell admin-guest-crm__cell--actions" data-label="Timeline">
+                                <td className="admin-guest-crm__cell admin-guest-crm__cell--actions" data-label="Detail">
                                   <button
                                     type="button"
                                     className="admin-guest-crm__toggle"
@@ -9160,13 +9182,13 @@ export default function AdminPanel() {
                                     aria-expanded={isExpanded}
                                     aria-controls={`guest-crm-detail-${item.key}`}
                                   >
-                                    {isExpanded ? "Hide timeline" : "View timeline"}
+                                    {isExpanded ? "Close" : "View"}
                                   </button>
                                 </td>
                               </tr>
                               {isExpanded ? (
                                 <tr className="admin-guest-crm__detail-row" id={`guest-crm-detail-${item.key}`}>
-                                  <td colSpan={11} className="admin-guest-crm__detail-cell">
+                                  <td colSpan={7} className="admin-guest-crm__detail-cell">
                                     <div className="admin-guest-crm__detail-grid">
                                       <section className="admin-guest-crm__detail-card admin-guest-crm__detail-card--guest">
                                         <h3>Guest details</h3>
@@ -9178,9 +9200,9 @@ export default function AdminPanel() {
                                         </div>
                                       </section>
                                       <section className="admin-guest-crm__detail-card admin-guest-crm__detail-card--timeline">
-                                        <h3>Timeline</h3>
+                                        <h3>Status Snapshot</h3>
                                         <div className="admin-guest-crm__detail-list admin-guest-crm__detail-list--timeline">
-                                          {item.timelineLines.map((line) => (
+                                          {item.snapshotLines.map((line) => (
                                             <p key={line} className="admin-guest-crm__detail-copy">{line}</p>
                                           ))}
                                         </div>
@@ -9215,25 +9237,19 @@ export default function AdminPanel() {
 
                                 <div className="admin-guest-crm-card__meta">
                                   <div className="admin-guest-crm-card__metric">
-                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Contact">Contact</span>
-                                    <strong>{item.phone}</strong>
-                                    <span>{item.telegramUsername}</span>
-                                  </div>
-                                  <div className="admin-guest-crm-card__metric">
-                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Current Status">Current Status</span>
+                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Current Status">Status</span>
                                     <AdminBadge tone={getTelegramStatusSummary(item.rawStatus)[0]?.tone ?? "default"}>
                                       {item.statusLabel || "No status"}
                                     </AdminBadge>
                                   </div>
                                   <div className="admin-guest-crm-card__metric">
-                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Payments">Payments</span>
+                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Total payments from bot counter">Payments</span>
                                     <strong>{item.totalPayments === null ? "—" : formatCurrency(item.totalPayments)}</strong>
                                     <span>{item.paidStatusLabel || "Unpaid"}</span>
                                   </div>
                                   <div className="admin-guest-crm-card__metric">
-                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Last Activity">Last Activity</span>
+                                    <span className="admin-landing-crm-card__metric-label admin-tooltip-target" data-tooltip="Most recent registration or record update">Last Updated</span>
                                     <strong>{formatDateLabel(item.lastActivityAt)}</strong>
-                                    {item.createdAt ? <span>Created {formatDateLabel(item.createdAt)}</span> : null}
                                   </div>
                                 </div>
 
@@ -9245,7 +9261,7 @@ export default function AdminPanel() {
                                     aria-expanded={isExpanded}
                                     aria-controls={`guest-crm-card-detail-${item.key}`}
                                   >
-                                    {isExpanded ? "Hide timeline" : "View timeline"}
+                                    {isExpanded ? "Close" : "View"}
                                   </button>
                                 </div>
                               </div>
@@ -9263,9 +9279,9 @@ export default function AdminPanel() {
                                       </div>
                                     </section>
                                     <section className="admin-guest-crm__detail-card admin-guest-crm__detail-card--timeline">
-                                      <h3>Timeline</h3>
+                                      <h3>Status Snapshot</h3>
                                       <div className="admin-guest-crm__detail-list admin-guest-crm__detail-list--timeline">
-                                        {item.timelineLines.map((line) => (
+                                        {item.snapshotLines.map((line) => (
                                           <p key={line} className="admin-guest-crm__detail-copy">{line}</p>
                                         ))}
                                       </div>

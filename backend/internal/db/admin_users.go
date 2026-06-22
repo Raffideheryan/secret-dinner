@@ -2,9 +2,12 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
+
+var ErrLandingCompletedRequiresDinnerAndPackage = errors.New("selection_status cannot be set to completed without a dinner and package selection")
 
 type adminUsersRepo struct {
 	landingDB  *sql.DB
@@ -149,6 +152,25 @@ func (r *adminUsersRepo) UpdateLandingUserStatus(userID string, selectionStatus 
 
 	if selectionStatus == nil && adminStatus == nil {
 		return LandingUserRecord{}, sql.ErrNoRows
+	}
+
+	// Prevent setting selection_status = completed when the user has no dinner
+	// or package selection — completed without these fields is an impossible state.
+	if selectionStatus != nil && *selectionStatus == "completed" {
+		var dinnerID sql.NullInt64
+		var chosenPackage sql.NullString
+		if err := r.landingDB.QueryRow(
+			`SELECT dinner_id, chosen_package FROM users_landing WHERE id::text = $1`,
+			userID,
+		).Scan(&dinnerID, &chosenPackage); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return LandingUserRecord{}, sql.ErrNoRows
+			}
+			return LandingUserRecord{}, err
+		}
+		if !dinnerID.Valid || !chosenPackage.Valid || strings.TrimSpace(chosenPackage.String) == "" {
+			return LandingUserRecord{}, ErrLandingCompletedRequiresDinnerAndPackage
+		}
 	}
 
 	query := `
@@ -298,7 +320,19 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 				FROM blocked_users bu
 				WHERE bu.user_id = u.id
 					AND (bu.unblock_date IS NULL OR bu.unblock_date > now())
-			) AS blocked_active
+			) AS blocked_active,
+			COALESCE((
+				SELECT COUNT(*)
+				FROM registered_users ru3
+				JOIN package_info pi3 ON pi3.id = ru3.package_info_id
+				WHERE ru3.user_id = u.id AND pi3.status = 'paid'
+			), 0) AS paid_bookings_count,
+			COALESCE((
+				SELECT COUNT(*)
+				FROM registered_users ru4
+				JOIN package_info pi4 ON pi4.id = ru4.package_info_id
+				WHERE ru4.user_id = u.id AND pi4.status = 'no_show'
+			), 0) AS no_show_count
 		FROM users u
 		LEFT JOIN registered_users ru ON ru.user_id = u.id
 		LEFT JOIN referals ruv ON ruv.user_id = u.id
@@ -349,6 +383,8 @@ func (r *adminUsersRepo) ListTelegramUsers(params UserListParams) ([]TelegramUse
 			&item.LastTablePreference,
 			&item.LastApplicationStatus,
 			&item.BlockedActive,
+			&item.PaidBookingsCount,
+			&item.NoShowCount,
 		); err != nil {
 			return nil, err
 		}

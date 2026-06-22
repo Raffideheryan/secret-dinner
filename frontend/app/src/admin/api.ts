@@ -88,6 +88,8 @@ export type AdminTelegramUser = {
   points: number;
   discount: number;
   ordersCount: number;
+  paidBookingsCount: number;
+  noShowCount: number;
   blockedActive: boolean;
   lastRegisteredAt?: string;
   lastApplicationStatus: string;
@@ -154,6 +156,10 @@ export type AdminTelegramApplicationsSummary = {
   cancelled: number;
   rejected: number;
   noShow: number;
+  vipApplicationsCount: number;
+  goldApplicationsCount: number;
+  totalGuestCount: number;
+  referralSourcedCount: number;
 };
 
 export type AdminAuditLog = {
@@ -647,6 +653,11 @@ export type EngagementCampaignLog = {
   status: string;
   message: string;
   metadata: string;
+  messageType: string;
+  question: string;
+  choiceIndex?: number;
+  choiceLabel: string;
+  correct?: boolean;
   occurredAt: string;
   attempt: number;
   messageId: number;
@@ -954,6 +965,10 @@ export async function getAdminTelegramApplications(params: {
       cancelled: 0,
       rejected: 0,
       noShow: 0,
+      vipApplicationsCount: 0,
+      goldApplicationsCount: 0,
+      totalGuestCount: 0,
+      referralSourcedCount: 0,
     },
   };
 }

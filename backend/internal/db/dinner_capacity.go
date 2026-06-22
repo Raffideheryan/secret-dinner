@@ -7,8 +7,9 @@ import (
 	"github.com/lib/pq"
 )
 
+// draft is excluded: incomplete bot sessions that haven't submitted an
+// application must not consume dinner capacity.
 var telegramCapacityStatuses = map[string]struct{}{
-	"draft":               {},
 	"pending_application": {},
 	"contacted":           {},
 	"approved":            {},

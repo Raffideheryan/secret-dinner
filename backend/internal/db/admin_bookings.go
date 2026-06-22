@@ -16,16 +16,20 @@ var ErrInvalidTelegramApplicationStatusTransition = errors.New("invalid telegram
 var ErrTelegramApplicationStaleUpdate = errors.New("telegram application was updated by another admin")
 var ErrTelegramApplicationReasonRequired = errors.New("reason is required for risky status overrides")
 
+// Strict transition map mirroring the frontend rules. Terminal states (rejected,
+// cancelled, no_show) cannot be exited — only the same status is allowed.
+// no_show is intentionally only reachable from paid, preventing the impossible
+// state of a no-show on a booking that was never paid.
 var allowedTelegramApplicationStatusTransitions = map[string][]string{
-	"draft":               {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"pending_application": {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"contacted":           {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"approved":            {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"waiting_payment":     {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"paid":                {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"rejected":            {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"cancelled":           {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
-	"no_show":             {"draft", "pending_application", "contacted", "approved", "rejected", "waiting_payment", "paid", "cancelled", "no_show"},
+	"draft":               {"draft", "pending_application", "cancelled"},
+	"pending_application": {"pending_application", "contacted", "approved", "rejected", "cancelled"},
+	"contacted":           {"contacted", "approved", "rejected", "cancelled"},
+	"approved":            {"approved", "waiting_payment", "cancelled"},
+	"waiting_payment":     {"waiting_payment", "paid", "cancelled"},
+	"paid":                {"paid", "no_show", "cancelled"},
+	"rejected":            {"rejected"},
+	"cancelled":           {"cancelled"},
+	"no_show":             {"no_show"},
 }
 
 func NewAdminBookingsDB(db *sql.DB) AdminBookingsDB {
@@ -163,17 +167,32 @@ func (r *adminBookingsRepo) ListTelegramApplications(params UserListParams) ([]T
 }
 
 func (r *adminBookingsRepo) TelegramApplicationsSummary() (TelegramApplicationsSummary, error) {
+	// vipApplicationsCount, goldApplicationsCount, totalGuestCount, and
+	// referralSourcedCount are computed across all applications (not just the
+	// current page) so that Bookings KPI cards show global totals.
 	const query = `
 		SELECT
 			COUNT(*) AS total,
-			COUNT(*) FILTER (WHERE status = 'pending_application') AS pending_application,
-			COUNT(*) FILTER (WHERE status = 'approved') AS approved,
-			COUNT(*) FILTER (WHERE status = 'waiting_payment') AS waiting_payment,
-			COUNT(*) FILTER (WHERE status = 'paid') AS paid,
-			COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled,
-			COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
-			COUNT(*) FILTER (WHERE status = 'no_show') AS no_show
-		FROM package_info
+			COUNT(*) FILTER (WHERE pi.status = 'pending_application') AS pending_application,
+			COUNT(*) FILTER (WHERE pi.status = 'approved') AS approved,
+			COUNT(*) FILTER (WHERE pi.status = 'waiting_payment') AS waiting_payment,
+			COUNT(*) FILTER (WHERE pi.status = 'paid') AS paid,
+			COUNT(*) FILTER (WHERE pi.status = 'cancelled') AS cancelled,
+			COUNT(*) FILTER (WHERE pi.status = 'rejected') AS rejected,
+			COUNT(*) FILTER (WHERE pi.status = 'no_show') AS no_show,
+			COUNT(*) FILTER (WHERE lower(pi.menu) LIKE '%vip%') AS vip_applications_count,
+			COUNT(*) FILTER (WHERE lower(pi.menu) LIKE '%gold%' AND lower(pi.menu) NOT LIKE '%vip%') AS gold_applications_count,
+			COALESCE(SUM(
+				CASE
+					WHEN lower(pi.menu) IN ('silver', 'gold', 'vip', 'custom_menu') THEN 1
+					WHEN pi.menu = '' OR pi.menu IS NULL THEN 0
+					ELSE (LENGTH(pi.menu) - LENGTH(REPLACE(pi.menu, ',', ''))) + 1
+				END
+			), 0) AS total_guest_count,
+			COUNT(*) FILTER (WHERE rv.referal_code IS NOT NULL AND rv.referal_code <> '') AS referral_sourced_count
+		FROM package_info pi
+		JOIN registered_users ru ON ru.package_info_id = pi.id
+		LEFT JOIN referals rv ON rv.user_id = ru.user_id
 	`
 	var summary TelegramApplicationsSummary
 	if err := r.db.QueryRow(query).Scan(
@@ -185,6 +204,10 @@ func (r *adminBookingsRepo) TelegramApplicationsSummary() (TelegramApplicationsS
 		&summary.Cancelled,
 		&summary.Rejected,
 		&summary.NoShow,
+		&summary.VIPApplicationsCount,
+		&summary.GoldApplicationsCount,
+		&summary.TotalGuestCount,
+		&summary.ReferralSourcedCount,
 	); err != nil {
 		return TelegramApplicationsSummary{}, err
 	}

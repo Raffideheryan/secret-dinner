@@ -9,7 +9,8 @@ func TestTelegramStatusCountsTowardCapacity(t *testing.T) {
 		status string
 		want   bool
 	}{
-		{status: "draft", want: true},
+		// draft is excluded: incomplete bot sessions must not consume capacity.
+		{status: "draft", want: false},
 		{status: "pending_application", want: true},
 		{status: "contacted", want: true},
 		{status: "approved", want: true},
@@ -156,5 +157,27 @@ func TestTelegramCapacityUsageSumsGuestCountAcrossBookings(t *testing.T) {
 	}
 	if totalSeats != 7 {
 		t.Fatalf("total occupied seats = %d, want 7", totalSeats)
+	}
+}
+
+func TestDraftDoesNotCountTowardCapacity(t *testing.T) {
+	t.Parallel()
+
+	// Draft bookings are incomplete bot sessions that have not submitted an
+	// application. They must never occupy dinner capacity.
+	draftBookings := []struct {
+		menu string
+	}{
+		{menu: "silver"},
+		{menu: "guest_1:silver,guest_2:gold"},
+		{menu: "vip"},
+		{menu: ""},
+	}
+
+	for _, b := range draftBookings {
+		bookings, seats := telegramCapacityUsage("draft", b.menu)
+		if bookings != 0 || seats != 0 {
+			t.Fatalf("draft booking with menu=%q should not count toward capacity, got bookings=%d seats=%d", b.menu, bookings, seats)
+		}
 	}
 }

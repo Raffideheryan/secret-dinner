@@ -37,12 +37,12 @@ func (r *telegramStatsRepo) GetAdminStats() (TelegramDashboardStats, error) {
 			(SELECT COUNT(*) FROM registered_users) AS registrations_total,
 			(SELECT COUNT(*) FROM referals) AS referrals_total,
 			(SELECT COUNT(*) FROM blocked_users WHERE unblock_date IS NULL OR unblock_date > now()) AS blocked_active,
-			COALESCE((SELECT SUM(price)::float8 FROM package_info), 0) AS revenue_total,
+			COALESCE((SELECT SUM(price)::float8 FROM package_info WHERE status = 'paid'), 0) AS revenue_total,
+			COALESCE((SELECT COUNT(*)::int8 FROM package_info WHERE status = 'paid'), 0) AS paid_bookings_count,
 			COALESCE((
-				SELECT SUM(pi.price)::float8
-				FROM registered_users ru
-				JOIN package_info pi ON pi.id = ru.package_info_id
-				WHERE ru.created_at >= now() - interval '24 hours'
+				SELECT SUM(price)::float8
+				FROM package_info
+				WHERE status = 'paid' AND updated_at >= now() - interval '24 hours'
 			), 0) AS revenue_24h,
 			COALESCE((
 				SELECT COUNT(*)
@@ -68,6 +68,7 @@ func (r *telegramStatsRepo) GetAdminStats() (TelegramDashboardStats, error) {
 		&stats.ReferralsTotal,
 		&stats.BlockedActive,
 		&stats.RevenueTotal,
+		&stats.PaidBookingsCount,
 		&stats.Revenue24h,
 		&stats.Orders24h,
 		&nextDinner,
@@ -91,8 +92,8 @@ func (r *telegramStatsRepo) GetAdminStats() (TelegramDashboardStats, error) {
 		stats.ReferralCoveragePct = (float64(stats.ReferralsTotal) / float64(stats.TotalUsers)) * 100
 		stats.BlockedRatePct = (float64(stats.BlockedActive) / float64(stats.TotalUsers)) * 100
 	}
-	if stats.RegistrationsTotal > 0 {
-		stats.AvgOrderValue = stats.RevenueTotal / float64(stats.RegistrationsTotal)
+	if stats.PaidBookingsCount > 0 {
+		stats.AvgOrderValue = stats.RevenueTotal / float64(stats.PaidBookingsCount)
 	}
 
 	const packageBreakdownQuery = `

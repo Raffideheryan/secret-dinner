@@ -142,6 +142,23 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 			})
 		}
 
+		// Bot-maintained denormalized counters (users.total_payments,
+		// users.attendance_count, users.friends_invited, users.points) are NOT
+		// updated here. They are written exclusively by the Telegram bot
+		// (secret-dinner-bot) during payment confirmation and post-dinner
+		// attendance marking. Admin panel status overrides intentionally do not
+		// touch these fields to avoid double-counting or misrepresenting the
+		// bot's source of truth.
+		//
+		// NOTIFICATIONS NOTE (post-launch):
+		// The following status transitions should trigger user-facing Telegram
+		// notifications but currently do not when set via the admin panel:
+		//   - paid      → bot currently does not notify on admin-set paid
+		//   - cancelled → user is not informed when admin cancels their booking
+		//   - no_show   → no notification sent; consider adding a follow-up message
+		// These should be implemented as webhook calls to the bot's admin-notify
+		// endpoint after UpdateTelegramApplication succeeds, passing the new
+		// status and the user's Telegram ID.
 		before, after, err := l.connections.AdminBookings.UpdateTelegramApplication(packageInfoID, status, body.Note, expectedUpdatedAt)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {

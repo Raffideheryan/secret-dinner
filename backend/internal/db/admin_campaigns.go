@@ -492,11 +492,15 @@ func (r *adminCampaignsRepo) ListEngagementCampaignLogs(id int64, limit int, off
 			logs.status,
 			COALESCE(logs.message, ''),
 			COALESCE(logs.metadata::text, '{}'),
+			COALESCE(ec.message_type, ''),
+			COALESCE(ec.message_payload->'poll'->>'question', ''),
+			COALESCE(ec.message_payload->'poll'->'options', '[]'::jsonb),
 			logs.created_at,
 			logs.attempt,
 			logs.message_id,
 			COALESCE(logs.poll_id, '')
 		FROM engagement_campaign_delivery_logs logs
+		LEFT JOIN engagement_campaigns ec ON ec.id = logs.campaign_id
 		LEFT JOIN users u ON u.id = logs.user_id
 		WHERE logs.campaign_id = $1
 		ORDER BY logs.created_at DESC, logs.id DESC
@@ -510,6 +514,7 @@ func (r *adminCampaignsRepo) ListEngagementCampaignLogs(id int64, limit int, off
 	items := make([]EngagementCampaignDeliveryLog, 0, limit)
 	for rows.Next() {
 		var item EngagementCampaignDeliveryLog
+		var optionsJSON []byte
 		if err := rows.Scan(
 			&item.ID,
 			&item.CampaignID,
@@ -520,12 +525,31 @@ func (r *adminCampaignsRepo) ListEngagementCampaignLogs(id int64, limit int, off
 			&item.Status,
 			&item.Message,
 			&item.Metadata,
+			&item.MessageType,
+			&item.Question,
+			&optionsJSON,
 			&item.OccurredAt,
 			&item.Attempt,
 			&item.MessageID,
 			&item.PollID,
 		); err != nil {
 			return nil, 0, err
+		}
+		var meta struct {
+			ChoiceIndex *int `json:"choiceIndex"`
+			Correct     *bool `json:"correct"`
+		}
+		if err := json.Unmarshal([]byte(item.Metadata), &meta); err == nil {
+			item.ChoiceIndex = meta.ChoiceIndex
+			item.Correct = meta.Correct
+		}
+		if item.ChoiceIndex != nil {
+			var options []string
+			if err := json.Unmarshal(optionsJSON, &options); err == nil {
+				if idx := *item.ChoiceIndex; idx >= 0 && idx < len(options) {
+					item.ChoiceLabel = options[idx]
+				}
+			}
 		}
 		items = append(items, item)
 	}

@@ -208,6 +208,11 @@ func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 					"error": "user not found",
 				})
 			}
+			if errors.Is(err, db.ErrLandingCompletedRequiresDinnerAndPackage) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": db.ErrLandingCompletedRequiresDinnerAndPackage.Error(),
+				})
+			}
 			log.WithError(err).Error("failed to update landing user status")
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "failed to update user status",
