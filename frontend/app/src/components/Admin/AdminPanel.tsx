@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { FormControl, MenuItem, Select, TextField } from "@mui/material";
+import { FormControl, InputLabel, MenuItem, Select, TextField } from "@mui/material";
 import SeoHead from "../SEO/SeoHead";
 import {
   adminLogout,
@@ -384,6 +384,73 @@ type CampaignComposerState = {
   confirmBulkSend: boolean;
 };
 
+const campaignButtonActionOptions = [
+  { value: "track_only", label: "Track Only" },
+  { value: "menu", label: "Open Main Menu" },
+  { value: "dinners", label: "Open Tickets / Dinners" },
+  { value: "referral", label: "Open Referral" },
+  { value: "dinner", label: "Open Specific Dinner" },
+] as const;
+
+function validateCampaignMediaInput(form: CampaignComposerState): string {
+  const urlBasedTypes = new Set(["photo", "image", "video", "document", "audio", "voice"]);
+  if (!urlBasedTypes.has(form.messageType) || form.mediaKind !== "url") {
+    return "";
+  }
+  const raw = form.mediaValue.trim();
+  if (!raw) {
+    return "";
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return "Media URL is invalid.";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "Media URL must use http or https.";
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const blockedHosts = new Set([
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "youtu.be",
+    "vimeo.com",
+    "www.vimeo.com",
+    "facebook.com",
+    "www.facebook.com",
+    "instagram.com",
+    "www.instagram.com",
+    "tiktok.com",
+    "www.tiktok.com",
+  ]);
+  if (blockedHosts.has(host)) {
+    return `${humanizeLabel(form.messageType)} campaigns require a direct media file URL, not a webpage link from ${host}.`;
+  }
+
+  const pathname = parsed.pathname.toLowerCase();
+  const extension = pathname.includes(".") ? pathname.slice(pathname.lastIndexOf(".")) : "";
+  const matches = (...allowed: string[]) => allowed.includes(extension);
+  switch (form.messageType) {
+    case "video":
+      return matches(".mp4", ".mov", ".m4v", ".webm") ? "" : "Video campaigns require a direct video file URL such as .mp4.";
+    case "photo":
+    case "image":
+      return matches(".jpg", ".jpeg", ".png", ".webp", ".gif") ? "" : "Image campaigns require a direct image file URL such as .jpg or .png.";
+    case "audio":
+      return matches(".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac") ? "" : "Audio campaigns require a direct audio file URL such as .mp3.";
+    case "voice":
+      return matches(".ogg", ".oga", ".opus") ? "" : "Voice campaigns require a direct voice file URL such as .ogg.";
+    case "document":
+      return extension ? "" : "Document campaigns require a direct file URL with an extension such as .pdf or .docx.";
+    default:
+      return "";
+  }
+}
+
 const sectionLabels: Record<AdminSection, string> = {
   overview: "Overview",
   guests: "Guests",
@@ -655,8 +722,14 @@ function buildCampaignPayload(form: CampaignComposerState): EngagementCampaignPa
       label: item.label.trim(),
       kind: item.kind,
       url: item.url.trim() || undefined,
-      action: item.action.trim() || undefined,
-      dinnerId: item.dinnerId && item.dinnerId !== "all" ? Number(item.dinnerId) : undefined,
+      action: item.kind === "link"
+        ? undefined
+        : item.action === "track_only"
+          ? undefined
+          : item.action.trim() || undefined,
+      dinnerId: item.kind !== "link" && item.action === "dinner" && item.dinnerId && item.dinnerId !== "all"
+        ? Number(item.dinnerId)
+        : undefined,
     }))
     .filter((item) => item.label);
   if (buttons.length > 0) {
@@ -743,7 +816,7 @@ function buildCampaignComposerStateFromRecord(record: EngagementCampaignRecord):
       label: item.label,
       kind: item.kind,
       url: item.url ?? "",
-      action: item.action ?? "menu",
+      action: item.action?.trim() ? item.action : "track_only",
       dinnerId: item.dinnerId != null ? String(item.dinnerId) : "",
     })),
     scheduledFor: record.scheduledFor ? record.scheduledFor.slice(0, 16) : "",
@@ -3792,6 +3865,12 @@ export default function AdminPanel() {
   };
 
   const handleSaveCampaign = async () => {
+    const mediaValidationError = validateCampaignMediaInput(campaignComposer);
+    if (mediaValidationError) {
+      setCampaignComposerError(mediaValidationError);
+      setCampaignComposerTab("content");
+      return;
+    }
     setCampaignComposerSaving(true);
     setCampaignComposerError("");
     try {
@@ -8390,7 +8469,47 @@ export default function AdminPanel() {
                                             {button.kind === "link" ? (
                                               <TextField label="URL" value={button.url} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, url: event.target.value } : item) }))} className="admin-engagement__field" sx={engagementFieldSx} />
                                             ) : (
-                                              <TextField label="Action" value={button.action} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, action: event.target.value } : item) }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                              <>
+                                                <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                                  <InputLabel>Action</InputLabel>
+                                                  <Select
+                                                    label="Action"
+                                                    value={button.action || "track_only"}
+                                                    onChange={(event) => setCampaignComposer((prev) => ({
+                                                      ...prev,
+                                                      buttons: prev.buttons.map((item) => item.id === button.id
+                                                        ? {
+                                                            ...item,
+                                                            action: event.target.value,
+                                                            dinnerId: event.target.value === "dinner" ? item.dinnerId : "",
+                                                          }
+                                                        : item),
+                                                    }))}
+                                                  >
+                                                    {campaignButtonActionOptions.map((option) => (
+                                                      <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                                                    ))}
+                                                  </Select>
+                                                </FormControl>
+                                                {button.action === "dinner" ? (
+                                                  <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
+                                                    <InputLabel>Dinner</InputLabel>
+                                                    <Select
+                                                      label="Dinner"
+                                                      value={button.dinnerId || "all"}
+                                                      onChange={(event) => setCampaignComposer((prev) => ({
+                                                        ...prev,
+                                                        buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, dinnerId: event.target.value } : item),
+                                                      }))}
+                                                    >
+                                                      <MenuItem value="all">Select dinner</MenuItem>
+                                                      {campaignOptions.dinners.map((option) => (
+                                                        <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                                                      ))}
+                                                    </Select>
+                                                  </FormControl>
+                                                ) : null}
+                                              </>
                                             )}
                                           </div>
                                         </div>
@@ -8715,6 +8834,60 @@ export default function AdminPanel() {
                                   </ul>
                                 </article>
                               </section>
+
+                              {(selectedCampaign.messageType === "poll" || selectedCampaign.messageType === "quiz") && selectedCampaign.message.poll?.options?.length ? (() => {
+                                const configuredOptions = selectedCampaign.message.poll?.options ?? [];
+                                const pollAnswerLogs = campaignLogs.filter((item) => item.eventType === "poll_answer");
+                                const counts = new Map<string, number>();
+                                for (const option of configuredOptions) {
+                                  const normalized = option.trim();
+                                  if (normalized) {
+                                    counts.set(normalized, 0);
+                                  }
+                                }
+                                for (const item of pollAnswerLogs) {
+                                  const normalized = (item.choiceLabel || "").trim();
+                                  if (!normalized) {
+                                    continue;
+                                  }
+                                  counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+                                }
+                                const rows = Array.from(counts.entries())
+                                  .map(([label, count]) => ({ label, count }))
+                                  .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+                                const totalVotes = rows.reduce((sum, row) => sum + row.count, 0);
+                                return rows.length ? (
+                                  <article className="admin-widget admin-widget--fit">
+                                    <div className="admin-widget__header">
+                                      <h2>{selectedCampaign.messageType === "quiz" ? "Quiz Answers" : "Poll Results"}</h2>
+                                      <span>{totalVotes} total votes</span>
+                                    </div>
+                                    <div style={{ overflowX: "auto" }}>
+                                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                        <thead>
+                                          <tr style={{ textAlign: "left", opacity: 0.72 }}>
+                                            <th style={{ padding: "0 0 10px" }}>Option</th>
+                                            <th style={{ padding: "0 0 10px", textAlign: "right" }}>Votes</th>
+                                            <th style={{ padding: "0 0 10px", textAlign: "right" }}>Share</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {rows.map((row) => {
+                                            const share = totalVotes > 0 ? Math.round((row.count / totalVotes) * 100) : 0;
+                                            return (
+                                              <tr key={row.label} style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                                                <td style={{ padding: "10px 0", paddingRight: 16 }}>{row.label}</td>
+                                                <td style={{ padding: "10px 0", textAlign: "right", fontWeight: 700 }}>{row.count}</td>
+                                                <td style={{ padding: "10px 0", textAlign: "right", opacity: 0.72 }}>{share}%</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </article>
+                                ) : null;
+                              })() : null}
 
                               {/* Audience sample */}
                               {selectedCampaign.previewUsers.length > 0 ? (

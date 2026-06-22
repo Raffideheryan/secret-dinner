@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -647,7 +649,84 @@ func validateCampaignPayload(payload EngagementCampaignComposerPayload, allowSch
 	if payload.MaxRetries < 0 {
 		return errors.New("max retries cannot be negative")
 	}
+	if err := validateCampaignMessageMedia(payload.MessageType, payload.Message.Media); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateCampaignMessageMedia(messageType string, media *EngagementCampaignMedia) error {
+	messageType = strings.ToLower(strings.TrimSpace(messageType))
+	if media == nil {
+		return nil
+	}
+	kind := strings.ToLower(strings.TrimSpace(media.Kind))
+	value := strings.TrimSpace(media.Value)
+	if value == "" {
+		return nil
+	}
+	if kind != "url" {
+		return nil
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil || parsed.Host == "" {
+		return errors.New("media URL is invalid")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("media URL must use http or https")
+	}
+
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if isUnsupportedCampaignWebPageHost(host) {
+		return fmt.Errorf("%s campaigns require a direct media file URL, not a webpage link from %s", messageType, host)
+	}
+
+	ext := strings.ToLower(path.Ext(parsed.Path))
+	switch messageType {
+	case "video":
+		if !hasAllowedMediaExtension(ext, ".mp4", ".mov", ".m4v", ".webm") {
+			return errors.New("video campaigns require a direct video file URL such as .mp4")
+		}
+	case "photo", "image":
+		if !hasAllowedMediaExtension(ext, ".jpg", ".jpeg", ".png", ".webp", ".gif") {
+			return errors.New("image campaigns require a direct image file URL such as .jpg or .png")
+		}
+	case "audio":
+		if !hasAllowedMediaExtension(ext, ".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac") {
+			return errors.New("audio campaigns require a direct audio file URL such as .mp3")
+		}
+	case "voice":
+		if !hasAllowedMediaExtension(ext, ".ogg", ".oga", ".opus") {
+			return errors.New("voice campaigns require a direct voice file URL such as .ogg")
+		}
+	case "document":
+		if ext == "" {
+			return errors.New("document campaigns require a direct file URL with an extension such as .pdf or .docx")
+		}
+	}
+	return nil
+}
+
+func isUnsupportedCampaignWebPageHost(host string) bool {
+	switch host {
+	case "youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "vimeo.com", "www.vimeo.com", "facebook.com", "www.facebook.com", "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasAllowedMediaExtension(ext string, allowed ...string) bool {
+	if ext == "" {
+		return false
+	}
+	for _, item := range allowed {
+		if ext == item {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCampaignPayload(payload EngagementCampaignComposerPayload) EngagementCampaignComposerPayload {
