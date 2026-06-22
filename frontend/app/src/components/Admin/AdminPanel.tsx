@@ -211,6 +211,13 @@ type BookingStatusSummaryBadge = {
   tone: "default" | "gold" | "emerald" | "danger";
   description: string;
 };
+type EngagementReturnContext = {
+  label: string;
+  returnTo: string;
+};
+type AdminLocationState = {
+  engagementReturnContext?: EngagementReturnContext;
+};
 
 function DishTypeSelect({
   value,
@@ -295,6 +302,9 @@ type DinnerFormState = {
   location: string;
   dinnerDate: string;
   places: string;
+  silverSeats: string;
+  goldSeats: string;
+  vipSeats: string;
   silverPrice: string;
   goldPrice: string;
   vipPrice: string;
@@ -424,6 +434,9 @@ const emptyDinnerForm: DinnerFormState = {
   location: "",
   dinnerDate: "",
   places: "",
+  silverSeats: "",
+  goldSeats: "",
+  vipSeats: "",
   silverPrice: "",
   goldPrice: "",
   vipPrice: "",
@@ -2443,6 +2456,18 @@ function parseOptionalNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseOptionalInteger(value: string): number | null {
+  const normalized = value.trim();
+  if (normalized === "") {
+    return null;
+  }
+  const parsed = Number(normalized);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
 function parsePositiveInt(value: string): number | null {
   const normalized = value.trim();
   if (normalized === "") {
@@ -2743,6 +2768,7 @@ export default function AdminPanel() {
   const [engagementUsersSearch, setEngagementUsersSearch] = useState("");
   const [engagementUsers, setEngagementUsers] = useState<EngagementUserListItem[]>([]);
   const [engagementUsersTotal, setEngagementUsersTotal] = useState(0);
+  const [engagementUsersPage, setEngagementUsersPage] = useState(1);
   const [engagementUsersLoading, setEngagementUsersLoading] = useState(false);
   const [engagementUsersError, setEngagementUsersError] = useState("");
   const [selectedEngagementUserId, setSelectedEngagementUserId] = useState("");
@@ -2855,6 +2881,10 @@ export default function AdminPanel() {
     payingUsers: 0,
     blockedActive: 0,
   });
+  const engagementUsersPageSize = 5;
+  const campaignLogFocusRef = useRef<number | null>(null);
+  const locationState = (location.state as AdminLocationState | null) ?? null;
+  const engagementReturnContext = locationState?.engagementReturnContext;
 
   const loadPanel = async (refresh = false) => {
     if (refresh) {
@@ -2925,8 +2955,8 @@ export default function AdminPanel() {
       const response = await getEngagementUsers({
         source: engagementUsersSource,
         search: engagementUsersSearch.trim(),
-        limit: Math.max(20, Math.min(120, (data?.settings?.runtime?.adminUsersPageSize ?? USERS_PAGE_SIZE) * 4)),
-        offset: 0,
+        limit: engagementUsersPageSize,
+        offset: Math.max(0, (engagementUsersPage - 1) * engagementUsersPageSize),
       });
       setEngagementUsers(response.users);
       setEngagementUsersTotal(response.total);
@@ -3039,11 +3069,25 @@ export default function AdminPanel() {
     }
   };
 
-  const openFullEngagementProfile = (userId: string, source: EngagementUsersSource) => {
-    navigate(`/users/${encodeURIComponent(userId)}?source=${source}&tab=overview`);
+  const openFullEngagementProfile = (
+    userId: string,
+    source: EngagementUsersSource,
+    options?: {
+      profileTab?: EngagementProfileTab;
+      returnContext?: EngagementReturnContext;
+    }
+  ) => {
+    const profileTab = options?.profileTab ?? "overview";
+    navigate(`/users/${encodeURIComponent(userId)}?source=${source}&tab=${profileTab}`, {
+      state: options?.returnContext ? { engagementReturnContext: options.returnContext } satisfies AdminLocationState : undefined,
+    });
   };
 
   const closeFullEngagementProfile = () => {
+    if (engagementReturnContext?.returnTo) {
+      navigate(engagementReturnContext.returnTo);
+      return;
+    }
     navigate(`/admin?section=engagement&engagementTab=users&engagementSource=${routeProfileSource}`);
   };
 
@@ -3415,6 +3459,10 @@ export default function AdminPanel() {
   }, [activeSection, usersSource, usersStatus, searchQuery]);
 
   useEffect(() => {
+    setEngagementUsersPage(1);
+  }, [engagementUsersSource, engagementUsersSearch]);
+
+  useEffect(() => {
     if (activeSection !== "engagement" || engagementTab !== "analytics") {
       return;
     }
@@ -3426,7 +3474,7 @@ export default function AdminPanel() {
       return;
     }
     void loadEngagementUsers();
-  }, [activeSection, engagementTab, engagementUsersSource, engagementUsersSearch, data?.settings?.runtime?.adminUsersPageSize, isEngagementUserProfileRoute]);
+  }, [activeSection, engagementTab, engagementUsersSource, engagementUsersSearch, engagementUsersPage, isEngagementUserProfileRoute]);
 
   useEffect(() => {
     if (isEngagementUserProfileRoute || activeSection !== "engagement" || engagementTab !== "users" || !selectedEngagementUserId) {
@@ -3441,6 +3489,54 @@ export default function AdminPanel() {
     }
     void loadEngagementUserProfile(routeUserId, routeProfileSource);
   }, [isEngagementUserProfileRoute, routeUserId, routeProfileSource]);
+
+  useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "campaigns" || isEngagementUserProfileRoute) {
+      return;
+    }
+    const campaignId = Number(new URLSearchParams(location.search).get("campaignId") ?? "");
+    if (!Number.isFinite(campaignId) || campaignId <= 0 || campaignId === selectedCampaignId) {
+      return;
+    }
+    setSelectedCampaignId(campaignId);
+  }, [activeSection, engagementTab, isEngagementUserProfileRoute, location.search, selectedCampaignId]);
+
+  useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "campaigns" || isEngagementUserProfileRoute || selectedCampaignId == null) {
+      return;
+    }
+    const params = new URLSearchParams(location.search);
+    const currentCampaignId = Number(params.get("campaignId") ?? "");
+    if (currentCampaignId === selectedCampaignId) {
+      return;
+    }
+    params.set("campaignId", String(selectedCampaignId));
+    navigate(
+      {
+        pathname: location.pathname,
+        search: `?${params.toString()}`,
+      },
+      { replace: true }
+    );
+  }, [activeSection, engagementTab, isEngagementUserProfileRoute, selectedCampaignId, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (activeSection !== "engagement" || engagementTab !== "campaigns" || campaignLogs.length === 0 || isEngagementUserProfileRoute) {
+      return;
+    }
+    const focusId = Number(new URLSearchParams(location.search).get("campaignLogFocus") ?? "");
+    if (!Number.isFinite(focusId) || focusId <= 0 || campaignLogFocusRef.current === focusId) {
+      return;
+    }
+    const element = document.getElementById(`campaign-log-${focusId}`);
+    if (!element) {
+      return;
+    }
+    campaignLogFocusRef.current = focusId;
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [activeSection, engagementTab, campaignLogs, isEngagementUserProfileRoute, location.search]);
 
   useEffect(() => {
     if (activeSection !== "engagement" || engagementTab !== "campaigns") {
@@ -4139,6 +4235,9 @@ export default function AdminPanel() {
       location: item.location,
       dinnerDate: toDateInputValue(item.dinnerDate),
       places: String(item.places),
+      silverSeats: item.silverSeats != null ? String(item.silverSeats) : "",
+      goldSeats: item.goldSeats != null ? String(item.goldSeats) : "",
+      vipSeats: item.vipSeats != null ? String(item.vipSeats) : "",
       silverPrice: item.silverPrice != null ? String(item.silverPrice) : "",
       goldPrice: item.goldPrice != null ? String(item.goldPrice) : "",
       vipPrice: item.vipPrice != null ? String(item.vipPrice) : "",
@@ -4202,6 +4301,9 @@ export default function AdminPanel() {
       location,
       dinnerDate: dinnerForm.dinnerDate,
       places: placesNumber,
+      silverSeats: parseOptionalInteger(dinnerForm.silverSeats),
+      goldSeats: parseOptionalInteger(dinnerForm.goldSeats),
+      vipSeats: parseOptionalInteger(dinnerForm.vipSeats),
       silverPrice: parseOptionalNumber(dinnerForm.silverPrice),
       goldPrice: parseOptionalNumber(dinnerForm.goldPrice),
       vipPrice: parseOptionalNumber(dinnerForm.vipPrice),
@@ -4849,6 +4951,9 @@ export default function AdminPanel() {
 
   const engagementSummary = engagementAnalytics?.summary;
   const selectedEngagementListItem = engagementUsers.find((item) => item.id === selectedEngagementUserId) ?? null;
+  const engagementUsersTotalPages = Math.max(1, Math.ceil(engagementUsersTotal / engagementUsersPageSize));
+  const engagementUsersPageStart = engagementUsersTotal === 0 ? 0 : (engagementUsersPage - 1) * engagementUsersPageSize + 1;
+  const engagementUsersPageEnd = Math.min(engagementUsersTotal, engagementUsersPage * engagementUsersPageSize);
   const engagementProfileScoreBreakdown = useMemo(
     () => (engagementProfile ? buildEngagementScoreBreakdown(engagementProfile) : null),
     [engagementProfile]
@@ -5604,7 +5709,7 @@ export default function AdminPanel() {
                 {isEngagementUserProfileRoute ? (
                   <div className="admin-engagement-profile-header__actions">
                     <AdminButton type="button" variant="ghost" onClick={closeFullEngagementProfile}>
-                      Back To Users
+                      {engagementReturnContext?.label || "Back To Users"}
                     </AdminButton>
                   </div>
                 ) : (
@@ -7789,10 +7894,12 @@ export default function AdminPanel() {
                               type="search"
                               value={engagementUsersSearch}
                               onChange={(event) => setEngagementUsersSearch(event.target.value)}
-                              placeholder="Search name, username, or phone"
+                              placeholder="Search Telegram ID, name, username, or phone"
                             />
                           </div>
-                          <span className="admin-toolbar__meta">{engagementUsersTotal} users loaded for CRM review</span>
+                          <span className="admin-toolbar__meta">
+                            {engagementUsersTotal === 0 ? "0 users" : `${engagementUsersPageStart}-${engagementUsersPageEnd} of ${engagementUsersTotal} users`}
+                          </span>
                         </AdminFilterBar>
                         {engagementUsersError ? <p className="admin-auth__error">{engagementUsersError}</p> : null}
                       </article>
@@ -7861,6 +7968,25 @@ export default function AdminPanel() {
                                 </button>
                               );
                             })}
+                          </div>
+                          <div className="admin-engagement-timeline__pagination">
+                            <AdminButton
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setEngagementUsersPage((previous) => Math.max(1, previous - 1))}
+                              disabled={engagementUsersPage <= 1 || engagementUsersLoading}
+                            >
+                              Previous
+                            </AdminButton>
+                            <span className="admin-toolbar__meta">{`Page ${engagementUsersPage} of ${engagementUsersTotalPages}`}</span>
+                            <AdminButton
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setEngagementUsersPage((previous) => Math.min(engagementUsersTotalPages, previous + 1))}
+                              disabled={engagementUsersPage >= engagementUsersTotalPages || engagementUsersLoading}
+                            >
+                              Next
+                            </AdminButton>
                           </div>
                         </article>
 
@@ -8646,7 +8772,37 @@ export default function AdminPanel() {
                                       {filtered.length === 0 ? (
                                         <p className="admin-dashboard__state">No logs match "{campaignLogSearch}"</p>
                                       ) : filtered.map((item) => (
-                                        <article key={item.id} className="admin-engagement-timeline__item">
+                                        <article
+                                          key={item.id}
+                                          id={`campaign-log-${item.id}`}
+                                          className="admin-engagement-timeline__item"
+                                          role="button"
+                                          tabIndex={0}
+                                          onClick={() => {
+                                            const params = new URLSearchParams(location.search);
+                                            params.set("section", "engagement");
+                                            params.set("engagementTab", "campaigns");
+                                            params.set("engagementSource", "telegram");
+                                            if (selectedCampaignId != null) {
+                                              params.set("campaignId", String(selectedCampaignId));
+                                            }
+                                            params.set("campaignLogFocus", String(item.id));
+                                            openFullEngagementProfile(item.userId, "telegram", {
+                                              profileTab: "campaigns",
+                                              returnContext: {
+                                                label: "Back To Campaign Interactions",
+                                                returnTo: `/admin?${params.toString()}`,
+                                              },
+                                            });
+                                          }}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter" || event.key === " ") {
+                                              event.preventDefault();
+                                              (event.currentTarget as HTMLElement).click();
+                                            }
+                                          }}
+                                          style={{ cursor: "pointer" }}
+                                        >
                                           <div className="admin-engagement-timeline__head">
                                             <strong>{humanizeLabel(item.eventType)}</strong>
                                             <AdminBadge tone={getBookingToneByStatus(item.status)}>{humanizeLabel(item.status)}</AdminBadge>
@@ -9802,6 +9958,30 @@ export default function AdminPanel() {
                         <input
                           className="admin-dinner-input"
                           type="number"
+                          min={0}
+                          placeholder="Silver seats"
+                          value={dinnerForm.silverSeats}
+                          onChange={(event) => setDinnerForm((prev) => ({ ...prev, silverSeats: event.target.value }))}
+                        />
+                        <input
+                          className="admin-dinner-input"
+                          type="number"
+                          min={0}
+                          placeholder="Gold seats"
+                          value={dinnerForm.goldSeats}
+                          onChange={(event) => setDinnerForm((prev) => ({ ...prev, goldSeats: event.target.value }))}
+                        />
+                        <input
+                          className="admin-dinner-input"
+                          type="number"
+                          min={0}
+                          placeholder="VIP seats"
+                          value={dinnerForm.vipSeats}
+                          onChange={(event) => setDinnerForm((prev) => ({ ...prev, vipSeats: event.target.value }))}
+                        />
+                        <input
+                          className="admin-dinner-input"
+                          type="number"
                           step="0.01"
                           min={0}
                           placeholder="Silver price"
@@ -9862,6 +10042,9 @@ export default function AdminPanel() {
                           <p className="admin-dinner-card__line">{item.location}</p>
                           <p className="admin-dinner-card__line">{formatDateLabel(item.dinnerDate)}</p>
                           <DinnerCapacityInline registered={item.alreadyRegistered} places={item.places} />
+                          <p className="admin-dinner-card__line">
+                            Seat caps: S {item.silverSeats ?? "—"} / G {item.goldSeats ?? "—"} / V {item.vipSeats ?? "—"}
+                          </p>
                           <p className="admin-dinner-card__line">
                             Prices: S {item.silverPrice ?? "—"} / G {item.goldPrice ?? "—"} / V {item.vipPrice ?? "—"}
                           </p>

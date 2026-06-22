@@ -38,6 +38,9 @@ export type AdminDinner = {
   activeBookings: number;
   location: string;
   dinnerDate: string;
+  silverSeats?: number | null;
+  goldSeats?: number | null;
+  vipSeats?: number | null;
   silverPrice?: number | null;
   goldPrice?: number | null;
   vipPrice?: number | null;
@@ -911,6 +914,9 @@ export type AdminDinnerUpsertPayload = {
   places: number;
   location: string;
   dinnerDate: string;
+  silverSeats?: number | null;
+  goldSeats?: number | null;
+  vipSeats?: number | null;
   silverPrice?: number | null;
   goldPrice?: number | null;
   vipPrice?: number | null;
