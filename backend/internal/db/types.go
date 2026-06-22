@@ -139,6 +139,9 @@ type Dinners struct {
 	ActiveBookings    int       `json:"activeBookings"`
 	Location          string    `json:"location" db:"location"`
 	DinnerDate        time.Time `json:"dinnerDate" db:"dinner_date"`
+	SilverSeats       *int      `json:"silverSeats" db:"silver_seats"`
+	GoldSeats         *int      `json:"goldSeats" db:"gold_seats"`
+	VIPSeats          *int      `json:"vipSeats" db:"vip_seats"`
 	SilverPrice       *float64  `json:"silverPrice" db:"silver_price"`
 	GoldPrice         *float64  `json:"goldPrice" db:"gold_price"`
 	VIPPrice          *float64  `json:"vipPrice" db:"vip_price"`
@@ -152,6 +155,9 @@ type DinnerMutation struct {
 	Places      int
 	Location    string
 	DinnerDate  time.Time
+	SilverSeats *int
+	GoldSeats   *int
+	VIPSeats    *int
 	SilverPrice *float64
 	GoldPrice   *float64
 	VIPPrice    *float64

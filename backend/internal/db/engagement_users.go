@@ -191,7 +191,7 @@ func (r *adminUsersRepo) listTelegramEngagementUsers(params EngagementUsersListP
 	if search != "" {
 		args = append(args, "%"+search+"%")
 		placeholder := fmt.Sprintf("$%d", len(args))
-		conditions = append(conditions, fmt.Sprintf("(COALESCE(u.username, '') ILIKE %s OR COALESCE(u.name, '') ILIKE %s OR COALESCE(u.surname, '') ILIKE %s OR COALESCE(u.phone, '') ILIKE %s)", placeholder, placeholder, placeholder, placeholder))
+		conditions = append(conditions, fmt.Sprintf("(u.id::text ILIKE %s OR COALESCE(u.username, '') ILIKE %s OR COALESCE(u.name, '') ILIKE %s OR COALESCE(u.surname, '') ILIKE %s OR COALESCE(u.phone, '') ILIKE %s)", placeholder, placeholder, placeholder, placeholder, placeholder))
 	}
 
 	whereSQL := ""

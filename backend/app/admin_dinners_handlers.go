@@ -16,6 +16,9 @@ type adminDinnerRequest struct {
 	Places      int      `json:"places"`
 	Location    string   `json:"location"`
 	DinnerDate  string   `json:"dinnerDate"`
+	SilverSeats *int     `json:"silverSeats"`
+	GoldSeats   *int     `json:"goldSeats"`
+	VIPSeats    *int     `json:"vipSeats"`
 	SilverPrice *float64 `json:"silverPrice"`
 	GoldPrice   *float64 `json:"goldPrice"`
 	VIPPrice    *float64 `json:"vipPrice"`
@@ -199,15 +202,46 @@ func parseAdminDinnerRequest(c *fiber.Ctx) (db.DinnerMutation, error) {
 	if body.Places < 0 {
 		return db.DinnerMutation{}, errors.New("places must be >= 0")
 	}
+	if body.SilverSeats != nil && *body.SilverSeats < 0 {
+		return db.DinnerMutation{}, errors.New("silverSeats must be >= 0")
+	}
+	if body.GoldSeats != nil && *body.GoldSeats < 0 {
+		return db.DinnerMutation{}, errors.New("goldSeats must be >= 0")
+	}
+	if body.VIPSeats != nil && *body.VIPSeats < 0 {
+		return db.DinnerMutation{}, errors.New("vipSeats must be >= 0")
+	}
+	if body.SilverSeats != nil && *body.SilverSeats > body.Places {
+		return db.DinnerMutation{}, errors.New("silverSeats cannot exceed places")
+	}
+	if body.GoldSeats != nil && *body.GoldSeats > body.Places {
+		return db.DinnerMutation{}, errors.New("goldSeats cannot exceed places")
+	}
+	if body.VIPSeats != nil && *body.VIPSeats > body.Places {
+		return db.DinnerMutation{}, errors.New("vipSeats cannot exceed places")
+	}
+	if totalCaps := nullableSeatCount(body.SilverSeats) + nullableSeatCount(body.GoldSeats) + nullableSeatCount(body.VIPSeats); totalCaps > body.Places {
+		return db.DinnerMutation{}, errors.New("sum of package seat caps cannot exceed places")
+	}
 
 	return db.DinnerMutation{
 		Description: description,
 		Places:      body.Places,
 		Location:    location,
 		DinnerDate:  date,
+		SilverSeats: body.SilverSeats,
+		GoldSeats:   body.GoldSeats,
+		VIPSeats:    body.VIPSeats,
 		SilverPrice: body.SilverPrice,
 		GoldPrice:   body.GoldPrice,
 		VIPPrice:    body.VIPPrice,
 		Expired:     body.Expired,
 	}, nil
+}
+
+func nullableSeatCount(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

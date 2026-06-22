@@ -54,6 +54,9 @@ func (d *dinnersRepo) GetActiveDinners() ([]Dinners, error) {
 			already_registered,
 			location,
 			dinner_date,
+			silver_seats,
+			gold_seats,
+			vip_seats,
 			silver_price,
 			gold_price,
 			vip_price,
@@ -81,6 +84,9 @@ func (d *dinnersRepo) GetAdminDinners() ([]Dinners, error) {
 			already_registered,
 			location,
 			dinner_date,
+			silver_seats,
+			gold_seats,
+			vip_seats,
 			silver_price,
 			gold_price,
 			vip_price,
@@ -113,12 +119,15 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 			already_registered,
 			location,
 			dinner_date,
+			silver_seats,
+			gold_seats,
+			vip_seats,
 			silver_price,
 			gold_price,
 			vip_price,
 			expired
 		)
-		VALUES ($1, $2, 0, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, 0, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id
 	`
 
@@ -129,6 +138,9 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 		input.Places,
 		input.Location,
 		input.DinnerDate,
+		toNullableSeatCount(input.SilverSeats),
+		toNullableSeatCount(input.GoldSeats),
+		toNullableSeatCount(input.VIPSeats),
 		toNullablePrice(input.SilverPrice),
 		toNullablePrice(input.GoldPrice),
 		toNullablePrice(input.VIPPrice),
@@ -146,12 +158,15 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 				already_registered,
 				location,
 				dinner_date,
+				silver_seats,
+				gold_seats,
+				vip_seats,
 				silver_price,
 				gold_price,
 				vip_price,
 				expired
 			)
-			VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, $9)
+			VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		`
 		if _, err := d.telegramDB.Exec(
 			insertTelegram,
@@ -160,6 +175,9 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 			input.Places,
 			input.Location,
 			input.DinnerDate,
+			toNullableSeatCount(input.SilverSeats),
+			toNullableSeatCount(input.GoldSeats),
+			toNullableSeatCount(input.VIPSeats),
 			toNullablePrice(input.SilverPrice),
 			toNullablePrice(input.GoldPrice),
 			toNullablePrice(input.VIPPrice),
@@ -209,10 +227,13 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 			places = $3,
 			location = $4,
 			dinner_date = $5,
-			silver_price = $6,
-			gold_price = $7,
-			vip_price = $8,
-			expired = $9,
+			silver_seats = $6,
+			gold_seats = $7,
+			vip_seats = $8,
+			silver_price = $9,
+			gold_price = $10,
+			vip_price = $11,
+			expired = $12,
 			updated_at = now()
 		WHERE id = $1
 	`
@@ -224,6 +245,9 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 		input.Places,
 		input.Location,
 		input.DinnerDate,
+		toNullableSeatCount(input.SilverSeats),
+		toNullableSeatCount(input.GoldSeats),
+		toNullableSeatCount(input.VIPSeats),
 		toNullablePrice(input.SilverPrice),
 		toNullablePrice(input.GoldPrice),
 		toNullablePrice(input.VIPPrice),
@@ -247,10 +271,13 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 				places = $3,
 				location = $4,
 				dinner_date = $5,
-				silver_price = $6,
-				gold_price = $7,
-				vip_price = $8,
-				expired = $9,
+				silver_seats = $6,
+				gold_seats = $7,
+				vip_seats = $8,
+				silver_price = $9,
+				gold_price = $10,
+				vip_price = $11,
+				expired = $12,
 				updated_at = now()
 			WHERE id = $1
 		`
@@ -261,6 +288,9 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 			input.Places,
 			input.Location,
 			input.DinnerDate,
+			toNullableSeatCount(input.SilverSeats),
+			toNullableSeatCount(input.GoldSeats),
+			toNullableSeatCount(input.VIPSeats),
 			toNullablePrice(input.SilverPrice),
 			toNullablePrice(input.GoldPrice),
 			toNullablePrice(input.VIPPrice),
@@ -350,6 +380,9 @@ func (d *dinnersRepo) fetchDinners(query string) ([]Dinners, error) {
 			&dinner.AlreadyRegistered,
 			&dinner.Location,
 			&dinner.DinnerDate,
+			&dinner.SilverSeats,
+			&dinner.GoldSeats,
+			&dinner.VIPSeats,
 			&dinner.SilverPrice,
 			&dinner.GoldPrice,
 			&dinner.VIPPrice,
@@ -465,6 +498,17 @@ func toNullablePrice(value *float64) interface{} {
 	}
 	if *value < 0 {
 		zero := 0.0
+		return zero
+	}
+	return *value
+}
+
+func toNullableSeatCount(value *int) interface{} {
+	if value == nil {
+		return nil
+	}
+	if *value < 0 {
+		zero := 0
 		return zero
 	}
 	return *value
