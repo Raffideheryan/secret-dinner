@@ -979,6 +979,7 @@ func (r *adminCampaignsRepo) loadCampaignMetrics(campaignID int64, audienceUsers
 			COUNT(*) FILTER (WHERE status = 'blocked') AS blocked,
 			COUNT(*) FILTER (WHERE status = 'skipped') AS skipped,
 			COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled,
+			COUNT(*) FILTER (WHERE button_clicks > 0) AS clicked_users,
 			COALESCE(SUM(button_clicks), 0) AS button_clicks,
 			COALESCE(SUM(poll_votes), 0) AS poll_votes,
 			COALESCE(SUM(quiz_correct_answers), 0) AS quiz_correct
@@ -994,6 +995,7 @@ func (r *adminCampaignsRepo) loadCampaignMetrics(campaignID int64, audienceUsers
 		&metrics.Blocked,
 		&metrics.Skipped,
 		&metrics.Cancelled,
+		&metrics.ClickedUsers,
 		&metrics.ButtonClicks,
 		&metrics.PollVotes,
 		&metrics.QuizCorrect,

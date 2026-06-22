@@ -637,6 +637,7 @@ export type EngagementCampaignRecord = {
     blocked: number;
     skipped: number;
     cancelled: number;
+    clickedUsers: number;
     buttonClicks: number;
     pollVotes: number;
     quizCorrect: number;

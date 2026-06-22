@@ -829,6 +829,7 @@ type EngagementCampaignDeliveryMetrics struct {
 	Blocked           int64   `json:"blocked"`
 	Skipped           int64   `json:"skipped"`
 	Cancelled         int64   `json:"cancelled"`
+	ClickedUsers      int64   `json:"clickedUsers"`
 	ButtonClicks      int64   `json:"buttonClicks"`
 	PollVotes         int64   `json:"pollVotes"`
 	QuizCorrect       int64   `json:"quizCorrect"`

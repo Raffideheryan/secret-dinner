@@ -2882,6 +2882,7 @@ export default function AdminPanel() {
   const [campaignComposerTab, setCampaignComposerTab] = useState<CampaignComposerTab>("content");
   const [campaignLogSearch, setCampaignLogSearch] = useState("");
   const [campaignPreviewRating, setCampaignPreviewRating] = useState(0);
+  const campaignDetailRequestRef = useRef(0);
   const [smartSegments, setSmartSegments] = useState<SmartSegmentResult[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsError, setSegmentsError] = useState("");
@@ -2956,8 +2957,54 @@ export default function AdminPanel() {
   });
   const engagementUsersPageSize = 5;
   const campaignLogFocusRef = useRef<number | null>(null);
+  const navigationPointerRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const locationState = (location.state as AdminLocationState | null) ?? null;
   const engagementReturnContext = locationState?.engagementReturnContext;
+
+  const handleNavigationPointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    navigationPointerRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+  };
+
+  const shouldIgnoreNavigationClick = (event: React.MouseEvent<HTMLElement>) => {
+    const state = navigationPointerRef.current;
+    navigationPointerRef.current = null;
+    if (!state) {
+      return false;
+    }
+    return state.moved || Math.abs(event.clientX - state.x) > 8 || Math.abs(event.clientY - state.y) > 8;
+  };
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const state = navigationPointerRef.current;
+      if (!state) {
+        return;
+      }
+      if (Math.abs(event.clientX - state.x) > 8 || Math.abs(event.clientY - state.y) > 8) {
+        navigationPointerRef.current = { ...state, moved: true };
+      }
+    };
+    const onPointerUp = () => {
+      window.setTimeout(() => {
+        navigationPointerRef.current = null;
+      }, 0);
+    };
+    const onPointerCancel = () => {
+      navigationPointerRef.current = null;
+    };
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerCancel);
+    };
+  }, []);
 
   const loadPanel = async (refresh = false) => {
     if (refresh) {
@@ -3218,6 +3265,8 @@ export default function AdminPanel() {
   };
 
   const loadCampaignDetail = async (campaignId: number) => {
+    const requestId = campaignDetailRequestRef.current + 1;
+    campaignDetailRequestRef.current = requestId;
     setCampaignLogsLoading(true);
     setCampaignLogsError("");
     try {
@@ -3225,12 +3274,20 @@ export default function AdminPanel() {
         getEngagementCampaign(campaignId),
         getEngagementCampaignLogs(campaignId, { limit: 40, offset: 0 }),
       ]);
+      if (campaignDetailRequestRef.current != requestId) {
+        return;
+      }
       setSelectedCampaign(campaign);
       setCampaignLogs(logsResponse.logs);
     } catch (err) {
+      if (campaignDetailRequestRef.current != requestId) {
+        return;
+      }
       setCampaignLogsError(err instanceof Error ? err.message : "failed to load campaign details");
     } finally {
-      setCampaignLogsLoading(false);
+      if (campaignDetailRequestRef.current === requestId) {
+        setCampaignLogsLoading(false);
+      }
     }
   };
 
@@ -3724,9 +3781,6 @@ export default function AdminPanel() {
       }
       if (activeSection === "engagement" && engagementTab === "campaigns") {
         void loadCampaigns();
-        if (selectedCampaignId != null) {
-          void loadCampaignDetail(selectedCampaignId);
-        }
         return;
       }
       if (activeSection === "audit" || activeSection === "operations") {
@@ -5744,7 +5798,11 @@ export default function AdminPanel() {
                 key={section}
                 className={`admin-sidebar__item ${activeSection === section ? "admin-sidebar__item--active" : ""}`}
                 type="button"
-                onClick={() => {
+                onPointerDown={handleNavigationPointerDown}
+                onClick={(event) => {
+                  if (shouldIgnoreNavigationClick(event)) {
+                    return;
+                  }
                   if (isEngagementUserProfileRoute) {
                     navigate(`/admin?section=${section}`);
                     return;
@@ -6968,7 +7026,13 @@ export default function AdminPanel() {
                             type="button"
                             role="tab"
                             aria-selected={engagementTab === tab.value}
-                            onClick={() => setEngagementTab(tab.value)}
+                            onPointerDown={handleNavigationPointerDown}
+                            onClick={(event) => {
+                              if (shouldIgnoreNavigationClick(event)) {
+                                return;
+                              }
+                              setEngagementTab(tab.value);
+                            }}
                             title={tab.description}
                           >
                             {tab.label}
@@ -7000,7 +7064,13 @@ export default function AdminPanel() {
                               role="tab"
                               aria-selected={engagementProfileTab === tab.key}
                               className={`admin-users__switch-btn ${engagementProfileTab === tab.key ? "admin-users__switch-btn--active" : ""}`}
-                              onClick={() => setEngagementProfileTab(tab.key)}
+                              onPointerDown={handleNavigationPointerDown}
+                              onClick={(event) => {
+                                if (shouldIgnoreNavigationClick(event)) {
+                                  return;
+                                }
+                                setEngagementProfileTab(tab.key);
+                              }}
                             >
                               {tab.label}
                             </button>
@@ -8210,13 +8280,19 @@ export default function AdminPanel() {
                             {campaigns.map((item) => {
                               const isSelected = item.id === selectedCampaignId;
                               const sentRate = item.metrics.total > 0 ? Math.round((item.metrics.sent / item.metrics.total) * 100) : 0;
-                              const clickRate = item.metrics.sent > 0 ? Math.round((item.metrics.buttonClicks / item.metrics.sent) * 100) : 0;
+                              const clickRate = item.metrics.sent > 0 ? Math.round((item.metrics.clickedUsers / item.metrics.sent) * 100) : 0;
                               return (
                                 <button
                                   key={item.id}
                                   type="button"
                                   className={`admin-engagement-user-card${isSelected ? " admin-engagement-user-card--active" : ""}`}
-                                  onClick={() => setSelectedCampaignId(item.id)}
+                                  onPointerDown={handleNavigationPointerDown}
+                                  onClick={(event) => {
+                                    if (shouldIgnoreNavigationClick(event)) {
+                                      return;
+                                    }
+                                    setSelectedCampaignId(item.id);
+                                  }}
                                   style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}
                                 >
                                   <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
@@ -8755,7 +8831,7 @@ export default function AdminPanel() {
                                 const sent = selectedCampaign.metrics.sent;
                                 const kpis = [
                                   { label: "Delivery", value: `${Math.round((sent / total) * 100)}%`, sub: `${sent} of ${selectedCampaign.metrics.total}` },
-                                  { label: "Click rate", value: sent > 0 ? `${Math.round((selectedCampaign.metrics.buttonClicks / sent) * 100)}%` : "—", sub: `${selectedCampaign.metrics.buttonClicks} clicks` },
+                                  { label: "Click rate", value: sent > 0 ? `${Math.round((selectedCampaign.metrics.clickedUsers / sent) * 100)}%` : "—", sub: `${selectedCampaign.metrics.clickedUsers} users · ${selectedCampaign.metrics.buttonClicks} clicks` },
                                   { label: "Conv. rate", value: sent > 0 ? `${Math.round((selectedCampaign.metrics.applicationsAfter / sent) * 100)}%` : "—", sub: `${selectedCampaign.metrics.applicationsAfter} apps` },
                                   { label: "Revenue", value: formatCurrency(selectedCampaign.metrics.revenueAfter), sub: `${selectedCampaign.metrics.paymentsAfter} payments` },
                                 ];
@@ -8794,17 +8870,21 @@ export default function AdminPanel() {
                                         const total = Math.max(selectedCampaign.metrics.total, 1);
                                         const sent = selectedCampaign.metrics.sent;
                                         return [
-                                          { label: "Queued", value: selectedCampaign.metrics.total, pct: 100, color: "#6b7c93" },
-                                          { label: "Sent", value: sent, pct: Math.round((sent / total) * 100), color: "#4da6ff" },
-                                          { label: "Failed / Blocked", value: selectedCampaign.metrics.failed + selectedCampaign.metrics.blocked, pct: Math.round(((selectedCampaign.metrics.failed + selectedCampaign.metrics.blocked) / total) * 100), color: "#e05c5c" },
-                                          { label: "Clicked", value: selectedCampaign.metrics.buttonClicks, pct: sent > 0 ? Math.round((selectedCampaign.metrics.buttonClicks / sent) * 100) : 0, color: "#d4af37" },
-                                          { label: "Applied", value: selectedCampaign.metrics.applicationsAfter, pct: sent > 0 ? Math.round((selectedCampaign.metrics.applicationsAfter / sent) * 100) : 0, color: "#52d98c" },
-                                          { label: "Paid", value: selectedCampaign.metrics.paymentsAfter, pct: sent > 0 ? Math.round((selectedCampaign.metrics.paymentsAfter / sent) * 100) : 0, color: "#d4af37" },
+                                          { label: "Queued", value: selectedCampaign.metrics.total, pct: 100, color: "#6b7c93", showPercent: true },
+                                          { label: "Sent", value: sent, pct: Math.round((sent / total) * 100), color: "#4da6ff", showPercent: true },
+                                          { label: "Failed / Blocked", value: selectedCampaign.metrics.failed + selectedCampaign.metrics.blocked, pct: Math.round(((selectedCampaign.metrics.failed + selectedCampaign.metrics.blocked) / total) * 100), color: "#e05c5c", showPercent: true },
+                                          { label: "Clicked", value: selectedCampaign.metrics.clickedUsers, pct: sent > 0 ? Math.round((selectedCampaign.metrics.clickedUsers / sent) * 100) : 0, color: "#d4af37", showPercent: true },
+                                          { label: "Overall Button Clicks", value: selectedCampaign.metrics.buttonClicks, pct: sent > 0 ? Math.min(100, Math.round((selectedCampaign.metrics.buttonClicks / sent) * 100)) : 0, color: "#c98f1f", showPercent: false },
+                                          { label: "Applied", value: selectedCampaign.metrics.applicationsAfter, pct: sent > 0 ? Math.round((selectedCampaign.metrics.applicationsAfter / sent) * 100) : 0, color: "#52d98c", showPercent: true },
+                                          { label: "Paid", value: selectedCampaign.metrics.paymentsAfter, pct: sent > 0 ? Math.round((selectedCampaign.metrics.paymentsAfter / sent) * 100) : 0, color: "#d4af37", showPercent: true },
                                         ].map((step) => (
                                           <div key={step.label}>
                                             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
                                               <span>{step.label}</span>
-                                              <span style={{ fontWeight: 600 }}>{step.value.toLocaleString()} <span style={{ opacity: 0.45 }}>({step.pct}%)</span></span>
+                                              <span style={{ fontWeight: 600 }}>
+                                                {step.value.toLocaleString()}
+                                                {step.showPercent ? <span style={{ opacity: 0.45 }}> ({step.pct}%)</span> : null}
+                                              </span>
                                             </div>
                                             <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.07)" }}>
                                               <div style={{ height: "100%", borderRadius: 3, background: step.color, width: `${step.pct}%`, transition: "width 0.4s" }} />
@@ -8827,6 +8907,8 @@ export default function AdminPanel() {
                                     <li><span>Payments after send</span><b>{selectedCampaign.metrics.paymentsAfter}</b></li>
                                     <li><span>Revenue after send</span><b>{formatCurrency(selectedCampaign.metrics.revenueAfter)}</b></li>
                                     <li><span>Revenue per send</span><b>{selectedCampaign.metrics.sent > 0 ? formatCurrency(selectedCampaign.metrics.revenueAfter / selectedCampaign.metrics.sent) : "—"}</b></li>
+                                    <li><span>Unique click users</span><b>{selectedCampaign.metrics.clickedUsers}</b></li>
+                                    <li><span>Total button clicks</span><b>{selectedCampaign.metrics.buttonClicks}</b></li>
                                     <li><span>Poll votes</span><b>{selectedCampaign.metrics.pollVotes}</b></li>
                                     <li><span>Quiz correct answers</span><b>{selectedCampaign.metrics.quizCorrect}</b></li>
                                     <li><span>Pending in queue</span><b>{selectedCampaign.metrics.pending}</b></li>
