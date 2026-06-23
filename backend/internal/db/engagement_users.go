@@ -1128,6 +1128,16 @@ func formatEngagementTimelineEvent(eventName string, entityType string, entityID
 	if packageValue, ok := metadata["package"].(string); ok && strings.TrimSpace(packageValue) != "" {
 		descriptionParts = append(descriptionParts, fmt.Sprintf("Package %s", humanizeEngagementLabel(packageValue)))
 	}
+	if isButtonEvent(eventName) {
+		buttonLabel := strings.TrimSpace(stringMetadata(metadata, "buttonLabel"))
+		callbackData := strings.TrimSpace(stringMetadata(metadata, "callbackData"))
+		switch {
+		case buttonLabel != "":
+			descriptionParts = append(descriptionParts, fmt.Sprintf("Button %s", businessFriendlyButtonLabel(buttonLabel)))
+		case callbackData != "":
+			descriptionParts = append(descriptionParts, fmt.Sprintf("Button %s", businessFriendlyButtonLabel(callbackData)))
+		}
+	}
 	if pagePath != "" {
 		descriptionParts = append(descriptionParts, pagePath)
 	}

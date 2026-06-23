@@ -283,18 +283,18 @@ type TelegramApplicationRecord struct {
 }
 
 type TelegramApplicationsSummary struct {
-	Total                int64 `json:"total"`
-	PendingApplication   int64 `json:"pendingApplication"`
-	Approved             int64 `json:"approved"`
-	WaitingPayment       int64 `json:"waitingPayment"`
-	Paid                 int64 `json:"paid"`
-	Cancelled            int64 `json:"cancelled"`
-	Rejected             int64 `json:"rejected"`
-	NoShow               int64 `json:"noShow"`
-	VIPApplicationsCount int64 `json:"vipApplicationsCount"`
+	Total                 int64 `json:"total"`
+	PendingApplication    int64 `json:"pendingApplication"`
+	Approved              int64 `json:"approved"`
+	WaitingPayment        int64 `json:"waitingPayment"`
+	Paid                  int64 `json:"paid"`
+	Cancelled             int64 `json:"cancelled"`
+	Rejected              int64 `json:"rejected"`
+	NoShow                int64 `json:"noShow"`
+	VIPApplicationsCount  int64 `json:"vipApplicationsCount"`
 	GoldApplicationsCount int64 `json:"goldApplicationsCount"`
-	TotalGuestCount      int64 `json:"totalGuestCount"`
-	ReferralSourcedCount int64 `json:"referralSourcedCount"`
+	TotalGuestCount       int64 `json:"totalGuestCount"`
+	ReferralSourcedCount  int64 `json:"referralSourcedCount"`
 }
 
 type AdminBookingsDB interface {
@@ -594,6 +594,9 @@ type EngagementSummary struct {
 	NewUsers       int64 `json:"newUsers"`
 	ReturningUsers int64 `json:"returningUsers"`
 	TotalEvents    int64 `json:"totalEvents"`
+	DinnerViews    int64 `json:"dinnerViews"`
+	PackageEvents  int64 `json:"packageEvents"`
+	ButtonClicks   int64 `json:"buttonClicks"`
 }
 
 type EngagementConversionSummary struct {
@@ -870,24 +873,24 @@ type EngagementCampaignAudienceUser struct {
 }
 
 type EngagementCampaignDeliveryLog struct {
-	ID         int64     `json:"id"`
-	CampaignID int64     `json:"campaignId"`
-	DeliveryID int64     `json:"deliveryId"`
-	UserID     string    `json:"userId"`
-	Username   string    `json:"username"`
-	EventType  string    `json:"eventType"`
-	Status     string    `json:"status"`
-	Message    string    `json:"message"`
-	Metadata   string    `json:"metadata"`
-	MessageType string   `json:"messageType"`
-	Question    string   `json:"question"`
-	ChoiceIndex *int     `json:"choiceIndex,omitempty"`
-	ChoiceLabel string   `json:"choiceLabel"`
-	Correct     *bool    `json:"correct,omitempty"`
-	OccurredAt time.Time `json:"occurredAt"`
-	Attempt    int       `json:"attempt"`
-	MessageID  int       `json:"messageId"`
-	PollID     string    `json:"pollId"`
+	ID          int64     `json:"id"`
+	CampaignID  int64     `json:"campaignId"`
+	DeliveryID  int64     `json:"deliveryId"`
+	UserID      string    `json:"userId"`
+	Username    string    `json:"username"`
+	EventType   string    `json:"eventType"`
+	Status      string    `json:"status"`
+	Message     string    `json:"message"`
+	Metadata    string    `json:"metadata"`
+	MessageType string    `json:"messageType"`
+	Question    string    `json:"question"`
+	ChoiceIndex *int      `json:"choiceIndex,omitempty"`
+	ChoiceLabel string    `json:"choiceLabel"`
+	Correct     *bool     `json:"correct,omitempty"`
+	OccurredAt  time.Time `json:"occurredAt"`
+	Attempt     int       `json:"attempt"`
+	MessageID   int       `json:"messageId"`
+	PollID      string    `json:"pollId"`
 }
 
 type EngagementCampaignOptions struct {

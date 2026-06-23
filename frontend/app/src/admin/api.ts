@@ -250,6 +250,9 @@ export type EngagementAnalytics = {
     newUsers: number;
     returningUsers: number;
     totalEvents: number;
+    dinnerViews: number;
+    packageEvents: number;
+    buttonClicks: number;
   };
   conversions: {
     overallAvailable: boolean;

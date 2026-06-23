@@ -545,6 +545,7 @@ func buildEngagementAnalyticsFromDataset(
 		}
 		switch event.EventName {
 		case "viewed_dinner", "landing_dinner_viewed":
+			analytics.Summary.DinnerViews++
 			if dinnerID != "" {
 				dinnerViewCounts[dinnerID]++
 				addSetValue(dinnerViewActors, dinnerID, event.ActorKey)
@@ -554,12 +555,14 @@ func buildEngagementAnalyticsFromDataset(
 				addSetValue(dinnerSubmitActors, dinnerID, event.ActorKey)
 			}
 		case "selected_package", "landing_package_selected":
+			analytics.Summary.PackageEvents++
 			if pkg := strings.ToLower(strings.TrimSpace(stringMetadata(event.Metadata, "package"))); pkg != "" {
 				addSetValue(packageActors, pkg, event.ActorKey)
 			}
 		}
 
 		if isButtonEvent(event.EventName) {
+			analytics.Summary.ButtonClicks++
 			buttonKey := buttonEventKey(event)
 			buttonClickCounts[buttonKey]++
 			addSetValue(buttonClickUsers, buttonKey, event.ActorKey)

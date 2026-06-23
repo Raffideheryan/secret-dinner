@@ -271,16 +271,22 @@ func (r *adminUsersRepo) segmentPassiveUsers() (SmartSegmentResult, error) {
 	if err != nil {
 		return SmartSegmentResult{}, err
 	}
-	condition := ""
+	condition := `
+		AND u.terms_accepted = true
+		AND COALESCE(u.total_payments, 0) = 0
+		AND COALESCE(u.attendance_count, 0) = 0
+		AND COALESCE(u.friends_invited, 0) = 0
+		AND COALESCE(u.points, 0) = 0
+	`
 	args := []any{}
 	if len(ids) > 0 {
 		args = append(args, pq.Array(ids))
-		condition = fmt.Sprintf("AND u.id::text <> ALL($%d)", len(args))
+		condition += fmt.Sprintf("AND u.id::text <> ALL($%d)", len(args))
 	}
 	count, err := r.countSegment(`
 		SELECT COUNT(*)
 		FROM users u
-		WHERE u.terms_accepted = true
+		WHERE 1 = 1
 		`+condition, args...)
 	if err != nil {
 		return SmartSegmentResult{}, err
@@ -291,7 +297,7 @@ func (r *adminUsersRepo) segmentPassiveUsers() (SmartSegmentResult, error) {
 			TRIM(COALESCE(u.name, '') || ' ' || COALESCE(u.surname, '')),
 			0::float8
 		FROM users u
-		WHERE u.terms_accepted = true
+		WHERE 1 = 1
 		`+condition+`
 		ORDER BY u.created_at DESC
 		LIMIT 50
@@ -464,11 +470,15 @@ func (r *adminUsersRepo) GetAdminRecommendations() ([]AdminRecommendation, error
 
 	var noShowCount int64
 	if err := r.telegramDB.QueryRow(`
-		SELECT COUNT(DISTINCT u.id) FROM users u
-		JOIN registered_users ru ON ru.user_id = u.id
-		JOIN package_info pi ON pi.id = ru.package_info_id AND pi.status = 'no_show'
-		GROUP BY u.id
-		HAVING COUNT(pi.id) >= 2
+		SELECT COUNT(*)
+		FROM (
+			SELECT u.id
+			FROM users u
+			JOIN registered_users ru ON ru.user_id = u.id
+			JOIN package_info pi ON pi.id = ru.package_info_id AND pi.status = 'no_show'
+			GROUP BY u.id
+			HAVING COUNT(pi.id) >= 2
+		) AS repeat_no_show_users
 	`).Scan(&noShowCount); err == nil && noShowCount > 0 {
 		recs = append(recs, AdminRecommendation{
 			Priority: "low",

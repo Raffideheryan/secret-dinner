@@ -538,7 +538,7 @@ func (r *adminCampaignsRepo) ListEngagementCampaignLogs(id int64, limit int, off
 			return nil, 0, err
 		}
 		var meta struct {
-			ChoiceIndex *int `json:"choiceIndex"`
+			ChoiceIndex *int  `json:"choiceIndex"`
 			Correct     *bool `json:"correct"`
 		}
 		if err := json.Unmarshal([]byte(item.Metadata), &meta); err == nil {
@@ -860,17 +860,24 @@ func (r *adminCampaignsRepo) resolveAudienceUsers(audience EngagementCampaignAud
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(ids) == 0 {
-			if audience.AudienceType == "active_users" {
+		if audience.AudienceType == "active_users" {
+			if len(ids) == 0 {
 				return []EngagementCampaignAudienceUser{}, []EngagementCampaignAudienceUser{}, nil
 			}
-		} else {
 			args = append(args, pq.Array(ids))
-			condition := fmt.Sprintf(`u.id::text = ANY($%d)`, len(args))
-			if audience.AudienceType == "passive_users" {
-				condition = "NOT (" + condition + ")"
+			conditions = append(conditions, fmt.Sprintf(`u.id::text = ANY($%d)`, len(args)))
+		} else {
+			conditions = append(conditions,
+				`u.terms_accepted = true`,
+				`COALESCE(u.total_payments, 0) = 0`,
+				`COALESCE(u.attendance_count, 0) = 0`,
+				`COALESCE(u.friends_invited, 0) = 0`,
+				`COALESCE(u.points, 0) = 0`,
+			)
+			if len(ids) > 0 {
+				args = append(args, pq.Array(ids))
+				conditions = append(conditions, fmt.Sprintf(`u.id::text <> ALL($%d)`, len(args)))
 			}
-			conditions = append(conditions, condition)
 		}
 	case "paid_users":
 		conditions = append(conditions, "COALESCE(u.total_payments, 0) > 0")

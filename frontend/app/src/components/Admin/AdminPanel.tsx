@@ -592,26 +592,87 @@ const engagementFieldSx = {
   "& .MuiInputBase-root": {
     minHeight: 46,
     color: "#f5f1e8",
-    background: "rgba(255, 255, 255, 0.03)",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.025) 100%)",
     borderRadius: "14px",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 30px rgba(0,0,0,0.12)",
+    transition: "border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease",
   },
   "& .MuiInputLabel-root": {
     color: "#a6afa8",
+  },
+  "& .MuiOutlinedInput-root:hover": {
+    transform: "translateY(-1px)",
   },
   "& .MuiOutlinedInput-notchedOutline": {
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
   "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(212, 175, 55, 0.24)",
+    borderColor: "rgba(212, 175, 55, 0.3)",
   },
   "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
     borderColor: "rgba(212, 175, 55, 0.42)",
+  },
+  "& .MuiOutlinedInput-root.Mui-focused": {
+    boxShadow: "0 0 0 1px rgba(212,175,55,0.08), 0 14px 34px rgba(0,0,0,0.18)",
   },
   "& .MuiSvgIcon-root": {
     color: "#f5f1e8",
   },
   "& .MuiSelect-select": {
     whiteSpace: "nowrap",
+  },
+};
+
+const adminSelectMenuProps = {
+  disableScrollLock: true,
+  PaperProps: {
+    elevation: 0,
+    sx: {
+      mt: 1,
+      borderRadius: "18px",
+      minWidth: 220,
+      overflow: "hidden",
+      border: "1px solid rgba(212,175,55,0.18)",
+      background: "linear-gradient(180deg, rgba(19,24,22,0.98) 0%, rgba(14,18,16,0.98) 100%)",
+      backdropFilter: "blur(18px)",
+      boxShadow: "0 22px 70px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.04)",
+      color: "#f5f1e8",
+      "& .MuiList-root": {
+        padding: "8px",
+      },
+      "& .MuiMenuItem-root": {
+        borderRadius: "12px",
+        minHeight: 42,
+        marginBottom: "4px",
+        color: "#f5f1e8",
+        fontSize: 14,
+        transition: "background 0.18s ease, transform 0.18s ease, color 0.18s ease",
+      },
+      "& .MuiMenuItem-root:last-of-type": {
+        marginBottom: 0,
+      },
+      "& .MuiMenuItem-root:hover": {
+        background: "rgba(212,175,55,0.12)",
+        transform: "translateX(2px)",
+      },
+      "& .MuiMenuItem-root.Mui-selected": {
+        background: "linear-gradient(90deg, rgba(212,175,55,0.22) 0%, rgba(212,175,55,0.08) 100%)",
+        color: "#ffe29a",
+      },
+      "& .MuiMenuItem-root.Mui-selected:hover": {
+        background: "linear-gradient(90deg, rgba(212,175,55,0.28) 0%, rgba(212,175,55,0.12) 100%)",
+      },
+      "&::-webkit-scrollbar": {
+        width: 10,
+      },
+      "&::-webkit-scrollbar-track": {
+        background: "rgba(255,255,255,0.03)",
+      },
+      "&::-webkit-scrollbar-thumb": {
+        background: "rgba(212,175,55,0.3)",
+        borderRadius: "999px",
+      },
+    },
   },
 };
 
@@ -660,6 +721,19 @@ function buildCampaignButtonState() {
     action: "menu",
     dinnerId: "",
   };
+}
+
+function getCampaignIdFromSearch(search: string): number | null {
+  const raw = new URLSearchParams(search).get("campaignId") ?? "";
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+function serializeCampaignComposerState(state: CampaignComposerState): string {
+  return JSON.stringify(state);
 }
 
 function humanizeLabel(value: string): string {
@@ -2875,7 +2949,6 @@ export default function AdminPanel() {
   const [campaignComposerError, setCampaignComposerError] = useState("");
   const [campaignComposer, setCampaignComposer] = useState<CampaignComposerState>(emptyCampaignComposerState);
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
-  const [selectedCampaign, setSelectedCampaign] = useState<EngagementCampaignRecord | null>(null);
   const [campaignLogs, setCampaignLogs] = useState<EngagementCampaignLog[]>([]);
   const [campaignLogsLoading, setCampaignLogsLoading] = useState(false);
   const [campaignLogsError, setCampaignLogsError] = useState("");
@@ -2883,6 +2956,9 @@ export default function AdminPanel() {
   const [campaignLogSearch, setCampaignLogSearch] = useState("");
   const [campaignPreviewRating, setCampaignPreviewRating] = useState(0);
   const campaignDetailRequestRef = useRef(0);
+  const campaignComposerHydratedForIdRef = useRef<number | "new" | null>(null);
+  const campaignComposerHydratedSnapshotRef = useRef(serializeCampaignComposerState(emptyCampaignComposerState));
+  const [campaignComposerEditingId, setCampaignComposerEditingId] = useState<number | null>(null);
   const [smartSegments, setSmartSegments] = useState<SmartSegmentResult[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsError, setSegmentsError] = useState("");
@@ -2960,6 +3036,14 @@ export default function AdminPanel() {
   const navigationPointerRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const locationState = (location.state as AdminLocationState | null) ?? null;
   const engagementReturnContext = locationState?.engagementReturnContext;
+  const selectedCampaign = useMemo(
+    () => campaigns.find((item) => item.id === selectedCampaignId) ?? null,
+    [campaigns, selectedCampaignId],
+  );
+  const campaignComposerDirty = useMemo(
+    () => serializeCampaignComposerState(campaignComposer) !== campaignComposerHydratedSnapshotRef.current,
+    [campaignComposer],
+  );
 
   const handleNavigationPointerDown = (event: React.PointerEvent<HTMLElement>) => {
     navigationPointerRef.current = {
@@ -3211,6 +3295,14 @@ export default function AdminPanel() {
     navigate(`/admin?section=engagement&engagementTab=users&engagementSource=${routeProfileSource}`);
   };
 
+  const handleEngagementTabSwitch = (tab: EngagementTab) => {
+    if (isEngagementUserProfileRoute) {
+      navigate(`/admin?section=engagement&engagementTab=${tab}&engagementSource=${routeProfileSource}`);
+      return;
+    }
+    setEngagementTab(tab);
+  };
+
   useEffect(() => {
     if (!crmCopyFeedback) {
       return undefined;
@@ -3251,9 +3343,16 @@ export default function AdminPanel() {
       });
       setCampaigns(response.campaigns);
       setCampaignsTotal(response.total);
+      // Keep campaign selection anchored to the stable selected ID.
+      // Only fall back to the URL/first item when there is no current selection
+      // or when the selected campaign genuinely disappeared from the refreshed list.
       setSelectedCampaignId((previous) => {
         if (previous && response.campaigns.some((item) => item.id === previous)) {
           return previous;
+        }
+        const routeCampaignId = getCampaignIdFromSearch(location.search);
+        if (!previous && routeCampaignId != null && response.campaigns.some((item) => item.id === routeCampaignId)) {
+          return routeCampaignId;
         }
         return response.campaigns[0]?.id ?? null;
       });
@@ -3277,7 +3376,10 @@ export default function AdminPanel() {
       if (campaignDetailRequestRef.current != requestId) {
         return;
       }
-      setSelectedCampaign(campaign);
+      setCampaigns((previous) => {
+        const next = previous.map((item) => (item.id === campaign.id ? campaign : item));
+        return next.some((item) => item.id === campaign.id) ? next : previous;
+      });
       setCampaignLogs(logsResponse.logs);
     } catch (err) {
       if (campaignDetailRequestRef.current != requestId) {
@@ -3437,6 +3539,30 @@ export default function AdminPanel() {
       setAuditLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!campaignComposerOpen || campaignComposerEditingId == null) {
+      setCampaignComposerLoading(false);
+      return;
+    }
+    if (campaignComposerHydratedForIdRef.current === campaignComposerEditingId) {
+      setCampaignComposerLoading(false);
+      return;
+    }
+    if (selectedCampaign?.id !== campaignComposerEditingId) {
+      setCampaignComposerLoading(true);
+      return;
+    }
+
+    // Hydrate the composer exactly once per selected campaign ID.
+    // After this point, auto-refresh updates may replace campaign data in the queue,
+    // but they must never overwrite unsaved composer fields for the same campaign.
+    const nextComposer = buildCampaignComposerStateFromRecord(selectedCampaign);
+    campaignComposerHydratedForIdRef.current = campaignComposerEditingId;
+    campaignComposerHydratedSnapshotRef.current = serializeCampaignComposerState(nextComposer);
+    setCampaignComposer(nextComposer);
+    setCampaignComposerLoading(false);
+  }, [campaignComposerOpen, campaignComposerEditingId, selectedCampaign]);
 
   useEffect(() => {
     void loadPanel();
@@ -3624,12 +3750,12 @@ export default function AdminPanel() {
     if (activeSection !== "engagement" || engagementTab !== "campaigns" || isEngagementUserProfileRoute) {
       return;
     }
-    const campaignId = Number(new URLSearchParams(location.search).get("campaignId") ?? "");
-    if (!Number.isFinite(campaignId) || campaignId <= 0 || campaignId === selectedCampaignId) {
+    const campaignId = getCampaignIdFromSearch(location.search);
+    if (campaignId == null || selectedCampaignId != null || campaignComposerOpen) {
       return;
     }
     setSelectedCampaignId(campaignId);
-  }, [activeSection, engagementTab, isEngagementUserProfileRoute, location.search, selectedCampaignId]);
+  }, [activeSection, engagementTab, isEngagementUserProfileRoute, location.search, selectedCampaignId, campaignComposerOpen]);
 
   useEffect(() => {
     if (activeSection !== "engagement" || engagementTab !== "campaigns" || isEngagementUserProfileRoute || selectedCampaignId == null) {
@@ -3780,6 +3906,9 @@ export default function AdminPanel() {
         return;
       }
       if (activeSection === "engagement" && engagementTab === "campaigns") {
+        if (campaignComposerOpen && campaignComposerDirty) {
+          return;
+        }
         void loadCampaigns();
         return;
       }
@@ -3791,7 +3920,7 @@ export default function AdminPanel() {
     }, intervalSec * 1000);
 
     return () => window.clearInterval(timer);
-  }, [data?.settings.runtime.panelAutoRefreshSeconds, activeSection, usersSource, bookingsSource, usersStatus, searchQuery, engagementTab, engagementFilters.startDate, engagementFilters.endDate, engagementFilters.source, engagementFilters.dinnerId, engagementFilters.package, engagementUsersSource, engagementUsersSearch, selectedEngagementUserId, campaignStatusFilter, campaignSearchQuery, selectedCampaignId, isEngagementUserProfileRoute, routeUserId, routeProfileSource]);
+  }, [data?.settings.runtime.panelAutoRefreshSeconds, activeSection, usersSource, bookingsSource, usersStatus, searchQuery, engagementTab, engagementFilters.startDate, engagementFilters.endDate, engagementFilters.source, engagementFilters.dinnerId, engagementFilters.package, engagementUsersSource, engagementUsersSearch, selectedEngagementUserId, campaignStatusFilter, campaignSearchQuery, selectedCampaignId, isEngagementUserProfileRoute, routeUserId, routeProfileSource, campaignComposerOpen, campaignComposerDirty]);
 
   useEffect(() => {
     if (!dinnerDeleteTarget) {
@@ -3896,26 +4025,30 @@ export default function AdminPanel() {
     await loadAuditLogs(true);
   };
 
+  const closeCampaignComposer = () => {
+    setCampaignComposerOpen(false);
+    setCampaignComposerEditingId(null);
+    setCampaignComposerLoading(false);
+    campaignComposerHydratedForIdRef.current = null;
+  };
+
   const handleOpenNewCampaign = () => {
     setCampaignComposerError("");
+    campaignComposerHydratedForIdRef.current = "new";
+    campaignComposerHydratedSnapshotRef.current = serializeCampaignComposerState(emptyCampaignComposerState);
     setCampaignComposer(emptyCampaignComposerState);
+    setCampaignComposerEditingId(null);
     setCampaignComposerTab("content");
     setCampaignComposerOpen(true);
   };
 
   const handleEditCampaign = async (campaignId: number) => {
-    setCampaignComposerLoading(true);
     setCampaignComposerError("");
-    try {
-      const campaign = await getEngagementCampaign(campaignId);
-      setCampaignComposer(buildCampaignComposerStateFromRecord(campaign));
-      setCampaignComposerTab("content");
-      setCampaignComposerOpen(true);
-    } catch (err) {
-      setCampaignComposerError(err instanceof Error ? err.message : "failed to load campaign");
-    } finally {
-      setCampaignComposerLoading(false);
-    }
+    campaignComposerHydratedForIdRef.current = null;
+    setSelectedCampaignId(campaignId);
+    setCampaignComposerEditingId(campaignId);
+    setCampaignComposerTab("content");
+    setCampaignComposerOpen(true);
   };
 
   const handleSaveCampaign = async () => {
@@ -3935,7 +4068,7 @@ export default function AdminPanel() {
       } else {
         saved = await createEngagementCampaign(payload);
       }
-      setCampaignComposerOpen(false);
+      closeCampaignComposer();
       setSelectedCampaignId(saved.id);
       await loadCampaigns();
       await loadCampaignDetail(saved.id);
@@ -3954,7 +4087,6 @@ export default function AdminPanel() {
         scheduledFor: sendNow ? undefined : campaignComposer.scheduledFor ? new Date(campaignComposer.scheduledFor).toISOString() : undefined,
       });
       setSelectedCampaignId(campaign.id);
-      setSelectedCampaign(campaign);
       await loadCampaigns();
       await loadCampaignDetail(campaign.id);
       setInfoMessage(sendNow ? `Campaign ${campaign.title} is now sending.` : `Campaign ${campaign.title} scheduled.`);
@@ -3969,7 +4101,7 @@ export default function AdminPanel() {
     }
     try {
       const campaign = await cancelEngagementCampaign(campaignId);
-      setSelectedCampaign(campaign);
+      setSelectedCampaignId(campaign.id);
       await loadCampaigns();
       await loadCampaignDetail(campaign.id);
       setInfoMessage(`Campaign ${campaign.title} cancelled.`);
@@ -3985,7 +4117,7 @@ export default function AdminPanel() {
     }
     try {
       const campaign = await testSendEngagementCampaign(campaignId, userId);
-      setSelectedCampaign(campaign);
+      setSelectedCampaignId(campaign.id);
       await loadCampaignDetail(campaign.id);
       setInfoMessage(`Test send queued for campaign ${campaign.title}.`);
     } catch (err) {
@@ -5087,6 +5219,9 @@ export default function AdminPanel() {
   const engagementUsersTotalPages = Math.max(1, Math.ceil(engagementUsersTotal / engagementUsersPageSize));
   const engagementUsersPageStart = engagementUsersTotal === 0 ? 0 : (engagementUsersPage - 1) * engagementUsersPageSize + 1;
   const engagementUsersPageEnd = Math.min(engagementUsersTotal, engagementUsersPage * engagementUsersPageSize);
+  useEffect(() => {
+    setEngagementUsersPage((previous) => Math.min(previous, engagementUsersTotalPages));
+  }, [engagementUsersTotalPages]);
   const engagementProfileScoreBreakdown = useMemo(
     () => (engagementProfile ? buildEngagementScoreBreakdown(engagementProfile) : null),
     [engagementProfile]
@@ -5372,7 +5507,7 @@ export default function AdminPanel() {
     ]),
     engagement: filterItems([
       { label: "Active users", value: `${engagementSummary?.activeUsers ?? 0}`, description: "Users with deeper engagement in the selected period", trend: `${engagementSummary?.totalEvents ?? 0} tracked events`, tone: "emerald", icon: "E1" },
-      { label: "Passive users", value: `${engagementSummary?.passiveUsers ?? 0}`, description: "Light-touch visitors and low-intent users", trend: "1-2 events in range", tone: "default", icon: "E2" },
+      { label: "Passive users", value: `${engagementSummary?.passiveUsers ?? 0}`, description: "Users without meaningful engagement yet", trend: "No meaningful events in range", tone: "default", icon: "E2" },
       { label: "New users", value: `${engagementSummary?.newUsers ?? 0}`, description: "First-seen users entering the funnel", trend: `${engagementSummary?.returningUsers ?? 0} returning`, tone: "gold", icon: "E3" },
       { label: "Returning users", value: `${engagementSummary?.returningUsers ?? 0}`, description: "Known users who came back in the selected period", trend: "Relationship depth and retention signal", tone: "default", icon: "E4" },
     ]),
@@ -7031,7 +7166,7 @@ export default function AdminPanel() {
                               if (shouldIgnoreNavigationClick(event)) {
                                 return;
                               }
-                              setEngagementTab(tab.value);
+                              handleEngagementTabSwitch(tab.value);
                             }}
                             title={tab.description}
                           >
@@ -8205,7 +8340,7 @@ export default function AdminPanel() {
                         <article className="admin-widget admin-widget--fit">
                           <div className="admin-widget__header">
                             <h2>Marketing Center</h2>
-                            <span>Aggregate performance · {campaignsTotal} campaigns</span>
+                            <span>Loaded queue performance · {campaigns.length} of {campaignsTotal} campaigns</span>
                           </div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "4px 0 8px" }}>
                             {[
@@ -8428,7 +8563,7 @@ export default function AdminPanel() {
                                       <>
                                         <TextField label="Caption" multiline minRows={2} value={campaignComposer.caption} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, caption: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
                                         <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                          <Select value={campaignComposer.mediaKind} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaKind: event.target.value as CampaignComposerState["mediaKind"] }))}>
+                                          <Select MenuProps={adminSelectMenuProps} value={campaignComposer.mediaKind} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaKind: event.target.value as CampaignComposerState["mediaKind"] }))}>
                                             <MenuItem value="url">URL</MenuItem>
                                             <MenuItem value="file_id">Telegram file_id</MenuItem>
                                             <MenuItem value="data_url">Base64</MenuItem>
@@ -8536,7 +8671,7 @@ export default function AdminPanel() {
                                           <div className="admin-engagement__filters" style={{ gap: 8 }}>
                                             <TextField label="Label" value={button.label} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, label: event.target.value } : item) }))} className="admin-engagement__field" sx={engagementFieldSx} />
                                             <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                              <Select value={button.kind} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, kind: event.target.value as CampaignComposerState["buttons"][number]["kind"] } : item) }))}>
+                                              <Select MenuProps={adminSelectMenuProps} value={button.kind} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, buttons: prev.buttons.map((item) => item.id === button.id ? { ...item, kind: event.target.value as CampaignComposerState["buttons"][number]["kind"] } : item) }))}>
                                                 <MenuItem value="callback">Callback</MenuItem>
                                                 <MenuItem value="link">Link</MenuItem>
                                                 <MenuItem value="cta">CTA deep link</MenuItem>
@@ -8549,6 +8684,7 @@ export default function AdminPanel() {
                                                 <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
                                                   <InputLabel>Action</InputLabel>
                                                   <Select
+                                                    MenuProps={adminSelectMenuProps}
                                                     label="Action"
                                                     value={button.action || "track_only"}
                                                     onChange={(event) => setCampaignComposer((prev) => ({
@@ -8571,6 +8707,7 @@ export default function AdminPanel() {
                                                   <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
                                                     <InputLabel>Dinner</InputLabel>
                                                     <Select
+                                                      MenuProps={adminSelectMenuProps}
                                                       label="Dinner"
                                                       value={button.dinnerId || "all"}
                                                       onChange={(event) => setCampaignComposer((prev) => ({
@@ -8604,7 +8741,7 @@ export default function AdminPanel() {
                               ) : campaignComposerTab === "audience" ? (
                                 <div className="admin-engagement__filters admin-campaign-composer__section">
                                   <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                    <Select value={campaignComposer.audienceType} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, audienceType: event.target.value }))}>
+                                    <Select MenuProps={adminSelectMenuProps} value={campaignComposer.audienceType} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, audienceType: event.target.value }))}>
                                       {[
                                         ["all_users", "All users"],
                                         ["active_users", "Active users"],
@@ -8622,7 +8759,7 @@ export default function AdminPanel() {
                                   </FormControl>
                                   {campaignComposer.audienceType === "users_by_dinner" ? (
                                     <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                      <Select value={campaignComposer.dinnerId} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, dinnerId: event.target.value }))}>
+                                      <Select MenuProps={adminSelectMenuProps} value={campaignComposer.dinnerId} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, dinnerId: event.target.value }))}>
                                         <MenuItem value="all">All dinners</MenuItem>
                                         {campaignOptions.dinners.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                                       </Select>
@@ -8630,7 +8767,7 @@ export default function AdminPanel() {
                                   ) : null}
                                   {campaignComposer.audienceType === "users_by_package" ? (
                                     <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                      <Select value={campaignComposer.packageValue} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, packageValue: event.target.value }))}>
+                                      <Select MenuProps={adminSelectMenuProps} value={campaignComposer.packageValue} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, packageValue: event.target.value }))}>
                                         <MenuItem value="all">All packages</MenuItem>
                                         {campaignOptions.packages.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                                       </Select>
@@ -8692,7 +8829,7 @@ export default function AdminPanel() {
                               ) : campaignComposerTab === "schedule" ? (
                                 <div className="admin-engagement__filters admin-campaign-composer__section">
                                   <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                    <Select value={campaignComposer.objective} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, objective: event.target.value as CampaignObjective }))}>
+                                    <Select MenuProps={adminSelectMenuProps} value={campaignComposer.objective} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, objective: event.target.value as CampaignObjective }))}>
                                       <MenuItem value="awareness">Awareness — broaden reach</MenuItem>
                                       <MenuItem value="engagement">Engagement — drive interactions</MenuItem>
                                       <MenuItem value="conversion">Conversion — generate bookings</MenuItem>
@@ -8700,7 +8837,7 @@ export default function AdminPanel() {
                                     </Select>
                                   </FormControl>
                                   <FormControl className="admin-engagement__field" sx={engagementFieldSx}>
-                                    <Select value={campaignComposer.status} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, status: event.target.value as CampaignComposerState["status"] }))}>
+                                    <Select MenuProps={adminSelectMenuProps} value={campaignComposer.status} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, status: event.target.value as CampaignComposerState["status"] }))}>
                                       <MenuItem value="draft">Draft</MenuItem>
                                       <MenuItem value="scheduled">Scheduled</MenuItem>
                                     </Select>
@@ -8798,7 +8935,7 @@ export default function AdminPanel() {
                               )}
 
                               <div className="admin-toolbar" style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                                <AdminButton type="button" variant="ghost" onClick={() => setCampaignComposerOpen(false)}>Close</AdminButton>
+                                <AdminButton type="button" variant="ghost" onClick={closeCampaignComposer}>Close</AdminButton>
                                 <AdminButton type="button" variant="primary" onClick={handleSaveCampaign} disabled={campaignComposerSaving}>
                                   {campaignComposerSaving ? "Saving…" : "Save Campaign"}
                                 </AdminButton>
@@ -9138,9 +9275,12 @@ export default function AdminPanel() {
                                         <span
                                           style={{ cursor: "pointer", textDecoration: "underline dotted" }}
                                           onClick={() => {
-                                            setEngagementTab("users");
-                                            setEngagementUsersSource(u.source as "telegram" | "landing");
-                                            setSelectedEngagementUserId(u.id);
+                                            openFullEngagementProfile(u.id, u.source as "telegram" | "landing", {
+                                              returnContext: {
+                                                label: "Back To Segments & BI",
+                                                returnTo: "/admin?section=engagement&engagementTab=segments&engagementSource=telegram",
+                                              },
+                                            });
                                           }}
                                         >
                                           {u.name || `User #${u.id}`}
@@ -9217,13 +9357,13 @@ export default function AdminPanel() {
                             {([
                               { label: "Total events", value: engagementAnalytics.summary.totalEvents },
                               { label: "Active users (meaningful events)", value: engagementAnalytics.summary.activeUsers },
-                              { label: "Passive users (1–2 events)", value: engagementAnalytics.summary.passiveUsers },
+                              { label: "Passive users (no meaningful events)", value: engagementAnalytics.summary.passiveUsers },
                               { label: "New users", value: engagementAnalytics.summary.newUsers },
                               { label: "Returning users", value: engagementAnalytics.summary.returningUsers },
                               { label: "Journey steps with data", value: engagementAnalytics.funnel.filter((s) => s.users > 0).length },
-                              { label: "Dinner views tracked", value: engagementAnalytics.dinnerViews.reduce((a, b) => a + b.value, 0) },
-                              { label: "Package selection events", value: engagementAnalytics.packageSelections.reduce((a, b) => a + b.value, 0) },
-                              { label: "Button click events", value: engagementAnalytics.buttonClicks.reduce((a, b) => a + b.value, 0) },
+                              { label: "Dinner views tracked", value: engagementAnalytics.summary.dinnerViews },
+                              { label: "Package selection events", value: engagementAnalytics.summary.packageEvents },
+                              { label: "Button click events", value: engagementAnalytics.summary.buttonClicks },
                               { label: "Timeline days loaded", value: engagementAnalytics.timeline.length },
                               { label: "Hourly buckets loaded", value: engagementAnalytics.hourlyActivity.length },
                               { label: "Dinner perf rows", value: engagementAnalytics.dinnerPerformance.length },
