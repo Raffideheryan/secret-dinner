@@ -2878,6 +2878,7 @@ export default function AdminPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [activeSection, setActiveSection] = useState<AdminSection>(() => (location.pathname.startsWith("/users/") ? "engagement" : getSectionFromSearch(location.search)));
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
 
@@ -2948,6 +2949,7 @@ export default function AdminPanel() {
   const [campaignComposerSaving, setCampaignComposerSaving] = useState(false);
   const [campaignComposerError, setCampaignComposerError] = useState("");
   const [campaignComposer, setCampaignComposer] = useState<CampaignComposerState>(emptyCampaignComposerState);
+  const [campaignComposerAdvancedOpen, setCampaignComposerAdvancedOpen] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
   const [campaignLogs, setCampaignLogs] = useState<EngagementCampaignLog[]>([]);
   const [campaignLogsLoading, setCampaignLogsLoading] = useState(false);
@@ -2956,6 +2958,7 @@ export default function AdminPanel() {
   const [campaignLogSearch, setCampaignLogSearch] = useState("");
   const [campaignPreviewRating, setCampaignPreviewRating] = useState(0);
   const campaignDetailRequestRef = useRef(0);
+  const campaignComposerTabRefs = useRef<Partial<Record<CampaignComposerTab, HTMLButtonElement | null>>>({});
   const campaignComposerHydratedForIdRef = useRef<number | "new" | null>(null);
   const campaignComposerHydratedSnapshotRef = useRef(serializeCampaignComposerState(emptyCampaignComposerState));
   const [campaignComposerEditingId, setCampaignComposerEditingId] = useState<number | null>(null);
@@ -2971,6 +2974,16 @@ export default function AdminPanel() {
   const [landingUsers, setLandingUsers] = useState<AdminLandingUser[]>([]);
   const [telegramUsers, setTelegramUsers] = useState<AdminTelegramUser[]>([]);
   const [telegramApplications, setTelegramApplications] = useState<AdminTelegramApplication[]>([]);
+
+  useEffect(() => {
+    const activeTab = campaignComposerTabRefs.current[campaignComposerTab];
+    if (!activeTab) return;
+    activeTab.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [campaignComposerTab]);
   const [telegramApplicationsSummary, setTelegramApplicationsSummary] = useState<AdminTelegramApplicationsSummary>({
     total: 0,
     pendingApplication: 0,
@@ -3062,6 +3075,15 @@ export default function AdminPanel() {
     return state.moved || Math.abs(event.clientX - state.x) > 8 || Math.abs(event.clientY - state.y) > 8;
   };
 
+  const handleSectionNavigation = (section: AdminSection) => {
+    setMobileNavOpen(false);
+    if (isEngagementUserProfileRoute) {
+      navigate(`/admin?section=${section}`);
+      return;
+    }
+    setActiveSection(section);
+  };
+
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
       const state = navigationPointerRef.current;
@@ -3089,6 +3111,40 @@ export default function AdminPanel() {
       document.removeEventListener("pointercancel", onPointerCancel);
     };
   }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [activeSection, location.pathname, location.search]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    const handleViewportChange = () => {
+      if (media.matches) {
+        setMobileNavOpen(false);
+      }
+    };
+    handleViewportChange();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", handleViewportChange);
+      return () => media.removeEventListener("change", handleViewportChange);
+    }
+    media.addListener(handleViewportChange);
+    return () => media.removeListener(handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    if (!mobileNavOpen) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNavOpen]);
 
   const loadPanel = async (refresh = false) => {
     if (refresh) {
@@ -5918,13 +5974,45 @@ export default function AdminPanel() {
         noindex
       />
       <div className="admin-dashboard__layout">
-        <aside className="admin-sidebar">
+        <div className="admin-mobile-bar">
+          <button
+            className="admin-mobile-bar__menu"
+            type="button"
+            aria-expanded={mobileNavOpen}
+            aria-controls="admin-mobile-nav"
+            onClick={() => setMobileNavOpen((prev) => !prev)}
+          >
+            <span className="admin-mobile-bar__menu-line" aria-hidden="true" />
+            <span className="admin-mobile-bar__menu-line" aria-hidden="true" />
+            <span className="admin-mobile-bar__menu-line" aria-hidden="true" />
+          </button>
+          <div className="admin-mobile-bar__copy">
+            <span className="admin-mobile-bar__eyebrow">
+              {isEngagementUserProfileRoute ? "User Intelligence" : sectionEyebrows[activeSection]}
+            </span>
+            <strong className="admin-mobile-bar__title">{pageTitle}</strong>
+          </div>
+          <AdminBadge tone="gold" className="admin-mobile-bar__badge">
+            {meta.username || "admin"}
+          </AdminBadge>
+        </div>
+
+        {mobileNavOpen ? <button className="admin-sidebar-backdrop" type="button" aria-label="Close navigation drawer" onClick={() => setMobileNavOpen(false)} /> : null}
+
+        <aside
+          id="admin-mobile-nav"
+          className={`admin-sidebar ${mobileNavOpen ? "admin-sidebar--open" : ""}`}
+          aria-hidden={!mobileNavOpen && undefined}
+        >
           <div className="admin-sidebar__brand">
             <span className="admin-sidebar__dot" />
             <div>
               <strong>Secret Dinner</strong>
               <span className="admin-sidebar__brand-sub">Private Dining OS</span>
             </div>
+            <button className="admin-sidebar__close" type="button" aria-label="Close navigation drawer" onClick={() => setMobileNavOpen(false)}>
+              x
+            </button>
           </div>
 
           <nav className="admin-sidebar__nav" aria-label="Admin navigation">
@@ -5938,11 +6026,7 @@ export default function AdminPanel() {
                   if (shouldIgnoreNavigationClick(event)) {
                     return;
                   }
-                  if (isEngagementUserProfileRoute) {
-                    navigate(`/admin?section=${section}`);
-                    return;
-                  }
-                  setActiveSection(section);
+                  handleSectionNavigation(section);
                 }}
                 title={sectionHints[section]}
               >
@@ -8420,7 +8504,7 @@ export default function AdminPanel() {
                                 <button
                                   key={item.id}
                                   type="button"
-                                  className={`admin-engagement-user-card${isSelected ? " admin-engagement-user-card--active" : ""}`}
+                                  className={`admin-engagement-user-card admin-campaign-queue-card${isSelected ? " admin-engagement-user-card--active" : ""}`}
                                   onPointerDown={handleNavigationPointerDown}
                                   onClick={(event) => {
                                     if (shouldIgnoreNavigationClick(event)) {
@@ -8428,19 +8512,40 @@ export default function AdminPanel() {
                                     }
                                     setSelectedCampaignId(item.id);
                                   }}
-                                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}
                                 >
-                                  <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                                    <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title}</div>
-                                    <div style={{ fontSize: 11, opacity: 0.5, marginTop: 1 }}>{humanizeLabel(item.messageType)} · {humanizeLabel(item.audience.audienceType)} · {item.targetUsers} users</div>
+                                  <div className="admin-campaign-queue-card__head">
+                                    <div className="admin-campaign-queue-card__copy">
+                                      <div className="admin-campaign-queue-card__title" title={item.title}>{item.title}</div>
+                                      <div className="admin-campaign-queue-card__subtitle">
+                                        {humanizeLabel(item.messageType)} · {humanizeLabel(item.audience.audienceType)} · {item.targetUsers} users
+                                      </div>
+                                    </div>
+                                    <AdminBadge tone={getBookingToneByStatus(item.status)} className="admin-campaign-queue-card__status">
+                                      {humanizeLabel(item.status)}
+                                    </AdminBadge>
                                   </div>
-                                  <div style={{ display: "flex", gap: 8, fontSize: 11, opacity: 0.75, flexShrink: 0 }}>
-                                    <span>{sentRate}%</span>
-                                    <span>{clickRate}% clk</span>
-                                    <span>{item.metrics.applicationsAfter} app</span>
-                                    <span style={{ color: "#d4af37" }}>{formatCurrency(item.metrics.revenueAfter)}</span>
+                                  <div className="admin-campaign-queue-card__metrics" aria-label="Campaign metrics">
+                                    <span className="admin-campaign-queue-card__metric">
+                                      <b>{sentRate}%</b>
+                                      <small>delivery</small>
+                                    </span>
+                                    <span className="admin-campaign-queue-card__metric">
+                                      <b>{clickRate}%</b>
+                                      <small>CTR</small>
+                                    </span>
+                                    <span className="admin-campaign-queue-card__metric">
+                                      <b>{item.metrics.clickedUsers}</b>
+                                      <small>clicks</small>
+                                    </span>
+                                    <span className="admin-campaign-queue-card__metric">
+                                      <b>{item.metrics.applicationsAfter}</b>
+                                      <small>applications</small>
+                                    </span>
+                                    <span className="admin-campaign-queue-card__metric admin-campaign-queue-card__metric--revenue">
+                                      <b>{formatCurrency(item.metrics.revenueAfter)}</b>
+                                      <small>revenue</small>
+                                    </span>
                                   </div>
-                                  <AdminBadge tone={getBookingToneByStatus(item.status)}>{humanizeLabel(item.status)}</AdminBadge>
                                 </button>
                               );
                             })}
@@ -8459,6 +8564,9 @@ export default function AdminPanel() {
                                   {(["content", "audience", "schedule", "preview"] as CampaignComposerTab[]).map((tab) => (
                                     <button
                                       key={tab}
+                                      ref={(node) => {
+                                        campaignComposerTabRefs.current[tab] = node;
+                                      }}
                                       className={`admin-users__switch-btn${campaignComposerTab === tab ? " admin-users__switch-btn--active" : ""}`}
                                       type="button"
                                       onClick={() => setCampaignComposerTab(tab)}
@@ -8843,8 +8951,23 @@ export default function AdminPanel() {
                                     </Select>
                                   </FormControl>
                                   <TextField label="Scheduled for" type="datetime-local" value={campaignComposer.scheduledFor} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, scheduledFor: event.target.value }))} InputLabelProps={{ shrink: true }} className="admin-engagement__field" sx={engagementFieldSx} />
-                                  <TextField label="Rate limit / min" value={campaignComposer.rateLimitPerMinute} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, rateLimitPerMinute: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} helperText="Messages per minute (max 60)" />
-                                  <TextField label="Max retries" value={campaignComposer.maxRetries} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, maxRetries: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                  <div className="admin-campaign-composer__advanced">
+                                    <button
+                                      type="button"
+                                      className="admin-campaign-composer__advanced-toggle"
+                                      aria-expanded={campaignComposerAdvancedOpen}
+                                      onClick={() => setCampaignComposerAdvancedOpen((prev) => !prev)}
+                                    >
+                                      <span>Advanced settings</span>
+                                      <span aria-hidden="true">{campaignComposerAdvancedOpen ? "−" : "+"}</span>
+                                    </button>
+                                    {campaignComposerAdvancedOpen ? (
+                                      <div className="admin-campaign-composer__advanced-grid">
+                                        <TextField label="Rate limit / min" value={campaignComposer.rateLimitPerMinute} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, rateLimitPerMinute: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} helperText="Messages per minute (max 60)" />
+                                        <TextField label="Max retries" value={campaignComposer.maxRetries} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, maxRetries: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="admin-campaign-composer__preview">
@@ -8934,7 +9057,7 @@ export default function AdminPanel() {
                                 </div>
                               )}
 
-                              <div className="admin-toolbar" style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                              <div className="admin-toolbar admin-campaign-composer__actions" style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                                 <AdminButton type="button" variant="ghost" onClick={closeCampaignComposer}>Close</AdminButton>
                                 <AdminButton type="button" variant="primary" onClick={handleSaveCampaign} disabled={campaignComposerSaving}>
                                   {campaignComposerSaving ? "Saving…" : "Save Campaign"}
@@ -9310,8 +9433,8 @@ export default function AdminPanel() {
                           <h2>Analytics Debug — Data Quality Report</h2>
                           <span>Backend-generated validation checks for the currently loaded analytics slice.</span>
                         </div>
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
+                        <div className="admin-engagement-debug-table-wrap">
+                          <table className="admin-engagement-debug-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
                             <thead>
                               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
                                 <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600, width: 200 }}>Metric / Widget</th>
@@ -9439,43 +9562,45 @@ export default function AdminPanel() {
                           <h2>Guest Journey Step Definitions</h2>
                           <span>Ordered guest journey steps with inference and warnings for incomplete stage tracking.</span>
                         </div>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
-                          <thead>
-                            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
-                              <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Journey step</th>
-                              <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Source events</th>
-                              <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Current guests</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(engagementAnalytics?.funnel ?? [
-                              { key: "viewed_dinner", label: "Viewed Dinner", users: 0 },
-                              { key: "selected_package", label: "Selected Package", users: 0 },
-                              { key: "started_application", label: "Started Application", users: 0 },
-                              { key: "submitted_application", label: "Submitted Application", users: 0 },
-                              { key: "approved", label: "Approved", users: 0 },
-                              { key: "paid", label: "Paid", users: 0 },
-                              { key: "attended", label: "Attended", users: 0 },
-                            ]).map((step) => {
-                              const eventMap: Record<string, string> = {
-                                viewed_dinner: "viewed_dinner, landing_dinner_viewed, opened_tickets",
-                                selected_package: "selected_package, landing_package_selected",
-                                started_application: "clicked_apply, landing_form_started, join_form_started",
-                                submitted_application: "join_form_submitted, submitted_application, landing_dinner_selection_saved, landing_form_submitted",
-                                approved: "inferred from current approved booking statuses",
-                                paid: "telegram_payment_success + inferred paid statuses",
-                                attended: "not yet tracked as an explicit event",
-                              };
-                              return (
-                                <tr key={step.key} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                                  <td style={{ padding: "8px 12px", fontWeight: 500 }}>{step.label}</td>
-                                  <td style={{ padding: "8px 12px", color: "#a6afa8", fontSize: 12, fontFamily: "monospace" }}>{eventMap[step.key] ?? "—"}</td>
-                                  <td style={{ padding: "8px 12px", fontWeight: 600, color: "#f5f1e8" }}>{step.users.toLocaleString()}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                        <div className="admin-engagement-debug-table-wrap">
+                          <table className="admin-engagement-debug-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: "#e2ddd4" }}>
+                            <thead>
+                              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Journey step</th>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Source events</th>
+                                <th style={{ padding: "8px 12px", color: "#a6afa8", fontWeight: 600 }}>Current guests</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(engagementAnalytics?.funnel ?? [
+                                { key: "viewed_dinner", label: "Viewed Dinner", users: 0 },
+                                { key: "selected_package", label: "Selected Package", users: 0 },
+                                { key: "started_application", label: "Started Application", users: 0 },
+                                { key: "submitted_application", label: "Submitted Application", users: 0 },
+                                { key: "approved", label: "Approved", users: 0 },
+                                { key: "paid", label: "Paid", users: 0 },
+                                { key: "attended", label: "Attended", users: 0 },
+                              ]).map((step) => {
+                                const eventMap: Record<string, string> = {
+                                  viewed_dinner: "viewed_dinner, landing_dinner_viewed, opened_tickets",
+                                  selected_package: "selected_package, landing_package_selected",
+                                  started_application: "clicked_apply, landing_form_started, join_form_started",
+                                  submitted_application: "join_form_submitted, submitted_application, landing_dinner_selection_saved, landing_form_submitted",
+                                  approved: "inferred from current approved booking statuses",
+                                  paid: "telegram_payment_success + inferred paid statuses",
+                                  attended: "not yet tracked as an explicit event",
+                                };
+                                return (
+                                  <tr key={step.key} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                                    <td style={{ padding: "8px 12px", fontWeight: 500 }}>{step.label}</td>
+                                    <td style={{ padding: "8px 12px", color: "#a6afa8", fontSize: 12, fontFamily: "monospace" }}>{eventMap[step.key] ?? "—"}</td>
+                                    <td style={{ padding: "8px 12px", fontWeight: 600, color: "#f5f1e8" }}>{step.users.toLocaleString()}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </article>
 
                       <article className="admin-widget admin-widget--fit">

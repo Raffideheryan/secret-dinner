@@ -5706,6 +5706,69 @@
   gap: 0.9rem;
 }
 
+/* Keep secondary delivery controls out of the main composer flow until needed. */
+.admin-campaign-composer__advanced {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.admin-campaign-composer__advanced-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 40px;
+  padding: 0.62rem 0.82rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--admin-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-campaign-composer__advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.admin-campaign-composer__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  background: linear-gradient(180deg, rgba(17, 23, 21, 0), rgba(17, 23, 21, 0.96) 26%, rgba(11, 15, 14, 0.98));
+}
+
+.admin-engagement-debug-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-engagement-debug-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.admin-engagement-debug-table th,
+.admin-engagement-debug-table td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
+}
+
 .admin-engagement-chart {
   display: grid;
   gap: 0.8rem;
@@ -6548,6 +6611,94 @@
 
 .admin-engagement-user-card__foot {
   font-size: 0.78rem;
+}
+
+.admin-campaign-queue-card {
+  display: grid;
+  gap: 0.7rem;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding: 0.9rem 1rem;
+}
+
+.admin-campaign-queue-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.admin-campaign-queue-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+  flex: 1 1 auto;
+}
+
+.admin-campaign-queue-card__title {
+  color: var(--admin-text);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.24;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-campaign-queue-card__subtitle {
+  color: var(--admin-muted);
+  font-size: 0.72rem;
+  line-height: 1.28;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.admin-campaign-queue-card__status {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.admin-campaign-queue-card__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.admin-campaign-queue-card__metric {
+  min-width: 0;
+  display: inline-grid;
+  gap: 0.08rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.admin-campaign-queue-card__metric b {
+  color: var(--admin-text);
+  font-size: 0.78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.admin-campaign-queue-card__metric small {
+  color: var(--admin-muted);
+  font-size: 0.62rem;
+  line-height: 1.1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-campaign-queue-card__metric--revenue b {
+  color: var(--admin-gold-strong);
 }
 
 .admin-engagement-user-preview {
@@ -7967,5 +8118,975 @@
 
   .admin-engagement-user-preview__meta {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.admin-mobile-bar,
+.admin-sidebar__close,
+.admin-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .admin-dashboard {
+    padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .admin-dashboard__layout {
+    width: min(100%, 1400px);
+    grid-template-columns: 1fr;
+  }
+
+  .admin-main {
+    overflow-x: clip;
+  }
+
+  .admin-widgets,
+  .admin-info-grid,
+  .admin-kpis,
+  .admin-kpis--dynamic,
+  .admin-speed-grid,
+  .admin-booking-manager__grid,
+  .admin-engagement-users__layout,
+  .admin-engagement-grid,
+  .admin-engagement-source__stats,
+  .admin-engagement-dual-metrics,
+  .admin-engagement-profile__hero,
+  .admin-engagement-profile__priority-grid,
+  .admin-engagement-profile__secondary-grid,
+  .admin-engagement-profile__workspace-grid,
+  .admin-engagement-profile__main-grid,
+  .admin-campaign-composer__message-grid,
+  .admin-dish-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-page-header,
+  .admin-filter-bar,
+  .admin-users__controls,
+  .admin-audit-log__filters,
+  .admin-engagement-timeline__toolbar,
+  .admin-toolbar {
+    align-items: stretch;
+  }
+
+  .admin-page-header__actions,
+  .admin-page-header__actions > *,
+  .admin-topbar__search,
+  .admin-engagement-users__search,
+  .admin-audit-log__search,
+  .admin-users__filter,
+  .admin-users__filter-group,
+  .admin-engagement__field,
+  .admin-dashboard .MuiFormControl-root {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-users__filter-buttons,
+  .admin-users__switch,
+  .admin-booking-status-groups,
+  .admin-booking-manager__options {
+    flex-wrap: wrap;
+  }
+
+  .admin-topbar__search,
+  .admin-toolbar__btn,
+  .admin-button,
+  .admin-users__switch-btn,
+  .admin-users__filter-btn,
+  .admin-users__status-btn,
+  .admin-engagement-copy-button,
+  .admin-engagement-inline-copy,
+  .admin-guest-crm__toggle,
+  .admin-modal__close {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-dashboard,
+  .admin-dashboard * {
+    --admin-kpi-height: auto;
+  }
+
+  .admin-dashboard {
+    padding-inline: 0.5rem;
+  }
+
+  .admin-dashboard__layout {
+    gap: 0.75rem;
+    min-height: auto;
+  }
+
+  .admin-mobile-bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    position: sticky;
+    top: max(0.25rem, env(safe-area-inset-top));
+    z-index: 60;
+    padding: 0.58rem 0.72rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+      linear-gradient(180deg, rgba(17, 23, 21, 0.96), rgba(11, 15, 14, 0.98));
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(18px);
+  }
+
+  .admin-mobile-bar__menu {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    display: inline-grid;
+    align-content: center;
+    justify-items: center;
+    gap: 4px;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--admin-text);
+  }
+
+  .admin-mobile-bar__menu-line {
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .admin-mobile-bar__copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.08rem;
+  }
+
+  .admin-mobile-bar__eyebrow {
+    color: var(--admin-gold-strong);
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    line-height: 1.05;
+  }
+
+  .admin-mobile-bar__title {
+    color: var(--admin-text);
+    font-size: 0.95rem;
+    line-height: 1.08;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .admin-mobile-bar__badge {
+    justify-self: end;
+    max-width: 78px;
+    min-height: 28px;
+    padding: 0.22rem 0.58rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .admin-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: rgba(5, 8, 7, 0.62);
+    backdrop-filter: blur(4px);
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 80;
+    width: min(86vw, 360px);
+    height: 100dvh;
+    min-height: 100vh;
+    border-radius: 0 24px 24px 0;
+    padding: max(1rem, env(safe-area-inset-top)) 0.85rem max(1rem, env(safe-area-inset-bottom));
+    transform: translateX(calc(-100% - 16px));
+    transition: transform 180ms ease;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    gap: 0.85rem;
+    overflow: hidden;
+  }
+
+  .admin-sidebar--open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--admin-text);
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .admin-sidebar__brand {
+    align-items: flex-start;
+    padding-right: 0;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 0 -0.05rem;
+    padding: 0.1rem 0.05rem 0.7rem;
+    background:
+      linear-gradient(180deg, rgba(17, 23, 21, 0.98), rgba(17, 23, 21, 0.9) 72%, rgba(17, 23, 21, 0));
+  }
+
+  .admin-sidebar__nav {
+    display: grid;
+    align-content: start;
+    gap: 0.45rem;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 0.15rem;
+    padding-bottom: 0.25rem;
+    scrollbar-width: thin;
+  }
+
+  .admin-sidebar__item {
+    width: 100%;
+    min-height: 48px;
+    white-space: normal;
+    align-items: flex-start;
+    overflow: visible;
+  }
+
+  .admin-sidebar__item-label,
+  .admin-sidebar__item-hint {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-sidebar__item-label {
+    line-height: 1.22;
+    color: var(--admin-text);
+  }
+
+  .admin-sidebar__item-hint {
+    line-height: 1.24;
+    color: rgba(245, 241, 232, 0.72);
+  }
+
+  .admin-sidebar__footer {
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 0;
+    padding-top: 0.7rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: linear-gradient(180deg, rgba(17, 23, 21, 0), rgba(17, 23, 21, 0.95) 22%, rgba(17, 23, 21, 0.98));
+  }
+
+  .admin-sidebar__logout {
+    display: inline-flex;
+    width: 100%;
+    min-height: 46px;
+    margin-top: 0;
+  }
+
+  .admin-main {
+    padding: 0.72rem;
+    border-radius: 18px;
+  }
+
+  .admin-page-header {
+    gap: 0.45rem;
+    padding: 0.05rem 0;
+  }
+
+  .admin-page-header__eyebrow {
+    font-size: 0.6rem;
+    line-height: 1.05;
+  }
+
+  .admin-page-header__title {
+    font-size: clamp(1.3rem, 5.8vw, 1.8rem);
+    line-height: 1.02;
+  }
+
+  .admin-page-header__subtitle {
+    font-size: 0.82rem;
+    line-height: 1.28;
+    margin-top: 0.12rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .admin-page-header__meta {
+    gap: 0.35rem;
+  }
+
+  .admin-toolbar,
+  .admin-filter-bar,
+  .admin-users__controls,
+  .admin-audit-log__filters,
+  .admin-engagement-timeline__toolbar,
+  .admin-engagement-profile-header__actions,
+  .admin-dinner-actions,
+  .admin-dish-card__actions,
+  .admin-dinner-card__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-users__filter,
+  .admin-users__filter-group,
+  .admin-audit-log__actions,
+  .admin-booking-actions__header,
+  .admin-booking-actions__segments,
+  .admin-engagement-user-card__actions,
+  .admin-engagement-timeline__pagination {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-users__filter select,
+  .admin-dinner-input,
+  .admin-booking-manager__textarea,
+  .admin-engagement-timeline__page-size select,
+  .admin-dashboard .MuiInputBase-root,
+  .admin-dashboard .MuiSelect-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-dinner-form,
+  .admin-engagement__filters,
+  .admin-campaign-composer__stack,
+  .admin-campaign-composer__message-grid,
+  .admin-booking-manager__grid,
+  .admin-booking-status-groups,
+  .admin-telegram-booking-card__body,
+  .admin-telegram-booking-card__details-inner,
+  .admin-guest-crm__detail-grid,
+  .admin-engagement-users__layout,
+  .admin-engagement-profile__hero,
+  .admin-engagement-profile__priority-grid,
+  .admin-engagement-profile__secondary-grid,
+  .admin-engagement-profile__workspace-grid,
+  .admin-engagement-profile__main-grid,
+  .admin-engagement-crm-header__stats,
+  .admin-engagement-crm-header__copy-grid,
+  .admin-engagement-kpi-grid,
+  .admin-engagement-kpi-grid--compact,
+  .admin-engagement-dual-metrics,
+  .admin-engagement-score-panel,
+  .admin-engagement-source__metrics,
+  .admin-engagement-insights,
+  .admin-booking-actions__segments {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-booking-manager__summary,
+  .admin-engagement-user-card__head,
+  .admin-engagement-user-card__meta,
+  .admin-engagement-user-card__foot,
+  .admin-engagement-profile__hero,
+  .admin-engagement-crm-header,
+  .admin-engagement-crm-header__title-row,
+  .admin-engagement-crm-header__contact-line,
+  .admin-engagement-crm-header__chips,
+  .admin-engagement-detail-row,
+  .admin-engagement-detail-row > div,
+  .admin-engagement-journey-step__head,
+  .admin-engagement-timeline__head,
+  .admin-widget__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-widget,
+  .admin-card,
+  .admin-chart-card,
+  .admin-empty-state,
+  .admin-dinner-card,
+  .admin-landing-crm-card,
+  .admin-guest-crm-card,
+  .admin-telegram-booking-card {
+    border-radius: 18px;
+  }
+
+  .admin-kpis,
+  .admin-kpis--dynamic {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-kpi,
+  .admin-kpi-card {
+    height: auto;
+    min-height: 0;
+  }
+
+  .admin-kpi {
+    padding: 0.72rem 0.78rem;
+  }
+
+  .admin-kpi-card {
+    padding: 0.88rem 0.9rem 0.82rem;
+    border-radius: 18px;
+  }
+
+  .admin-kpi-card::before {
+    inset: 0 auto auto 0.9rem;
+    width: 42px;
+  }
+
+  .admin-kpi-card::after {
+    width: 84px;
+    height: 84px;
+    right: -18px;
+    bottom: -24px;
+  }
+
+  .admin-kpi-card__top {
+    gap: 0.55rem;
+  }
+
+  .admin-kpi-card__label {
+    font-size: 0.72rem;
+    line-height: 1.15;
+  }
+
+  .admin-kpi-card__value {
+    margin-top: 0.38rem;
+    font-size: clamp(1.5rem, 6vw, 2rem);
+    line-height: 1.02;
+  }
+
+  .admin-kpi-card__value--long {
+    font-size: clamp(1rem, 4.2vw, 1.35rem);
+    line-height: 1.08;
+  }
+
+  .admin-kpi-card__icon {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    font-size: 0.7rem;
+  }
+
+  .admin-kpi-card__icon-dot {
+    width: 10px;
+    height: 10px;
+  }
+
+  .admin-kpi-card__bottom {
+    margin-top: 0.65rem;
+    gap: 0.5rem;
+  }
+
+  .admin-kpi-card__description {
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  .admin-kpi-card__trend {
+    min-height: 34px;
+    padding: 0.4rem 0.72rem;
+    border-radius: 14px;
+    font-size: 0.68rem;
+    line-height: 1.1;
+  }
+
+  .admin-widget,
+  .admin-widget--fit,
+  .admin-widget--full,
+  .admin-card,
+  .admin-chart-card,
+  .admin-empty-state,
+  .admin-empty-state--compact,
+  .admin-dinner-card,
+  .admin-engagement-card,
+  .admin-engagement__summary-card,
+  .admin-landing-crm-card,
+  .admin-guest-crm-card,
+  .admin-telegram-booking-card {
+    height: auto;
+    min-height: 0;
+  }
+
+  .admin-landing-crm-card__summary,
+  .admin-guest-crm-card__summary {
+    min-height: 0;
+  }
+
+  .admin-bars,
+  .admin-bars--compact,
+  .admin-wave-chart,
+  .admin-hour-combo,
+  .admin-lollipop-chart,
+  .admin-engagement-chart,
+  .admin-engagement-chart__frame,
+  .admin-engagement-chart__frame--compact,
+  .admin-engagement-chart__frame--pie,
+  .admin-custom-chart__bars--vertical,
+  .admin-custom-chart__column-track {
+    min-height: 0;
+  }
+
+  .admin-engagement-chart__frame {
+    height: auto;
+    padding-block: 0.55rem;
+  }
+
+  .admin-empty-state {
+    place-items: start center;
+  }
+
+  .admin-table-shell {
+    overflow: visible;
+  }
+
+  .admin-table:not(.admin-table--guest-crm) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-table:not(.admin-table--guest-crm) thead {
+    display: none;
+  }
+
+  .admin-table:not(.admin-table--guest-crm),
+  .admin-table:not(.admin-table--guest-crm) tbody,
+  .admin-table:not(.admin-table--guest-crm) tr,
+  .admin-table:not(.admin-table--guest-crm) td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-table:not(.admin-table--guest-crm) tr {
+    margin-bottom: 0.75rem;
+    padding: 0.8rem 0.85rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .admin-table:not(.admin-table--guest-crm) td {
+    display: grid;
+    grid-template-columns: minmax(88px, 40%) minmax(0, 1fr);
+    gap: 0.6rem;
+    padding: 0.38rem 0;
+    border: 0;
+  }
+
+  .admin-table:not(.admin-table--guest-crm) td::before {
+    content: attr(data-label);
+    color: var(--admin-gold-strong);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .admin-table:not(.admin-table--guest-crm) td:empty::after {
+    content: "—";
+    color: var(--admin-muted);
+  }
+
+  .admin-campaign-queue-card {
+    padding: 0.82rem 0.88rem;
+    gap: 0.62rem;
+  }
+
+  .admin-campaign-composer {
+    gap: 0.5rem;
+  }
+
+  .admin-campaign-composer__header {
+    gap: 0.35rem;
+    margin-bottom: 0;
+  }
+
+  .admin-campaign-composer__templates {
+    gap: 0.3rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .admin-campaign-composer__stack {
+    gap: 0.42rem;
+  }
+
+  .admin-campaign-composer__section {
+    gap: 0.3rem;
+  }
+
+  .admin-campaign-composer__subsection {
+    gap: 0.26rem;
+  }
+
+  .admin-campaign-composer__section-label {
+    font-size: 0.58rem;
+  }
+
+  .admin-campaign-composer__message-grid {
+    gap: 0.24rem;
+  }
+
+  .admin-campaign-composer__preview {
+    gap: 0.55rem;
+  }
+
+  /* Keep the composer navigation and save actions reachable while compressing
+     mobile spacing; desktop keeps the existing layout. */
+  .admin-campaign-composer__actions {
+    margin-top: 0.75rem !important;
+    padding-top: 0.68rem !important;
+    display: grid;
+    grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+    gap: 0.55rem;
+    padding-bottom: max(0.12rem, env(safe-area-inset-bottom));
+  }
+
+  .admin-campaign-composer__actions > * {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-campaign-composer__advanced-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .admin-campaign-composer .admin-users__switch {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 0.24rem;
+    padding: 0.24rem;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: linear-gradient(180deg, rgba(17, 23, 21, 0.98), rgba(11, 15, 14, 0.9));
+    box-shadow: 0 10px 24px rgba(4, 7, 6, 0.26);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  .admin-campaign-composer .admin-users__switch::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-campaign-composer .admin-users__switch-btn {
+    width: auto;
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0.48rem 0.78rem;
+    font-size: 0.76rem;
+    white-space: nowrap;
+    scroll-snap-align: center;
+  }
+
+  .admin-campaign-composer__message-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-campaign-composer__advanced-toggle {
+    min-height: 38px;
+    padding: 0.52rem 0.72rem;
+    font-size: 0.76rem;
+  }
+
+  .admin-engagement-debug-table {
+    min-width: 520px;
+  }
+
+  .admin-engagement-debug-table th,
+  .admin-engagement-debug-table td {
+    padding-inline: 0.6rem !important;
+    font-size: 0.74rem !important;
+    line-height: 1.28;
+  }
+
+  .admin-campaign-queue-card__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-campaign-queue-card__status {
+    align-self: flex-start;
+  }
+
+  .admin-campaign-queue-card__metrics {
+    gap: 0.38rem;
+  }
+
+  .admin-campaign-queue-card__metric {
+    flex: 1 1 calc(50% - 0.38rem);
+    max-width: 100%;
+  }
+
+  .admin-modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .admin-modal {
+    width: 100%;
+    max-width: none;
+    max-height: min(94dvh, 94vh);
+    border-radius: 24px 24px 0 0;
+    padding: 1rem;
+    overflow-y: auto;
+  }
+
+  .admin-modal--booking {
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .admin-modal__header--booking,
+  .admin-modal__actions--booking {
+    padding-inline: 1rem;
+  }
+
+  .admin-modal__body--booking {
+    padding: 0.9rem 1rem 1rem;
+  }
+
+  .admin-modal__actions {
+    position: sticky;
+    bottom: -1rem;
+    margin: 0 -1rem -1rem;
+    padding: 0.85rem 1rem max(1rem, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16, 28, 23, 0.86), rgba(16, 28, 23, 0.98));
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .admin-modal__actions .admin-toolbar__btn,
+  .admin-modal__actions .admin-button {
+    width: 100%;
+  }
+
+  .admin-wave-chart,
+  .admin-hour-combo {
+    height: 240px;
+  }
+
+  .admin-bars,
+  .admin-bars--compact,
+  .admin-lollipop-chart,
+  .admin-engagement-chart__frame,
+  .admin-engagement-chart__frame--compact,
+  .admin-engagement-chart__frame--pie,
+  .admin-custom-chart__bars--vertical {
+    min-height: 220px;
+  }
+
+  .admin-bars__pair,
+  .admin-bars--compact .admin-bars__pair,
+  .admin-lollipop-chart__track,
+  .admin-custom-chart__column-track {
+    height: 172px;
+  }
+
+  .admin-engagement-chart__frame {
+    min-height: 240px;
+    max-height: 280px;
+  }
+
+  .admin-wave-chart__labels,
+  .admin-pulse-strip__labels {
+    grid-auto-columns: minmax(28px, 1fr);
+    gap: 0.15rem;
+    font-size: 0.66rem;
+  }
+
+  .admin-wave-chart__label-chip,
+  .admin-pulse-strip__label,
+  .admin-bars__month,
+  .admin-lollipop-chart__label {
+    font-size: 0.66rem;
+  }
+
+  .admin-wave-chart__label-chip:nth-child(even),
+  .admin-bars__group:nth-child(even) .admin-bars__month,
+  .admin-lollipop-chart__col:nth-child(even) .admin-lollipop-chart__label {
+    display: none;
+  }
+
+  .admin-engagement-chart .MuiChartsLegend-label,
+  .admin-engagement-chart .MuiChartsAxis-label,
+  .admin-engagement-chart .MuiChartsTickLabel-root,
+  .admin-engagement-chart .MuiPieArcLabel-root {
+    font-size: 0.64rem;
+  }
+
+  .admin-engagement-chart .MuiChartsXAxis-root .MuiChartsTickLabel-root:nth-of-type(even),
+  .admin-engagement-chart .MuiChartsAxis-root .MuiChartsTickLabel-root:nth-of-type(even) {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 430px) {
+  .admin-dashboard {
+    padding-inline: 0.35rem;
+  }
+
+  .admin-main {
+    padding: 0.72rem;
+  }
+
+  .admin-widget,
+  .admin-card,
+  .admin-modal {
+    padding-inline: 0.82rem;
+  }
+
+  .admin-kpi,
+  .admin-kpi-card {
+    padding-inline: 0.82rem;
+  }
+
+  .admin-card__title,
+  .admin-widget__header h2,
+  .admin-dinner-card__title,
+  .admin-dish-card__title,
+  .admin-engagement-source__title,
+  .admin-engagement-user-preview__copy h3,
+  .admin-engagement-profile__hero-copy h3,
+  .admin-empty-state__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.18;
+    text-wrap: balance;
+  }
+
+  .admin-card__subtitle,
+  .admin-widget__header span,
+  .admin-dinner-card__line,
+  .admin-empty-state__text,
+  .admin-engagement-profile__hero-copy p,
+  .admin-engagement-user-preview__copy p,
+  .admin-engagement-user-card__identity span,
+  .admin-engagement-user-card__meta span,
+  .admin-engagement-user-card__foot span {
+    line-height: 1.28;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .admin-dinner-card__line,
+  .admin-engagement-user-card__identity span,
+  .admin-engagement-user-card__meta span,
+  .admin-engagement-user-card__foot span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .admin-widget__header span,
+  .admin-card__subtitle,
+  .admin-empty-state__text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .admin-booking-manager__copy,
+  .admin-guest-crm__detail-copy,
+  .admin-telegram-booking-card__block span,
+  .admin-telegram-booking-card__block strong,
+  .admin-modal__detail span,
+  .admin-modal__detail b {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .admin-page-header__title {
+    font-size: clamp(1.45rem, 8vw, 1.95rem);
+  }
+
+  .admin-table:not(.admin-table--guest-crm) td {
+    grid-template-columns: minmax(76px, 42%) minmax(0, 1fr);
+    gap: 0.45rem;
+  }
+
+  .admin-wave-chart,
+  .admin-hour-combo {
+    height: 224px;
+  }
+
+  .admin-engagement-chart__frame {
+    min-height: 220px;
+  }
+
+  .admin-wave-chart__labels,
+  .admin-pulse-strip__labels {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .admin-wave-chart__labels::-webkit-scrollbar,
+  .admin-pulse-strip__labels::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-campaign-composer__message-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-campaign-queue-card__metric {
+    flex-basis: 100%;
+  }
+
+  .admin-campaign-queue-card__title {
+    font-size: 0.84rem;
+  }
+
+  .admin-campaign-queue-card__subtitle {
+    font-size: 0.68rem;
+  }
+
+  .admin-campaign-composer__advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-engagement-debug-table {
+    min-width: 460px;
+  }
+}
+
+@media (max-width: 359px) {
+  .admin-campaign-composer__actions {
+    grid-template-columns: 1fr;
   }
 }
