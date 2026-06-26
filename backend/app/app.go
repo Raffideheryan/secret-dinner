@@ -23,6 +23,7 @@ type landingApp struct {
 	server      *fiber.App
 	auth        *adminAuthService
 	settings    *runtimeAdminSettings
+	miniAuth    *telegramMiniAuthService
 }
 
 func NewLandingApp(ctx context.Context, cfg config.Config) (LandingApplication, error) {
@@ -41,6 +42,7 @@ func NewLandingApp(ctx context.Context, cfg config.Config) (LandingApplication, 
 		connections: connection,
 		auth:        newAdminAuthService(cfg.Admin, settings.GetAdminTokenTTLMinutes),
 		settings:    settings,
+		miniAuth:    newTelegramMiniAuthService(cfg.Telegram),
 	}
 	app.server = app.buildHTTPServer()
 
@@ -117,6 +119,12 @@ func (l *landingApp) Shutdown() error {
 			return err
 		}
 	}
+	if l.connections.TelegramMini != nil {
+		if err := l.connections.TelegramMini.Close(); err != nil {
+			log.WithError(err).Error("Error closing telegram mini app connection")
+			return err
+		}
+	}
 	log.Info("Connections closed.")
 	return nil
 }
@@ -162,7 +170,7 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 	}
 
 	connections := db.Connections{
-		Users:          db.NewUsersDB(landingUsersConn),
+		Users:          db.NewUsersDB(landingUsersConn, nil),
 		AdminUsers:     db.NewAdminUsersDB(landingUsersConn, nil, activityEventsConn),
 		AdminAudit:     db.NewAdminAuditDB(landingUsersConn),
 		ActivityEvents: db.NewActivityEventsDB(activityEventsConn),
@@ -181,6 +189,7 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 			return db.Connections{}, err
 		}
 		connections.Dinners = db.NewDinnersDB(landingDinnersConn, telegramDinnersConn)
+		connections.Users = db.NewUsersDB(landingUsersConn, telegramDinnersConn)
 
 		telegramStatsConn, err := openPostgresConnection(telegramURL)
 		if err != nil {
@@ -219,6 +228,20 @@ func newConnections(cfg config.Config) (db.Connections, error) {
 			return db.Connections{}, err
 		}
 		connections.CustomMenu = db.NewCustomMenuDB(customMenuConn)
+
+		telegramMiniConn, err := openPostgresConnection(telegramURL)
+		if err != nil {
+			landingUsersConn.Close()
+			landingDinnersConn.Close()
+			landingStatsConn.Close()
+			activityEventsConn.Close()
+			telegramDinnersConn.Close()
+			telegramStatsConn.Close()
+			adminBookingsConn.Close()
+			customMenuConn.Close()
+			return db.Connections{}, err
+		}
+		connections.TelegramMini = db.NewTelegramMiniAppDB(telegramMiniConn, landingDinnersConn)
 	}
 
 	return connections, nil

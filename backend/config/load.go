@@ -28,6 +28,30 @@ func LoadConfig() (Config, error) {
 		tokenTTL = 60
 	}
 
+	rawAdminIDs := strings.Trim(os.Getenv("ADMIN_IDS"), " ,")
+	adminIDParts := strings.Split(rawAdminIDs, ",")
+	adminIDs := make([]int64, 0, len(adminIDParts))
+	for _, part := range adminIDParts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, parseErr := strconv.ParseInt(part, 10, 64)
+		if parseErr == nil {
+			adminIDs = append(adminIDs, id)
+		}
+	}
+
+	devUserID, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("TELEGRAM_MINI_APP_DEV_USER_ID")), 10, 64)
+	if err != nil {
+		devUserID = 0
+	}
+
+	authMaxAgeSec, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("TELEGRAM_INIT_DATA_MAX_AGE_SEC")), 10, 64)
+	if err != nil || authMaxAgeSec <= 0 {
+		authMaxAgeSec = 24 * 60 * 60
+	}
+
 	cookieSecure, err := strconv.ParseBool(os.Getenv("ADMIN_COOKIE_SECURE"))
 	if err != nil {
 		cookieSecure = false
@@ -78,6 +102,13 @@ func LoadConfig() (Config, error) {
 			ListenAddr:     listenAddr,
 			FrontendOrigin: frontendOrigin,
 		},
+		Telegram: TelegramConfig{
+			BotToken:      strings.TrimSpace(os.Getenv("TELEGRAM_TOKEN")),
+			BotUsername:   strings.TrimSpace(os.Getenv("TELEGRAM_BOT_USERNAME")),
+			AdminIDs:      adminIDs,
+			DevUserID:     devUserID,
+			AuthMaxAgeSec: authMaxAgeSec,
+		},
 	}
 
 	log.WithFields(logrus.Fields{
@@ -89,6 +120,11 @@ func LoadConfig() (Config, error) {
 		"admin_auth_secret_set":     strings.TrimSpace(cfg.Admin.AuthSecret) != "",
 		"listen_addr":               cfg.HTTP.ListenAddr,
 		"frontend_origin":           cfg.HTTP.FrontendOrigin,
+		"telegram_bot_token_set":    strings.TrimSpace(cfg.Telegram.BotToken) != "",
+		"telegram_bot_username_set": strings.TrimSpace(cfg.Telegram.BotUsername) != "",
+		"telegram_admin_ids_count":  len(cfg.Telegram.AdminIDs),
+		"telegram_dev_user_id_set":  cfg.Telegram.DevUserID > 0,
+		"telegram_auth_max_age_sec": cfg.Telegram.AuthMaxAgeSec,
 		"local_dev_mode":            isExplicitLocalDevMode(),
 	}).Info("Configs loaded successfully.")
 

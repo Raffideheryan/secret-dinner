@@ -19,6 +19,7 @@ type Connections struct {
 	LandingStats   LandingStatsDB
 	TelegramStats  TelegramStatsDB
 	CustomMenu     CustomMenuDB
+	TelegramMini   TelegramMiniAppDB
 }
 
 type PackageBreakdown struct {

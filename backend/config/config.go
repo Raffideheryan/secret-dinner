@@ -1,9 +1,10 @@
 package config
 
 type Config struct {
-	DB    DBConfig
-	Admin AdminConfig
-	HTTP  HTTPConfig
+	DB       DBConfig
+	Admin    AdminConfig
+	HTTP     HTTPConfig
+	Telegram TelegramConfig
 }
 
 type DBConfig struct {
@@ -24,4 +25,12 @@ type AdminConfig struct {
 type HTTPConfig struct {
 	ListenAddr     string
 	FrontendOrigin string
+}
+
+type TelegramConfig struct {
+	BotToken      string
+	BotUsername   string
+	AdminIDs      []int64
+	DevUserID     int64
+	AuthMaxAgeSec int64
 }

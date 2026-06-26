@@ -17,7 +17,7 @@ func (l *landingApp) buildHTTPServer() *fiber.App {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     l.cfg.HTTP.FrontendOrigin,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:     "Content-Type, Authorization",
+		AllowHeaders:     "Content-Type, Authorization, X-Telegram-Init-Data, X-Telegram-Dev-User",
 		AllowCredentials: true,
 	}))
 	app.Use(securityHeadersMiddleware(l.cfg.Admin.CookieSecure))
@@ -40,6 +40,18 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 		"too many join selection requests",
 		l.settings.GetJoinSelectionPer20MinByIP,
 	)
+	telegramMiniLimiter := newIPRateLimiter(
+		120,
+		time.Minute,
+		"too many telegram mini app requests",
+		nil,
+	)
+	telegramMiniApplicationLimiter := newIPRateLimiter(
+		8,
+		5*time.Minute,
+		"too many telegram mini app booking attempts",
+		nil,
+	)
 
 	api := app.Group("/api")
 	api.Get("/health", func(c *fiber.Ctx) error {
@@ -49,6 +61,17 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 	api.Post("/user/join", l.joinApplicationsGuard(), joinFormLimiter.middleware(), routes.HandleJoin(l.connections.Users, l.settings))
 	api.Post("/user/join/selection", l.joinSelectionsGuard(), joinSelectionLimiter.middleware(), routes.HandleJoinSelection(l.connections.Users, l.connections.Dinners))
 	api.Get("/dinners/info", routes.GetDinners(l.connections.Dinners))
+
+	telegramMini := api.Group("/telegram-mini", telegramMiniLimiter.middleware(), l.miniAuth.middleware(l.connections.TelegramMini))
+	telegramMini.Get("/health", l.telegramMiniHealthHandler())
+	telegramMini.Get("/bootstrap", l.telegramMiniBootstrapHandler())
+	telegramMini.Get("/applications", l.telegramMiniApplicationsHandler())
+	telegramMini.Post("/applications/:id/cancel", l.telegramMiniCancelApplicationHandler())
+	telegramMini.Patch("/profile", l.telegramMiniProfileUpdateHandler())
+	telegramMini.Get("/custom-menu/types", l.telegramMiniCustomMenuTypesHandler())
+	telegramMini.Get("/custom-menu/items", l.telegramMiniCustomMenuItemsHandler())
+	telegramMini.Post("/applications", telegramMiniApplicationLimiter.middleware(), l.telegramMiniCreateApplicationHandler())
+	telegramMini.Post("/support", l.telegramMiniSupportHandler())
 
 	admin := api.Group("/admin")
 	admin.Post("/login", limiter.middleware(), l.loginHandler(limiter))

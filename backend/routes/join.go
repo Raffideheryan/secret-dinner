@@ -104,6 +104,9 @@ func HandleJoinSelection(usersDB db.UsersDB, dinnersDB db.DinnersDB) fiber.Handl
 			if errors.Is(err, sql.ErrNoRows) {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 			}
+			if errors.Is(err, db.ErrDinnerSoldOut) {
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": true, "message": "Dinner is sold out"})
+			}
 			log.WithError(err).Error("Error updating user selection")
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Something went wrong"})
 		}
