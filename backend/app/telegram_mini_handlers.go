@@ -30,16 +30,16 @@ type telegramMiniProfileRequest struct {
 }
 
 type telegramMiniApplicationRequest struct {
-	DinnerID        int64    `json:"dinnerId"`
-	GuestCount      int      `json:"guestCount"`
-	GuestPackages   []string `json:"guestPackages"`
-	TablePreference string   `json:"tablePreference"`
-	Hobbies         string   `json:"hobbies"`
-	Allergies       string   `json:"allergies"`
-	Phone           string   `json:"phone"`
-	Language        string   `json:"language"`
-	CustomMenuIDs   []int64  `json:"customMenuItemIds"`
-	AcceptLegalTerms bool    `json:"acceptLegalTerms"`
+	DinnerID         int64    `json:"dinnerId"`
+	GuestCount       int      `json:"guestCount"`
+	GuestPackages    []string `json:"guestPackages"`
+	TablePreference  string   `json:"tablePreference"`
+	Hobbies          string   `json:"hobbies"`
+	Allergies        string   `json:"allergies"`
+	Phone            string   `json:"phone"`
+	Language         string   `json:"language"`
+	CustomMenuIDs    []int64  `json:"customMenuItemIds"`
+	AcceptLegalTerms bool     `json:"acceptLegalTerms"`
 }
 
 func (l *landingApp) telegramMiniBootstrapHandler() fiber.Handler {
@@ -187,16 +187,16 @@ func (l *landingApp) telegramMiniCreateApplicationHandler() fiber.Handler {
 		}
 
 		item, err := l.connections.TelegramMini.CreateApplication(db.TelegramMiniAppApplicationInput{
-			UserID:          user.ID,
-			DinnerID:        body.DinnerID,
-			GuestCount:      body.GuestCount,
-			GuestPackages:   body.GuestPackages,
-			TablePreference: body.TablePreference,
-			Hobbies:         body.Hobbies,
-			Allergies:       body.Allergies,
-			Phone:           phone,
-			Language:        language,
-			CustomMenuIDs:   body.CustomMenuIDs,
+			UserID:           user.ID,
+			DinnerID:         body.DinnerID,
+			GuestCount:       body.GuestCount,
+			GuestPackages:    body.GuestPackages,
+			TablePreference:  body.TablePreference,
+			Hobbies:          body.Hobbies,
+			Allergies:        body.Allergies,
+			Phone:            phone,
+			Language:         language,
+			CustomMenuIDs:    body.CustomMenuIDs,
 			AcceptLegalTerms: body.AcceptLegalTerms,
 		})
 		if err != nil {
@@ -415,16 +415,20 @@ func (l *landingApp) telegramMiniGameRewardClaimHandler() fiber.Handler {
 
 func (l *landingApp) telegramMiniGameLeaderboardHandler() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		user := currentTelegramMiniUser(c)
 		limit := 20
 		if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 				limit = parsed
 			}
 		}
+		fmt.Printf("[telegram-mini][leaderboard] request user_id=%d limit=%d\n", user.ID, limit)
 		entries, err := l.connections.TelegramMini.GetGameLeaderboard(limit)
 		if err != nil {
+			fmt.Printf("[telegram-mini][leaderboard] failed user_id=%d limit=%d err=%v\n", user.ID, limit, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load leaderboard"})
 		}
+		fmt.Printf("[telegram-mini][leaderboard] success user_id=%d limit=%d entries=%d\n", user.ID, limit, len(entries))
 		return c.JSON(fiber.Map{"leaderboard": entries})
 	}
 }

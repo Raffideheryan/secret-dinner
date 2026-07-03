@@ -2003,6 +2003,7 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	fmt.Printf("[telegram-mini][db][leaderboard] query start limit=%d\n", limit)
 	rows, err := r.telegramDB.Query(`
 		SELECT
 			u.id,
@@ -2017,6 +2018,7 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 		LIMIT $1
 	`, limit)
 	if err != nil {
+		fmt.Printf("[telegram-mini][db][leaderboard] query error limit=%d err=%v\n", limit, err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -2026,6 +2028,7 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 		var e GameLeaderboardEntry
 		var fullName, username string
 		if err := rows.Scan(&e.UserID, &fullName, &username, &e.HighScore); err != nil {
+			fmt.Printf("[telegram-mini][db][leaderboard] scan error err=%v\n", err)
 			return nil, err
 		}
 		name := strings.TrimSpace(fullName)
@@ -2036,9 +2039,15 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 			name = "Player"
 		}
 		e.Name = name
+		fmt.Printf("[telegram-mini][db][leaderboard] row user_id=%d name=%q high_score=%d raw_full_name=%q raw_username=%q\n", e.UserID, e.Name, e.HighScore, fullName, username)
 		entries = append(entries, e)
 	}
-	return entries, rows.Err()
+	if err := rows.Err(); err != nil {
+		fmt.Printf("[telegram-mini][db][leaderboard] rows error err=%v\n", err)
+		return nil, err
+	}
+	fmt.Printf("[telegram-mini][db][leaderboard] query done limit=%d entries=%d\n", limit, len(entries))
+	return entries, nil
 }
 
 const gameConvertPointsPerReal = 200
