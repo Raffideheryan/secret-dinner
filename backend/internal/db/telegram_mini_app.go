@@ -69,15 +69,15 @@ type GameRewardHistoryEntry struct {
 }
 
 type GameProgress struct {
-	GamePoints     int                      `json:"gamePoints"`
-	GameHighScore  int                      `json:"gameHighScore"`
-	ConvertToday   int                      `json:"convertToday"`
-	ConvertDate    string                   `json:"convertDate"` // "YYYY-MM-DD" or ""
-	RealPoints     int                      `json:"realPoints"`  // user.points — Discount Points
-	CurrentLevel   int                      `json:"currentLevel"`
-	LastPlayedAt   string                   `json:"lastPlayedAt"` // RFC3339 or ""
-	Levels         []GameLevelProgress      `json:"levels"`
-	RewardHistory  []GameRewardHistoryEntry `json:"rewardHistory"`
+	GamePoints    int                      `json:"gamePoints"`
+	GameHighScore int                      `json:"gameHighScore"`
+	ConvertToday  int                      `json:"convertToday"`
+	ConvertDate   string                   `json:"convertDate"` // "YYYY-MM-DD" or ""
+	RealPoints    int                      `json:"realPoints"`  // user.points — Discount Points
+	CurrentLevel  int                      `json:"currentLevel"`
+	LastPlayedAt  string                   `json:"lastPlayedAt"` // RFC3339 or ""
+	Levels        []GameLevelProgress      `json:"levels"`
+	RewardHistory []GameRewardHistoryEntry `json:"rewardHistory"`
 }
 
 type GameProgressUpdate struct {
@@ -88,10 +88,10 @@ type GameProgressUpdate struct {
 
 // LevelRewardResult reports the outcome of a server-authoritative reward claim.
 type LevelRewardResult struct {
-	Stars    int          `json:"stars"`     // stars earned this session (0–3)
-	BestStars int         `json:"bestStars"` // best stars ever on this level
-	Awarded  int          `json:"awarded"`   // Game Points granted this claim (>= 0)
-	Progress GameProgress `json:"progress"`
+	Stars     int          `json:"stars"`     // stars earned this session (0–3)
+	BestStars int          `json:"bestStars"` // best stars ever on this level
+	Awarded   int          `json:"awarded"`   // Game Points granted this claim (>= 0)
+	Progress  GameProgress `json:"progress"`
 }
 
 type GameLeaderboardEntry struct {
@@ -100,11 +100,11 @@ type GameLeaderboardEntry struct {
 	HighScore int    `json:"highScore"`
 }
 
-var ErrGameConvertInvalid   = errors.New("invalid conversion amount")
+var ErrGameConvertInvalid = errors.New("invalid conversion amount")
 var ErrGameConvertDailyLimit = errors.New("daily conversion limit exceeded")
 var ErrGameConvertNotEnough = errors.New("not enough game points")
-var ErrGameLevelInvalid     = errors.New("invalid level")
-var ErrGameScoreInvalid     = errors.New("invalid score")
+var ErrGameLevelInvalid = errors.New("invalid level")
+var ErrGameScoreInvalid = errors.New("invalid score")
 
 // gameLevelTargets mirrors the client TARGET_SCORES so the server can compute
 // star ratings authoritatively (never trusting a client-sent star count).
@@ -226,16 +226,16 @@ type TelegramMiniAppApplication struct {
 }
 
 type TelegramMiniAppApplicationInput struct {
-	UserID          int64
-	DinnerID        int64
-	GuestCount      int
-	GuestPackages   []string
-	TablePreference string
-	Hobbies         string
-	Allergies       string
-	Phone           string
-	Language        string
-	CustomMenuIDs   []int64
+	UserID           int64
+	DinnerID         int64
+	GuestCount       int
+	GuestPackages    []string
+	TablePreference  string
+	Hobbies          string
+	Allergies        string
+	Phone            string
+	Language         string
+	CustomMenuIDs    []int64
 	AcceptLegalTerms bool
 }
 
@@ -1971,6 +1971,18 @@ func (r *telegramMiniAppRepo) ClaimLevelReward(userID int64, level, score int) (
 		}
 	}
 
+	// Keep the aggregate leaderboard source in sync with the best gameplay score
+	// even if the client fails to hit the separate progress-save endpoint.
+	if _, err := tx.Exec(`
+		UPDATE users
+		SET game_high_score = GREATEST(COALESCE(game_high_score, 0), $2),
+			game_last_played_at = now(),
+			updated_at = now()
+		WHERE id = $1
+	`, userID, bestScore); err != nil {
+		return LevelRewardResult{}, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return LevelRewardResult{}, err
 	}
@@ -1993,13 +2005,15 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 	}
 	rows, err := r.telegramDB.Query(`
 		SELECT
-			id,
-			BTRIM(COALESCE(name, '') || ' ' || COALESCE(surname, '')),
-			COALESCE(username, ''),
-			COALESCE(game_high_score, 0)
-		FROM users
-		WHERE COALESCE(game_high_score, 0) > 0
-		ORDER BY game_high_score DESC, id ASC
+			u.id,
+			BTRIM(COALESCE(u.name, '') || ' ' || COALESCE(u.surname, '')),
+			COALESCE(u.username, ''),
+			GREATEST(COALESCE(u.game_high_score, 0), COALESCE(MAX(glp.best_score), 0)) AS high_score
+		FROM users u
+		LEFT JOIN game_level_progress glp ON glp.user_id = u.id
+		GROUP BY u.id, u.name, u.surname, u.username, u.game_high_score
+		HAVING GREATEST(COALESCE(u.game_high_score, 0), COALESCE(MAX(glp.best_score), 0)) > 0
+		ORDER BY high_score DESC, u.id ASC
 		LIMIT $1
 	`, limit)
 	if err != nil {
@@ -2028,7 +2042,7 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 }
 
 const gameConvertPointsPerReal = 200
-const gameConvertDailyLimit    = 1000
+const gameConvertDailyLimit = 1000
 
 func (r *telegramMiniAppRepo) ConvertGamePoints(userID int64, gamePointsToSpend int) (GameProgress, error) {
 	if gamePointsToSpend <= 0 || gamePointsToSpend%gameConvertPointsPerReal != 0 {
