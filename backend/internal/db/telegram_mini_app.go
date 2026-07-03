@@ -46,6 +46,108 @@ type TelegramMiniAppDB interface {
 	ListApplicationsByUser(userID int64) ([]TelegramMiniAppApplication, error)
 	CreateApplication(input TelegramMiniAppApplicationInput) (TelegramMiniAppApplication, error)
 	CancelApplication(userID int64, packageInfoID int64) (TelegramMiniAppApplication, error)
+	GetGameProgress(userID int64) (GameProgress, error)
+	SaveGameProgress(userID int64, input GameProgressUpdate) (GameProgress, error)
+	ConvertGamePoints(userID int64, gamePointsToSpend int) (GameProgress, error)
+	ClaimLevelReward(userID int64, level, score int) (LevelRewardResult, error)
+	GetGameLeaderboard(limit int) ([]GameLeaderboardEntry, error)
+}
+
+type GameLevelProgress struct {
+	Level     int    `json:"level"`
+	BestStars int    `json:"bestStars"`
+	BestScore int    `json:"bestScore"`
+	Completed bool   `json:"completed"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+type GameRewardHistoryEntry struct {
+	Level         int    `json:"level"`
+	Stars         int    `json:"stars"`
+	PointsAwarded int    `json:"pointsAwarded"`
+	CreatedAt     string `json:"createdAt"`
+}
+
+type GameProgress struct {
+	GamePoints     int                      `json:"gamePoints"`
+	GameHighScore  int                      `json:"gameHighScore"`
+	ConvertToday   int                      `json:"convertToday"`
+	ConvertDate    string                   `json:"convertDate"` // "YYYY-MM-DD" or ""
+	RealPoints     int                      `json:"realPoints"`  // user.points — Discount Points
+	CurrentLevel   int                      `json:"currentLevel"`
+	LastPlayedAt   string                   `json:"lastPlayedAt"` // RFC3339 or ""
+	Levels         []GameLevelProgress      `json:"levels"`
+	RewardHistory  []GameRewardHistoryEntry `json:"rewardHistory"`
+}
+
+type GameProgressUpdate struct {
+	GamePoints    *int
+	GameHighScore *int
+	CurrentLevel  *int
+}
+
+// LevelRewardResult reports the outcome of a server-authoritative reward claim.
+type LevelRewardResult struct {
+	Stars    int          `json:"stars"`     // stars earned this session (0–3)
+	BestStars int         `json:"bestStars"` // best stars ever on this level
+	Awarded  int          `json:"awarded"`   // Game Points granted this claim (>= 0)
+	Progress GameProgress `json:"progress"`
+}
+
+type GameLeaderboardEntry struct {
+	UserID    int64  `json:"userId"`
+	Name      string `json:"name"`
+	HighScore int    `json:"highScore"`
+}
+
+var ErrGameConvertInvalid   = errors.New("invalid conversion amount")
+var ErrGameConvertDailyLimit = errors.New("daily conversion limit exceeded")
+var ErrGameConvertNotEnough = errors.New("not enough game points")
+var ErrGameLevelInvalid     = errors.New("invalid level")
+var ErrGameScoreInvalid     = errors.New("invalid score")
+
+// gameLevelTargets mirrors the client TARGET_SCORES so the server can compute
+// star ratings authoritatively (never trusting a client-sent star count).
+var gameLevelTargets = []int{5000, 7500, 11000, 15000, 20000, 26000, 33000, 41000, 50000, 60000}
+
+const gameMaxLevel = 10
+
+// gameTargetForLevel returns the target score for a 1-based level.
+func gameTargetForLevel(level int) (int, bool) {
+	if level < 1 || level > len(gameLevelTargets) {
+		return 0, false
+	}
+	return gameLevelTargets[level-1], true
+}
+
+// gameStarsForScore applies the star thresholds: 1★ ≥ target, 2★ ≥ target×1.35,
+// 3★ ≥ target×1.75.
+func gameStarsForScore(score, target int) int {
+	if target <= 0 || score < target {
+		return 0
+	}
+	switch {
+	case score >= (target*175)/100:
+		return 3
+	case score >= (target*135)/100:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// gameRewardForStars is the cumulative Game-Point reward for a star count.
+func gameRewardForStars(stars int) int {
+	switch stars {
+	case 3:
+		return 35
+	case 2:
+		return 20
+	case 1:
+		return 10
+	default:
+		return 0
+	}
 }
 
 type TelegramMiniIdentity struct {
@@ -1643,4 +1745,345 @@ func signTelegramInitData(secret []byte, dataCheckString string) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(dataCheckString))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// ── Game progress ─────────────────────────────────────────────────────────────
+
+func (r *telegramMiniAppRepo) GetGameProgress(userID int64) (GameProgress, error) {
+	return r.getGameProgressWithQuerier(r.telegramDB, userID)
+}
+
+func (r *telegramMiniAppRepo) getGameProgressWithQuerier(q miniAppQueryer, userID int64) (GameProgress, error) {
+	const query = `
+		SELECT
+			COALESCE(game_points, 0),
+			COALESCE(game_high_score, 0),
+			COALESCE(game_convert_today, 0),
+			COALESCE(game_convert_date::text, ''),
+			COALESCE(points, 0),
+			COALESCE(game_current_level, 1),
+			COALESCE(game_last_played_at::text, '')
+		FROM users WHERE id = $1
+	`
+	var gp GameProgress
+	if err := q.QueryRow(query, userID).Scan(
+		&gp.GamePoints,
+		&gp.GameHighScore,
+		&gp.ConvertToday,
+		&gp.ConvertDate,
+		&gp.RealPoints,
+		&gp.CurrentLevel,
+		&gp.LastPlayedAt,
+	); err != nil {
+		return GameProgress{}, err
+	}
+
+	levels, err := r.loadLevelProgress(q, userID)
+	if err != nil {
+		return GameProgress{}, err
+	}
+	gp.Levels = levels
+
+	history, err := r.loadRewardHistory(q, userID)
+	if err != nil {
+		return GameProgress{}, err
+	}
+	gp.RewardHistory = history
+
+	return gp, nil
+}
+
+func (r *telegramMiniAppRepo) loadLevelProgress(q miniAppQueryer, userID int64) ([]GameLevelProgress, error) {
+	rows, err := q.Query(`
+		SELECT level, best_stars, best_score, completed, COALESCE(updated_at::text, '')
+		FROM game_level_progress
+		WHERE user_id = $1
+		ORDER BY level ASC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	levels := make([]GameLevelProgress, 0)
+	for rows.Next() {
+		var lp GameLevelProgress
+		if err := rows.Scan(&lp.Level, &lp.BestStars, &lp.BestScore, &lp.Completed, &lp.UpdatedAt); err != nil {
+			return nil, err
+		}
+		levels = append(levels, lp)
+	}
+	return levels, rows.Err()
+}
+
+func (r *telegramMiniAppRepo) loadRewardHistory(q miniAppQueryer, userID int64) ([]GameRewardHistoryEntry, error) {
+	rows, err := q.Query(`
+		SELECT level, stars, points_awarded, COALESCE(created_at::text, '')
+		FROM game_reward_history
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT 50
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	history := make([]GameRewardHistoryEntry, 0)
+	for rows.Next() {
+		var e GameRewardHistoryEntry
+		if err := rows.Scan(&e.Level, &e.Stars, &e.PointsAwarded, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		history = append(history, e)
+	}
+	return history, rows.Err()
+}
+
+func (r *telegramMiniAppRepo) SaveGameProgress(userID int64, input GameProgressUpdate) (GameProgress, error) {
+	// Clamp current level to the valid range if provided.
+	if input.CurrentLevel != nil {
+		lvl := *input.CurrentLevel
+		if lvl < 1 {
+			lvl = 1
+		}
+		if lvl > gameMaxLevel {
+			lvl = gameMaxLevel
+		}
+		input.CurrentLevel = &lvl
+	}
+	const query = `
+		UPDATE users SET
+			game_points        = COALESCE($2, game_points),
+			game_high_score    = GREATEST(COALESCE($3, game_high_score), COALESCE(game_high_score, 0)),
+			game_current_level = GREATEST(COALESCE($4, game_current_level), COALESCE(game_current_level, 1)),
+			game_last_played_at = now(),
+			updated_at         = now()
+		WHERE id = $1
+	`
+	_, err := r.telegramDB.Exec(query, userID, input.GamePoints, input.GameHighScore, input.CurrentLevel)
+	if err != nil {
+		return GameProgress{}, err
+	}
+	return r.GetGameProgress(userID)
+}
+
+// ClaimLevelReward is server-authoritative: the client sends only {level, score}
+// and the server derives the star rating, computes the *incremental* Game-Point
+// reward over the user's previous best for that level, caps it, and records the
+// result. Replaying a level never re-awards points already earned; improving the
+// star rating awards only the difference.
+func (r *telegramMiniAppRepo) ClaimLevelReward(userID int64, level, score int) (LevelRewardResult, error) {
+	target, ok := gameTargetForLevel(level)
+	if !ok {
+		return LevelRewardResult{}, ErrGameLevelInvalid
+	}
+	if score < 0 {
+		return LevelRewardResult{}, ErrGameScoreInvalid
+	}
+
+	newStars := gameStarsForScore(score, target)
+
+	tx, err := r.telegramDB.Begin()
+	if err != nil {
+		return LevelRewardResult{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Lock the per-level row (or note its absence) to serialise concurrent claims.
+	var prevStars, prevScore int
+	var hasRow bool
+	err = tx.QueryRow(`
+		SELECT best_stars, best_score FROM game_level_progress
+		WHERE user_id = $1 AND level = $2 FOR UPDATE
+	`, userID, level).Scan(&prevStars, &prevScore)
+	switch {
+	case err == nil:
+		hasRow = true
+	case errors.Is(err, sql.ErrNoRows):
+		hasRow = false
+	default:
+		return LevelRewardResult{}, err
+	}
+
+	bestStars := prevStars
+	if newStars > bestStars {
+		bestStars = newStars
+	}
+	bestScore := prevScore
+	if score > bestScore {
+		bestScore = score
+	}
+
+	// Incremental reward: only the difference between the new and previously
+	// earned star tiers, and never negative.
+	awarded := gameRewardForStars(newStars) - gameRewardForStars(prevStars)
+	if awarded < 0 {
+		awarded = 0
+	}
+
+	// Upsert the per-level best.
+	if hasRow {
+		if _, err := tx.Exec(`
+			UPDATE game_level_progress
+			SET best_stars = $3, best_score = $4, completed = true, updated_at = now()
+			WHERE user_id = $1 AND level = $2
+		`, userID, level, bestStars, bestScore); err != nil {
+			return LevelRewardResult{}, err
+		}
+	} else {
+		if _, err := tx.Exec(`
+			INSERT INTO game_level_progress (user_id, level, best_stars, best_score, completed, updated_at)
+			VALUES ($1, $2, $3, $4, true, now())
+		`, userID, level, bestStars, bestScore); err != nil {
+			return LevelRewardResult{}, err
+		}
+	}
+
+	// Credit the incremental reward + advance current level + record history.
+	if awarded > 0 {
+		if _, err := tx.Exec(`
+			UPDATE users
+			SET game_points = COALESCE(game_points, 0) + $2,
+				game_last_played_at = now(),
+				updated_at = now()
+			WHERE id = $1
+		`, userID, awarded); err != nil {
+			return LevelRewardResult{}, err
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO game_reward_history (user_id, level, stars, points_awarded)
+			VALUES ($1, $2, $3, $4)
+		`, userID, level, newStars, awarded); err != nil {
+			return LevelRewardResult{}, err
+		}
+	}
+
+	// Advance the furthest-unlocked level when the player wins (stars >= 1).
+	if newStars >= 1 && level < gameMaxLevel {
+		if _, err := tx.Exec(`
+			UPDATE users
+			SET game_current_level = GREATEST(COALESCE(game_current_level, 1), $2),
+				updated_at = now()
+			WHERE id = $1
+		`, userID, level+1); err != nil {
+			return LevelRewardResult{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return LevelRewardResult{}, err
+	}
+
+	progress, err := r.GetGameProgress(userID)
+	if err != nil {
+		return LevelRewardResult{}, err
+	}
+	return LevelRewardResult{
+		Stars:     newStars,
+		BestStars: bestStars,
+		Awarded:   awarded,
+		Progress:  progress,
+	}, nil
+}
+
+func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEntry, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := r.telegramDB.Query(`
+		SELECT
+			id,
+			BTRIM(COALESCE(name, '') || ' ' || COALESCE(surname, '')),
+			COALESCE(username, ''),
+			COALESCE(game_high_score, 0)
+		FROM users
+		WHERE COALESCE(game_high_score, 0) > 0
+		ORDER BY game_high_score DESC, id ASC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]GameLeaderboardEntry, 0, limit)
+	for rows.Next() {
+		var e GameLeaderboardEntry
+		var fullName, username string
+		if err := rows.Scan(&e.UserID, &fullName, &username, &e.HighScore); err != nil {
+			return nil, err
+		}
+		name := strings.TrimSpace(fullName)
+		if name == "" {
+			name = strings.TrimSpace(username)
+		}
+		if name == "" {
+			name = "Player"
+		}
+		e.Name = name
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+const gameConvertPointsPerReal = 200
+const gameConvertDailyLimit    = 1000
+
+func (r *telegramMiniAppRepo) ConvertGamePoints(userID int64, gamePointsToSpend int) (GameProgress, error) {
+	if gamePointsToSpend <= 0 || gamePointsToSpend%gameConvertPointsPerReal != 0 {
+		return GameProgress{}, ErrGameConvertInvalid
+	}
+	realPointsGained := gamePointsToSpend / gameConvertPointsPerReal
+
+	tx, err := r.telegramDB.Begin()
+	if err != nil {
+		return GameProgress{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Lock and read current state.
+	const lockQuery = `
+		SELECT
+			COALESCE(game_points, 0),
+			COALESCE(game_convert_today, 0),
+			COALESCE(game_convert_date::text, '')
+		FROM users WHERE id = $1 FOR UPDATE
+	`
+	var currentPoints, convertedToday int
+	var convertDate string
+	if err := tx.QueryRow(lockQuery, userID).Scan(&currentPoints, &convertedToday, &convertDate); err != nil {
+		return GameProgress{}, err
+	}
+
+	// Reset daily counter if the stored date is not today.
+	today := time.Now().UTC().Format("2006-01-02")
+	if convertDate != today {
+		convertedToday = 0
+	}
+
+	if convertedToday+gamePointsToSpend > gameConvertDailyLimit {
+		return GameProgress{}, ErrGameConvertDailyLimit
+	}
+	if currentPoints < gamePointsToSpend {
+		return GameProgress{}, ErrGameConvertNotEnough
+	}
+
+	const updateQuery = `
+		UPDATE users SET
+			game_points         = game_points - $2,
+			points              = COALESCE(points, 0) + $3,
+			game_convert_today  = $4,
+			game_convert_date   = $5::date,
+			updated_at          = now()
+		WHERE id = $1
+	`
+	_, err = tx.Exec(updateQuery, userID, gamePointsToSpend, realPointsGained, convertedToday+gamePointsToSpend, today)
+	if err != nil {
+		return GameProgress{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return GameProgress{}, err
+	}
+	return r.GetGameProgress(userID)
 }

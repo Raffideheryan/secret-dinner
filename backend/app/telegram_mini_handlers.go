@@ -330,3 +330,129 @@ func jsonStringLiteral(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
+
+// ── Game progress handlers ────────────────────────────────────────────────────
+
+func (l *landingApp) telegramMiniGameProgressGetHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user := currentTelegramMiniUser(c)
+		gp, err := l.connections.TelegramMini.GetGameProgress(user.ID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load game progress"})
+		}
+		return c.JSON(fiber.Map{"progress": gp})
+	}
+}
+
+type gameProgressSaveRequest struct {
+	GamePoints    *int `json:"gamePoints"`
+	GameHighScore *int `json:"gameHighScore"`
+	CurrentLevel  *int `json:"currentLevel"`
+}
+
+func (l *landingApp) telegramMiniGameProgressSaveHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user := currentTelegramMiniUser(c)
+		var req gameProgressSaveRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		if req.GamePoints != nil && *req.GamePoints < 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "gamePoints must be non-negative"})
+		}
+		if req.GameHighScore != nil && *req.GameHighScore < 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "gameHighScore must be non-negative"})
+		}
+		if req.CurrentLevel != nil && *req.CurrentLevel < 1 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "currentLevel must be at least 1"})
+		}
+		gp, err := l.connections.TelegramMini.SaveGameProgress(user.ID, db.GameProgressUpdate{
+			GamePoints:    req.GamePoints,
+			GameHighScore: req.GameHighScore,
+			CurrentLevel:  req.CurrentLevel,
+		})
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to save game progress"})
+		}
+		return c.JSON(fiber.Map{"progress": gp})
+	}
+}
+
+type gameRewardClaimRequest struct {
+	Level int `json:"level"`
+	Score int `json:"score"`
+}
+
+// Server-authoritative reward claim: the client sends only level + score; the
+// backend computes the star rating and incremental reward. Frontend score is
+// never trusted for the reward amount, and rewards are capped per level.
+func (l *landingApp) telegramMiniGameRewardClaimHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user := currentTelegramMiniUser(c)
+		var req gameRewardClaimRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		result, err := l.connections.TelegramMini.ClaimLevelReward(user.ID, req.Level, req.Score)
+		if err != nil {
+			switch {
+			case errors.Is(err, db.ErrGameLevelInvalid):
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid level"})
+			case errors.Is(err, db.ErrGameScoreInvalid):
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid score"})
+			default:
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to claim reward"})
+			}
+		}
+		return c.JSON(fiber.Map{
+			"stars":     result.Stars,
+			"bestStars": result.BestStars,
+			"awarded":   result.Awarded,
+			"progress":  result.Progress,
+		})
+	}
+}
+
+func (l *landingApp) telegramMiniGameLeaderboardHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		limit := 20
+		if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+				limit = parsed
+			}
+		}
+		entries, err := l.connections.TelegramMini.GetGameLeaderboard(limit)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load leaderboard"})
+		}
+		return c.JSON(fiber.Map{"leaderboard": entries})
+	}
+}
+
+type gameConvertRequest struct {
+	GamePoints int `json:"gamePoints"`
+}
+
+func (l *landingApp) telegramMiniGameConvertHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user := currentTelegramMiniUser(c)
+		var req gameConvertRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+		}
+		gp, err := l.connections.TelegramMini.ConvertGamePoints(user.ID, req.GamePoints)
+		if err != nil {
+			switch {
+			case errors.Is(err, db.ErrGameConvertInvalid):
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "amount must be a positive multiple of 200"})
+			case errors.Is(err, db.ErrGameConvertDailyLimit):
+				return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "daily conversion limit exceeded"})
+			case errors.Is(err, db.ErrGameConvertNotEnough):
+				return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "not enough game points"})
+			default:
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "conversion failed"})
+			}
+		}
+		return c.JSON(fiber.Map{"progress": gp})
+	}
+}

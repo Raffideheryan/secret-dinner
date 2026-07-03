@@ -72,6 +72,13 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 	telegramMini.Get("/custom-menu/items", l.telegramMiniCustomMenuItemsHandler())
 	telegramMini.Post("/applications", telegramMiniApplicationLimiter.middleware(), l.telegramMiniCreateApplicationHandler())
 	telegramMini.Post("/support", l.telegramMiniSupportHandler())
+	telegramMini.Get("/game/progress", l.telegramMiniGameProgressGetHandler())
+	telegramMini.Post("/game/progress", l.telegramMiniGameProgressSaveHandler())
+	telegramMini.Post("/game/progress/save", l.telegramMiniGameProgressSaveHandler())
+	telegramMini.Post("/game/convert", l.telegramMiniGameConvertHandler())
+	telegramMini.Post("/game/points/convert", l.telegramMiniGameConvertHandler())
+	telegramMini.Post("/game/reward/claim", l.telegramMiniGameRewardClaimHandler())
+	telegramMini.Get("/game/leaderboard", l.telegramMiniGameLeaderboardHandler())
 
 	admin := api.Group("/admin")
 	admin.Post("/login", limiter.middleware(), l.loginHandler(limiter))
