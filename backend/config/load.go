@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -152,7 +155,28 @@ func randomHex(n int) (string, error) {
 }
 
 func RunMigrations(cfg DBConfig) error {
-	db, err := sql.Open("postgres", cfg.URL)
+	if err := runGooseMigrations(cfg.URL, cfg.MigrationsPath, "landing", nil); err != nil {
+		return err
+	}
+
+	telegramURL := strings.TrimSpace(cfg.TelegramURL)
+	if telegramURL == "" {
+		return nil
+	}
+
+	// Audited July 3, 2026: the Telegram DB only needs the game schema subset.
+	// The rest of the files in internal/db/migrations target landing/admin tables
+	// and should not be applied to the Telegram database.
+	telegramGameMigrations := map[string]struct{}{
+		"20260629120000_game_progress.sql":       {},
+		"20260702120000_game_level_progress.sql": {},
+	}
+
+	return runGooseMigrations(telegramURL, cfg.MigrationsPath, "telegram", telegramGameMigrations)
+}
+
+func runGooseMigrations(databaseURL, migrationsPath, label string, allowed map[string]struct{}) error {
+	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		return err
 	}
@@ -162,11 +186,87 @@ func RunMigrations(cfg DBConfig) error {
 		return err
 	}
 
-	if err := goose.Up(db, cfg.MigrationsPath); err != nil {
-		log.WithError(err).Error("Error while running migrations.")
+	pathToRun := migrationsPath
+	cleanup := func() error { return nil }
+	if allowed != nil {
+		pathToRun, cleanup, err = buildSubsetMigrationDir(migrationsPath, allowed)
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if err := cleanup(); err != nil {
+			log.WithError(err).Warn("Failed to clean temporary migration directory")
+		}
+	}()
+
+	log.WithFields(logrus.Fields{
+		"target":           label,
+		"database_url_set": strings.TrimSpace(databaseURL) != "",
+		"migrations_path":  pathToRun,
+	}).Info("Running migrations...")
+
+	if err := goose.Up(db, pathToRun); err != nil {
+		log.WithError(err).WithField("target", label).Error("Error while running migrations.")
 		return err
 	}
 
-	log.Info("Migrations applied success...")
+	log.WithField("target", label).Info("Migrations applied success...")
 	return nil
+}
+
+func buildSubsetMigrationDir(sourceDir string, allowed map[string]struct{}) (string, func() error, error) {
+	entries, err := os.ReadDir(sourceDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	tempDir, err := os.MkdirTemp("", "secret-dinner-goose-*")
+	if err != nil {
+		return "", nil, err
+	}
+
+	cleanup := func() error {
+		return os.RemoveAll(tempDir)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if _, ok := allowed[name]; !ok {
+			continue
+		}
+
+		src := filepath.Join(sourceDir, name)
+		dst := filepath.Join(tempDir, name)
+		if err := copyFile(src, dst); err != nil {
+			_ = cleanup()
+			return "", nil, fmt.Errorf("copy migration %s: %w", name, err)
+		}
+	}
+
+	return tempDir, cleanup, nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = out.Close()
+	}()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }
