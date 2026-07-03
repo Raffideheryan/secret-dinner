@@ -2004,6 +2004,55 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 		limit = 20
 	}
 	fmt.Printf("[telegram-mini][db][leaderboard] query start limit=%d\n", limit)
+	hasGameLevelProgress, err := r.hasPublicTable("game_level_progress")
+	if err != nil {
+		fmt.Printf("[telegram-mini][db][leaderboard] schema check table error err=%v\n", err)
+		return nil, err
+	}
+	hasGameHighScore, err := r.hasPublicColumn("users", "game_high_score")
+	if err != nil {
+		fmt.Printf("[telegram-mini][db][leaderboard] schema check column error err=%v\n", err)
+		return nil, err
+	}
+	fmt.Printf("[telegram-mini][db][leaderboard] schema game_level_progress=%t game_high_score=%t\n", hasGameLevelProgress, hasGameHighScore)
+
+	switch {
+	case hasGameLevelProgress && hasGameHighScore:
+		return r.getGameLeaderboardFromAggregate(limit)
+	case hasGameHighScore:
+		fmt.Printf("[telegram-mini][db][leaderboard] using users.game_high_score fallback\n")
+		return r.getGameLeaderboardFromUsers(limit)
+	default:
+		fmt.Printf("[telegram-mini][db][leaderboard] no leaderboard schema available yet; returning empty set\n")
+		return []GameLeaderboardEntry{}, nil
+	}
+}
+
+func (r *telegramMiniAppRepo) hasPublicTable(tableName string) (bool, error) {
+	var exists bool
+	err := r.telegramDB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_name = $1
+		)
+	`, tableName).Scan(&exists)
+	return exists, err
+}
+
+func (r *telegramMiniAppRepo) hasPublicColumn(tableName, columnName string) (bool, error) {
+	var exists bool
+	err := r.telegramDB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+		)
+	`, tableName, columnName).Scan(&exists)
+	return exists, err
+}
+
+func (r *telegramMiniAppRepo) getGameLeaderboardFromAggregate(limit int) ([]GameLeaderboardEntry, error) {
 	rows, err := r.telegramDB.Query(`
 		SELECT
 			u.id,
@@ -2019,10 +2068,6 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 	`, limit)
 	if err != nil {
 		fmt.Printf("[telegram-mini][db][leaderboard] query error limit=%d err=%v\n", limit, err)
-		if strings.Contains(err.Error(), `relation "game_level_progress" does not exist`) {
-			fmt.Printf("[telegram-mini][db][leaderboard] falling back to users.game_high_score only\n")
-			return r.getGameLeaderboardFromUsers(limit)
-		}
 		return nil, err
 	}
 	defer rows.Close()
