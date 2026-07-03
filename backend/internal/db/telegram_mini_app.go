@@ -2019,6 +2019,10 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 	`, limit)
 	if err != nil {
 		fmt.Printf("[telegram-mini][db][leaderboard] query error limit=%d err=%v\n", limit, err)
+		if strings.Contains(err.Error(), `relation "game_level_progress" does not exist`) {
+			fmt.Printf("[telegram-mini][db][leaderboard] falling back to users.game_high_score only\n")
+			return r.getGameLeaderboardFromUsers(limit)
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -2047,6 +2051,48 @@ func (r *telegramMiniAppRepo) GetGameLeaderboard(limit int) ([]GameLeaderboardEn
 		return nil, err
 	}
 	fmt.Printf("[telegram-mini][db][leaderboard] query done limit=%d entries=%d\n", limit, len(entries))
+	return entries, nil
+}
+
+func (r *telegramMiniAppRepo) getGameLeaderboardFromUsers(limit int) ([]GameLeaderboardEntry, error) {
+	rows, err := r.telegramDB.Query(`
+		SELECT
+			id,
+			BTRIM(COALESCE(name, '') || ' ' || COALESCE(surname, '')),
+			COALESCE(username, ''),
+			COALESCE(game_high_score, 0)
+		FROM users
+		WHERE COALESCE(game_high_score, 0) > 0
+		ORDER BY game_high_score DESC, id ASC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]GameLeaderboardEntry, 0, limit)
+	for rows.Next() {
+		var e GameLeaderboardEntry
+		var fullName, username string
+		if err := rows.Scan(&e.UserID, &fullName, &username, &e.HighScore); err != nil {
+			return nil, err
+		}
+		name := strings.TrimSpace(fullName)
+		if name == "" {
+			name = strings.TrimSpace(username)
+		}
+		if name == "" {
+			name = "Player"
+		}
+		e.Name = name
+		fmt.Printf("[telegram-mini][db][leaderboard] fallback row user_id=%d name=%q high_score=%d raw_full_name=%q raw_username=%q\n", e.UserID, e.Name, e.HighScore, fullName, username)
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	fmt.Printf("[telegram-mini][db][leaderboard] fallback done limit=%d entries=%d\n", limit, len(entries))
 	return entries, nil
 }
 
