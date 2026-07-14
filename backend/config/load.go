@@ -168,8 +168,10 @@ func RunMigrations(cfg DBConfig) error {
 	// The rest of the files in internal/db/migrations target landing/admin tables
 	// and should not be applied to the Telegram database.
 	telegramGameMigrations := map[string]struct{}{
-		"20260629120000_game_progress.sql":       {},
-		"20260702120000_game_level_progress.sql": {},
+		"20260629120000_game_progress.sql":                         {},
+		"20260702120000_game_level_progress.sql":                   {},
+		"20260710130000_telegram_booking_status_notifications.sql": {},
+		"20260710151000_telegram_dinners_sync_version.sql":         {},
 	}
 
 	return runGooseMigrations(telegramURL, cfg.MigrationsPath, "telegram", telegramGameMigrations)

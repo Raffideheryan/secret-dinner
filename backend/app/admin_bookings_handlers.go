@@ -11,6 +11,7 @@ import (
 	"secret-dinner/internal/db"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/sirupsen/logrus"
 )
 
 var allowedTelegramApplicationStatuses = map[string]struct{}{
@@ -142,23 +143,6 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 			})
 		}
 
-		// Bot-maintained denormalized counters (users.total_payments,
-		// users.attendance_count, users.friends_invited, users.points) are NOT
-		// updated here. They are written exclusively by the Telegram bot
-		// (secret-dinner-bot) during payment confirmation and post-dinner
-		// attendance marking. Admin panel status overrides intentionally do not
-		// touch these fields to avoid double-counting or misrepresenting the
-		// bot's source of truth.
-		//
-		// NOTIFICATIONS NOTE (post-launch):
-		// The following status transitions should trigger user-facing Telegram
-		// notifications but currently do not when set via the admin panel:
-		//   - paid      → bot currently does not notify on admin-set paid
-		//   - cancelled → user is not informed when admin cancels their booking
-		//   - no_show   → no notification sent; consider adding a follow-up message
-		// These should be implemented as webhook calls to the bot's admin-notify
-		// endpoint after UpdateTelegramApplication succeeds, passing the new
-		// status and the user's Telegram ID.
 		before, after, err := l.connections.AdminBookings.UpdateTelegramApplication(packageInfoID, status, body.Note, expectedUpdatedAt)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -181,6 +165,24 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 				"error": "failed to update telegram application",
 			})
 		}
+		if before.DinnerID > 0 && after.DinnerID > 0 && before.Status != after.Status && l.connections.TelegramMini != nil {
+			if err := l.connections.TelegramMini.SyncDinnerRegistrations(after.DinnerID); err != nil {
+				log.WithError(err).WithField("dinner_id", after.DinnerID).Error("failed to resync dinner registrations after admin telegram application update")
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "application updated but dinner registration sync failed",
+				})
+			}
+		}
+
+		var notificationWarning string
+		if err := l.connections.AdminBookings.DispatchTelegramApplicationNotifications(packageInfoID, l.deliverTelegramBookingNotification); err != nil {
+			notificationWarning = "application updated but Telegram notification delivery is pending retry"
+			log.WithError(err).WithFields(logrus.Fields{
+				"package_info_id": packageInfoID,
+				"user_id":         after.UserID,
+				"status":          after.Status,
+			}).Error("failed to deliver telegram booking notification after admin update")
+		}
 
 		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
 			ActionType:    "telegram_application_updated",
@@ -191,10 +193,14 @@ func (l *landingApp) updateAdminTelegramApplicationHandler() fiber.Handler {
 			Reason:        reason,
 		})
 
-		return c.JSON(fiber.Map{
+		response := fiber.Map{
 			"ok":          true,
 			"application": after,
-		})
+		}
+		if notificationWarning != "" {
+			response["warning"] = notificationWarning
+		}
+		return c.JSON(response)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"secret-dinner/config"
 	"secret-dinner/internal/db"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
@@ -50,10 +51,14 @@ func NewLandingApp(ctx context.Context, cfg config.Config) (LandingApplication, 
 }
 
 func (l *landingApp) Run() error {
+	l.startDinnerSyncWorker()
 	return l.server.Listen(l.cfg.HTTP.ListenAddr)
 }
 
 func (l *landingApp) Shutdown() error {
+	if l.cancel != nil {
+		l.cancel()
+	}
 	if l.server != nil {
 		if err := l.server.Shutdown(); err != nil {
 			return err
@@ -127,6 +132,37 @@ func (l *landingApp) Shutdown() error {
 	}
 	log.Info("Connections closed.")
 	return nil
+}
+
+func (l *landingApp) startDinnerSyncWorker() {
+	if l.connections.Dinners == nil || l.ctx == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		runOnce := func() {
+			processed, err := l.connections.Dinners.ProcessPendingDinnerSyncJobs(25)
+			if err != nil {
+				log.WithError(err).Warn("Dinner sync worker iteration failed")
+				return
+			}
+			if processed > 0 {
+				log.WithField("processed_jobs", processed).Info("Dinner sync worker processed pending jobs")
+			}
+		}
+
+		runOnce()
+		for {
+			select {
+			case <-l.ctx.Done():
+				return
+			case <-ticker.C:
+				runOnce()
+			}
+		}
+	}()
 }
 
 func initDB(cfg config.Config) (db.Connections, error) {

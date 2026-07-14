@@ -46,6 +46,7 @@ type TelegramMiniAppDB interface {
 	ListApplicationsByUser(userID int64) ([]TelegramMiniAppApplication, error)
 	CreateApplication(input TelegramMiniAppApplicationInput) (TelegramMiniAppApplication, error)
 	CancelApplication(userID int64, packageInfoID int64) (TelegramMiniAppApplication, error)
+	SyncDinnerRegistrations(dinnerID int64) error
 	GetGameProgress(userID int64) (GameProgress, error)
 	SaveGameProgress(userID int64, input GameProgressUpdate) (GameProgress, error)
 	ConvertGamePoints(userID int64, gamePointsToSpend int) (GameProgress, error)
@@ -259,6 +260,10 @@ func NewTelegramMiniAppDB(telegramDB, landingDB *sql.DB) TelegramMiniAppDB {
 
 func (r *telegramMiniAppRepo) Close() error {
 	return nil
+}
+
+func (r *telegramMiniAppRepo) SyncDinnerRegistrations(dinnerID int64) error {
+	return r.syncDinnerRegistrations(dinnerID)
 }
 
 func (r *telegramMiniAppRepo) EnsureUser(identity TelegramMiniIdentity) error {
@@ -1308,14 +1313,21 @@ func (r *telegramMiniAppRepo) CancelApplication(userID int64, packageInfoID int6
 		return TelegramMiniAppApplication{}, ErrMiniAppApplicationUnavailable
 	}
 
-	if err := r.syncLandingDinnerRegistrationsTx(peerTx, current.DinnerID); err != nil {
+	if err := r.syncDinnerRegistrationsTx(tx, current.DinnerID); err != nil {
 		return TelegramMiniAppApplication{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return TelegramMiniAppApplication{}, err
 	}
 	if peerTx != nil {
+		if err := r.syncLandingDinnerRegistrationsTx(peerTx, current.DinnerID); err != nil {
+			return TelegramMiniAppApplication{}, err
+		}
 		if err := peerTx.Commit(); err != nil {
+			return TelegramMiniAppApplication{}, err
+		}
+	} else {
+		if err := r.syncLandingDinnerRegistrations(current.DinnerID); err != nil {
 			return TelegramMiniAppApplication{}, err
 		}
 	}

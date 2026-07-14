@@ -226,11 +226,11 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 	defer tx.Rollback()
 
 	var currentUpdatedAt time.Time
-	var currentStatus string
+	var userID int64
 	if err := tx.QueryRow(
-		`SELECT COALESCE(status, ''), updated_at FROM package_info WHERE id = $1 FOR UPDATE`,
+		`SELECT user_id, updated_at FROM package_info WHERE id = $1 FOR UPDATE`,
 		packageInfoID,
-	).Scan(&currentStatus, &currentUpdatedAt); err != nil {
+	).Scan(&userID, &currentUpdatedAt); err != nil {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
 
@@ -251,6 +251,21 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 	if err := validateTelegramApplicationStatusTransition(before.Status, status); err != nil {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
+	normalizedStatus := strings.ToLower(strings.TrimSpace(status))
+	normalizedNote := strings.TrimSpace(note)
+	statusChanged := !strings.EqualFold(strings.TrimSpace(before.Status), normalizedStatus)
+	noteChanged := strings.TrimSpace(before.AdminNote) != normalizedNote
+	if !statusChanged && !noteChanged {
+		if err := tx.Commit(); err != nil {
+			return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+		}
+		return before, before, nil
+	}
+	if statusChanged {
+		if err := lockDinnerSeatCapacityTx(tx, before.DinnerID); err != nil {
+			return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+		}
+	}
 
 	const query = `
 		UPDATE package_info
@@ -259,7 +274,7 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 			updated_at = now()
 		WHERE id = $1
 	`
-	result, err := tx.Exec(query, packageInfoID, status, note)
+	result, err := tx.Exec(query, packageInfoID, normalizedStatus, normalizedNote)
 	if err != nil {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
@@ -270,6 +285,14 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 	if rowsAffected == 0 {
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, sql.ErrNoRows
 	}
+	if statusChanged {
+		if err := syncTelegramUserPaymentSummaryTx(tx, userID); err != nil {
+			return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+		}
+		if err := enqueueTelegramBookingStatusNotificationTx(tx, packageInfoID, before.UserID, before.PublicCode, normalizedStatus, before.Language); err != nil {
+			return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
+		}
+	}
 
 	after, err := r.getTelegramApplicationWithQuerier(tx, packageInfoID)
 	if err != nil {
@@ -279,6 +302,34 @@ func (r *adminBookingsRepo) UpdateTelegramApplication(packageInfoID int64, statu
 		return TelegramApplicationRecord{}, TelegramApplicationRecord{}, err
 	}
 	return before, after, nil
+}
+
+func syncTelegramUserPaymentSummaryTx(tx *sql.Tx, userID int64) error {
+	if tx == nil || userID <= 0 {
+		return nil
+	}
+	result, err := tx.Exec(`
+		UPDATE users u
+		SET total_payments = COALESCE((
+			SELECT SUM(price)::numeric(12, 2)
+			FROM package_info
+			WHERE user_id = $1
+			  AND status IN ('paid', 'no_show')
+		), 0),
+			updated_at = now()
+		WHERE id = $1
+	`, userID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func validateTelegramApplicationStatusTransition(currentStatus, nextStatus string) error {
@@ -408,8 +459,8 @@ func deriveApplicationPackageMeta(menu string) (string, string, int) {
 	if strings.Contains(normalized, "guest_") {
 		parts := strings.Split(normalized, ",")
 		guestCount := 0
-		bestCode := "silver"
-		bestRank := 1
+		bestCode := "custom"
+		bestRank := 0
 		for _, part := range parts {
 			entry := strings.TrimSpace(part)
 			if entry == "" {
@@ -424,6 +475,9 @@ func deriveApplicationPackageMeta(menu string) (string, string, int) {
 			case strings.Contains(entry, ":silver") && bestRank < 1:
 				bestCode, bestRank = "silver", 1
 			}
+		}
+		if guestCount == 0 {
+			return "open", "Open", 0
 		}
 		return bestCode, strings.ToUpper(bestCode[:1]) + bestCode[1:], guestCount
 	}

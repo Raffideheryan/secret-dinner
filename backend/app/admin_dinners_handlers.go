@@ -109,10 +109,6 @@ func (l *landingApp) updateAdminDinnerHandler() fiber.Handler {
 			})
 		}
 
-		if err := l.connections.Dinners.SyncDinnerRegistrations(id); err != nil {
-			log.WithError(err).Warn("failed to sync dinner registrations after update")
-		}
-
 		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
 			ActionType: "dinner_updated",
 			EntityType: "dinner",
@@ -168,7 +164,8 @@ func (l *landingApp) syncAdminDinnersHandler() fiber.Handler {
 			})
 		}
 
-		if err := l.connections.Dinners.SyncAllDinnerRegistrations(); err != nil {
+		report, err := l.connections.Dinners.ReconcileDinnerMirrors(false)
+		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "failed to sync dinners",
 			})
@@ -177,8 +174,12 @@ func (l *landingApp) syncAdminDinnersHandler() fiber.Handler {
 			ActionType: "dinners_synced",
 			EntityType: "dinner",
 			EntityID:   "all",
+			NewValue:   mustMarshalAuditJSON(report),
 		})
-		return c.JSON(fiber.Map{"ok": true})
+		return c.JSON(fiber.Map{
+			"ok":     true,
+			"report": report,
+		})
 	}
 }
 

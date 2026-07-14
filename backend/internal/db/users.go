@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -84,17 +85,21 @@ func (u *usersRepo) UpdateSelection(userID string, dinnerID int64, chosenPackage
 		return ErrDinnerSoldOut
 	}
 
-	if chosenPackage == "silver" || chosenPackage == "gold" || chosenPackage == "vip" {
-		telegramPackageCounts, err := u.countTelegramPackageSeats(dinnerID)
-		if err != nil {
-			return err
-		}
-		landingPackageCounts, err := u.countLandingPackageSeats(tx, dinnerID, userID)
-		if err != nil {
-			return err
-		}
-		remaining := remainingLandingPackageSeats(dinner, chosenPackage, telegramPackageCounts, landingPackageCounts)
-		if remaining < current.GuestCount {
+	selectedPackages, err := normalizeLandingGuestPackages(chosenPackage, current.GuestCount)
+	if err != nil {
+		return err
+	}
+	telegramPackageCounts, err := u.countTelegramPackageSeats(dinnerID)
+	if err != nil {
+		return err
+	}
+	landingPackageCounts, err := u.countLandingPackageSeats(tx, dinnerID, userID)
+	if err != nil {
+		return err
+	}
+	for tier, count := range countLandingPackages(selectedPackages) {
+		remaining := remainingLandingPackageSeats(dinner, tier, telegramPackageCounts, landingPackageCounts)
+		if remaining < count {
 			return ErrDinnerSoldOut
 		}
 	}
@@ -268,6 +273,8 @@ func (u *usersRepo) countLandingPackageSeats(tx *sql.Tx, dinnerID int64, exclude
 		switch pkg {
 		case "silver", "gold", "vip":
 			counts[pkg] += guests
+		default:
+			addLandingPackageCountsFromTelegramMenu(counts, pkg)
 		}
 	}
 	return counts, rows.Err()
@@ -369,6 +376,64 @@ func addLandingPackageCountsFromTelegramMenu(counts map[string]int, menu string)
 			counts["vip"]++
 		}
 	}
+}
+
+func normalizeLandingGuestPackages(chosenPackage string, guestCount int) ([]string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(chosenPackage))
+	if guestCount <= 0 {
+		return nil, errors.New("guest count must be greater than 0")
+	}
+	if normalized == "" {
+		return nil, errors.New("chosen package is required")
+	}
+
+	switch normalized {
+	case "silver", "gold", "vip", "custom":
+		packages := make([]string, guestCount)
+		for index := range packages {
+			packages[index] = normalized
+		}
+		return packages, nil
+	}
+
+	parts := strings.Split(normalized, ",")
+	packages := make([]string, 0, len(parts))
+	for _, part := range parts {
+		entry := strings.TrimSpace(part)
+		if entry == "" {
+			continue
+		}
+		tokens := strings.SplitN(entry, ":", 2)
+		if len(tokens) != 2 || !strings.HasPrefix(tokens[0], "guest_") {
+			return nil, fmt.Errorf("invalid guest package format: %s", entry)
+		}
+		pkg := strings.TrimSpace(tokens[1])
+		switch pkg {
+		case "silver", "gold", "vip", "custom":
+			packages = append(packages, pkg)
+		default:
+			return nil, fmt.Errorf("invalid guest package value: %s", pkg)
+		}
+	}
+	if len(packages) != guestCount {
+		return nil, fmt.Errorf("expected %d guest packages, got %d", guestCount, len(packages))
+	}
+	return packages, nil
+}
+
+func countLandingPackages(packages []string) map[string]int {
+	counts := map[string]int{
+		"silver": 0,
+		"gold":   0,
+		"vip":    0,
+	}
+	for _, pkg := range packages {
+		switch pkg {
+		case "silver", "gold", "vip":
+			counts[pkg]++
+		}
+	}
+	return counts
 }
 
 func (u *usersRepo) syncLandingDinnerRegistrationsTx(tx *sql.Tx, dinnerID int64) error {

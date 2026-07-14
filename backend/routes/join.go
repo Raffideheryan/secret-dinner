@@ -3,6 +3,7 @@ package routes
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"secret-dinner/internal/db"
 	"strings"
 
@@ -81,26 +82,26 @@ func HandleJoin(usersDB db.UsersDB, policy joinPolicy) fiber.Handler {
 func HandleJoinSelection(usersDB db.UsersDB, dinnersDB db.DinnersDB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body struct {
-			UserID        string `json:"userId"`
-			DinnerID      int64  `json:"dinnerId"`
-			ChosenPackage string `json:"chosenPackage"`
+			UserID        string   `json:"userId"`
+			DinnerID      int64    `json:"dinnerId"`
+			ChosenPackage string   `json:"chosenPackage"`
+			GuestPackages []string `json:"guestPackages"`
 		}
 
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid body"})
 		}
 
-		switch body.ChosenPackage {
-		case "silver", "gold", "vip", "custom":
-		default:
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid chosenPackage"})
-		}
-
 		if body.UserID == "" || body.DinnerID <= 0 {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "userId and dinnerId are required"})
 		}
 
-		if err := usersDB.UpdateSelection(body.UserID, body.DinnerID, body.ChosenPackage); err != nil {
+		storedPackage, err := normalizeLandingSelectionPackage(body.ChosenPackage, body.GuestPackages)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": err.Error()})
+		}
+
+		if err := usersDB.UpdateSelection(body.UserID, body.DinnerID, storedPackage); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 			}
@@ -119,4 +120,38 @@ func HandleJoinSelection(usersDB db.UsersDB, dinnersDB db.DinnersDB) fiber.Handl
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"success": true})
 	}
+}
+
+func normalizeLandingSelectionPackage(chosenPackage string, guestPackages []string) (string, error) {
+	valid := map[string]struct{}{
+		"silver": {},
+		"gold":   {},
+		"vip":    {},
+		"custom": {},
+	}
+
+	normalizedGuests := make([]string, 0, len(guestPackages))
+	for _, raw := range guestPackages {
+		pkg := strings.ToLower(strings.TrimSpace(raw))
+		if pkg == "" {
+			continue
+		}
+		if _, ok := valid[pkg]; !ok {
+			return "", errors.New("Invalid guestPackages")
+		}
+		normalizedGuests = append(normalizedGuests, pkg)
+	}
+	if len(normalizedGuests) > 0 {
+		parts := make([]string, 0, len(normalizedGuests))
+		for index, pkg := range normalizedGuests {
+			parts = append(parts, fmt.Sprintf("guest_%d:%s", index+1, pkg))
+		}
+		return strings.Join(parts, ","), nil
+	}
+
+	normalizedChosen := strings.ToLower(strings.TrimSpace(chosenPackage))
+	if _, ok := valid[normalizedChosen]; !ok {
+		return "", errors.New("Invalid chosenPackage")
+	}
+	return normalizedChosen, nil
 }

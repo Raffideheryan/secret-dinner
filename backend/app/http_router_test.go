@@ -46,7 +46,9 @@ func (s *stubLandingUsersDB) UpdateSelection(userID string, dinnerID int64, chos
 
 func (s *stubLandingUsersDB) Close() error { return nil }
 
-func (s *stubLandingUsersDB) CountLandingUsers() (int64, error) { return int64(len(s.insertedUsers)), nil }
+func (s *stubLandingUsersDB) CountLandingUsers() (int64, error) {
+	return int64(len(s.insertedUsers)), nil
+}
 
 type stubLandingDinnersDB struct {
 	syncAllCalls int
@@ -58,11 +60,15 @@ func (s *stubLandingDinnersDB) CreateDinner(input db.DinnerMutation) (db.Dinners
 	return db.Dinners{}, nil
 }
 func (s *stubLandingDinnersDB) UpdateDinner(id int64, input db.DinnerMutation) error { return nil }
-func (s *stubLandingDinnersDB) DeleteDinner(id int64) error                           { return nil }
-func (s *stubLandingDinnersDB) SyncDinnerRegistrations(dinnerID int64) error          { return nil }
+func (s *stubLandingDinnersDB) DeleteDinner(id int64) error                          { return nil }
+func (s *stubLandingDinnersDB) SyncDinnerRegistrations(dinnerID int64) error         { return nil }
 func (s *stubLandingDinnersDB) SyncAllDinnerRegistrations() error {
 	s.syncAllCalls++
 	return nil
+}
+func (s *stubLandingDinnersDB) ProcessPendingDinnerSyncJobs(limit int) (int, error) { return 0, nil }
+func (s *stubLandingDinnersDB) ReconcileDinnerMirrors(dryRun bool) (db.DinnerMirrorReconciliationReport, error) {
+	return db.DinnerMirrorReconciliationReport{DryRun: dryRun}, nil
 }
 func (s *stubLandingDinnersDB) Close() error { return nil }
 
@@ -212,6 +218,40 @@ func TestJoinGuards(t *testing.T) {
 		}
 		if dinnersDB.syncAllCalls != 1 {
 			t.Fatalf("expected dinner sync after selection, got %d calls", dinnersDB.syncAllCalls)
+		}
+	})
+
+	t.Run("join selection accepts guest packages", func(t *testing.T) {
+		app, settings, usersDB, _ := makeTestApp()
+		enabled := true
+		settings.Apply(runtimeAdminSettingsUpdate{
+			AllowJoinApplications: &enabled,
+			AllowJoinSelections:   &enabled,
+		})
+
+		body := map[string]any{
+			"userId":        "landing-user-2",
+			"dinnerId":      77,
+			"chosenPackage": "vip",
+			"guestPackages": []string{"silver", "gold", "vip"},
+		}
+		payload, _ := json.Marshal(body)
+
+		req := httptest.NewRequest("POST", "/api/user/join/selection", bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("selection request failed: %v", err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200 for guest-package selection, got %d: %s", resp.StatusCode, string(raw))
+		}
+		if len(usersDB.updatedSelections) != 1 {
+			t.Fatalf("expected one selection update, got %d", len(usersDB.updatedSelections))
+		}
+		if got := usersDB.updatedSelections[0].chosenPackage; got != "guest_1:silver,guest_2:gold,guest_3:vip" {
+			t.Fatalf("chosenPackage = %q, want guest_1:silver,guest_2:gold,guest_3:vip", got)
 		}
 	})
 }

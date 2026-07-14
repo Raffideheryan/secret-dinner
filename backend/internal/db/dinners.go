@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type DinnersDB interface {
@@ -15,6 +16,8 @@ type DinnersDB interface {
 	DeleteDinner(id int64) error
 	SyncDinnerRegistrations(dinnerID int64) error
 	SyncAllDinnerRegistrations() error
+	ProcessPendingDinnerSyncJobs(limit int) (int, error)
+	ReconcileDinnerMirrors(dryRun bool) (DinnerMirrorReconciliationReport, error)
 	Close() error
 }
 
@@ -112,6 +115,17 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 		return Dinners{}, errors.New("places must be >= 0")
 	}
 
+	tx, err := d.landingDB.Begin()
+	if err != nil {
+		return Dinners{}, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
 	const insertLanding = `
 		INSERT INTO landing_dinners (
 			description,
@@ -128,11 +142,13 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 			expired
 		)
 		VALUES ($1, $2, 0, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id
+		RETURNING id, COALESCE(sync_version, 1), updated_at
 	`
 
 	var dinnerID int64
-	if err := d.landingDB.QueryRow(
+	var sourceVersion int64
+	var sourceUpdatedAt time.Time
+	if err := tx.QueryRow(
 		insertLanding,
 		input.Description,
 		input.Places,
@@ -145,72 +161,20 @@ func (d *dinnersRepo) CreateDinner(input DinnerMutation) (Dinners, error) {
 		toNullablePrice(input.GoldPrice),
 		toNullablePrice(input.VIPPrice),
 		input.Expired,
-	).Scan(&dinnerID); err != nil {
+	).Scan(&dinnerID, &sourceVersion, &sourceUpdatedAt); err != nil {
 		return Dinners{}, err
 	}
-
-	if d.telegramDB != nil {
-		const insertTelegram = `
-			INSERT INTO dinners (
-				id,
-				description,
-				places,
-				already_registered,
-				location,
-				dinner_date,
-				silver_seats,
-				gold_seats,
-				vip_seats,
-				silver_price,
-				gold_price,
-				vip_price,
-				expired
-			)
-			VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		`
-		if _, err := d.telegramDB.Exec(
-			insertTelegram,
-			dinnerID,
-			input.Description,
-			input.Places,
-			input.Location,
-			input.DinnerDate,
-			toNullableSeatCount(input.SilverSeats),
-			toNullableSeatCount(input.GoldSeats),
-			toNullableSeatCount(input.VIPSeats),
-			toNullablePrice(input.SilverPrice),
-			toNullablePrice(input.GoldPrice),
-			toNullablePrice(input.VIPPrice),
-			input.Expired,
-		); err != nil {
-			_, _ = d.landingDB.Exec(`DELETE FROM landing_dinners WHERE id = $1`, dinnerID)
-			return Dinners{}, err
-		}
-
-		if err := setDinnerSequence(d.telegramDB, "dinners"); err != nil {
-			return Dinners{}, err
-		}
-	}
-
-	if err := setDinnerSequence(d.landingDB, "landing_dinners"); err != nil {
+	if err := d.enqueueDinnerSyncJobTx(tx, dinnerID, dinnerSyncOperationUpsert, sourceVersion, sourceUpdatedAt.UTC()); err != nil {
 		return Dinners{}, err
 	}
-
-	if err := d.SyncDinnerRegistrations(dinnerID); err != nil {
-		log.WithError(err).Warn("failed to sync dinner registrations after create")
-	}
-
-	dinners, err := d.GetAdminDinners()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return Dinners{}, err
 	}
-	for _, dinner := range dinners {
-		if dinner.ID == dinnerID {
-			return dinner, nil
-		}
-	}
+	committed = true
 
-	return Dinners{}, sql.ErrNoRows
+	d.processDinnerSyncJobNow(dinnerID)
+
+	return d.getDinnerByID(dinnerID)
 }
 
 func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
@@ -220,6 +184,17 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 	if input.Places < 0 {
 		return errors.New("places must be >= 0")
 	}
+
+	tx, err := d.landingDB.Begin()
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
 
 	const updateLanding = `
 		UPDATE landing_dinners
@@ -234,11 +209,15 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 			gold_price = $10,
 			vip_price = $11,
 			expired = $12,
+			sync_version = COALESCE(sync_version, 1) + 1,
 			updated_at = now()
 		WHERE id = $1
+		RETURNING COALESCE(sync_version, 1), updated_at
 	`
 
-	result, err := d.landingDB.Exec(
+	var sourceVersion int64
+	var sourceUpdatedAt time.Time
+	err = tx.QueryRow(
 		updateLanding,
 		id,
 		input.Description,
@@ -252,75 +231,71 @@ func (d *dinnersRepo) UpdateDinner(id int64, input DinnerMutation) error {
 		toNullablePrice(input.GoldPrice),
 		toNullablePrice(input.VIPPrice),
 		input.Expired,
-	)
+	).Scan(&sourceVersion, &sourceUpdatedAt)
 	if err != nil {
-		return err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAffected == 0 {
-		return sql.ErrNoRows
-	}
-
-	if d.telegramDB != nil {
-		const updateTelegram = `
-			UPDATE dinners
-			SET description = $2,
-				places = $3,
-				location = $4,
-				dinner_date = $5,
-				silver_seats = $6,
-				gold_seats = $7,
-				vip_seats = $8,
-				silver_price = $9,
-				gold_price = $10,
-				vip_price = $11,
-				expired = $12,
-				updated_at = now()
-			WHERE id = $1
-		`
-		if _, err := d.telegramDB.Exec(
-			updateTelegram,
-			id,
-			input.Description,
-			input.Places,
-			input.Location,
-			input.DinnerDate,
-			toNullableSeatCount(input.SilverSeats),
-			toNullableSeatCount(input.GoldSeats),
-			toNullableSeatCount(input.VIPSeats),
-			toNullablePrice(input.SilverPrice),
-			toNullablePrice(input.GoldPrice),
-			toNullablePrice(input.VIPPrice),
-			input.Expired,
-		); err != nil {
-			return err
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
 		}
+		return err
 	}
+	if err := d.enqueueDinnerSyncJobTx(tx, id, dinnerSyncOperationUpsert, sourceVersion, sourceUpdatedAt.UTC()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
 
+	d.processDinnerSyncJobNow(id)
 	return nil
 }
 
 func (d *dinnersRepo) DeleteDinner(id int64) error {
-	result, err := d.landingDB.Exec(`DELETE FROM landing_dinners WHERE id = $1`, id)
-	if err != nil {
-		return err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAffected == 0 {
+	if id <= 0 {
 		return sql.ErrNoRows
 	}
-
-	if d.telegramDB != nil {
-		if _, err := d.telegramDB.Exec(`DELETE FROM dinners WHERE id = $1`, id); err != nil {
-			return err
-		}
+	hasDeps, err := d.telegramDinnerHasDependencies(id)
+	if err != nil {
+		return err
 	}
+	if hasDeps {
+		return ErrDinnerDeleteBlockedByTelegramDependencies
+	}
+
+	tx, err := d.landingDB.Begin()
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var sourceVersion int64
+	var sourceUpdatedAt time.Time
+	err = tx.QueryRow(`
+		DELETE FROM landing_dinners
+		WHERE id = $1
+		RETURNING COALESCE(sync_version, 1) + 1, now()
+	`, id).Scan(&sourceVersion, &sourceUpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+
+	if err := d.enqueueDinnerSyncJobTx(tx, id, dinnerSyncOperationDelete, sourceVersion, sourceUpdatedAt.UTC()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+
+	d.processDinnerSyncJobNow(id)
 	return nil
 }
 
@@ -363,8 +338,8 @@ func (d *dinnersRepo) SyncDinnerRegistrations(dinnerID int64) error {
 	return nil
 }
 
-func (d *dinnersRepo) fetchDinners(query string) ([]Dinners, error) {
-	rows, err := d.landingDB.Query(query)
+func (d *dinnersRepo) fetchDinners(query string, args ...any) ([]Dinners, error) {
+	rows, err := d.landingDB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +375,38 @@ func (d *dinnersRepo) fetchDinners(query string) ([]Dinners, error) {
 	}
 
 	return dinners, nil
+}
+
+func (d *dinnersRepo) getDinnerByID(id int64) (Dinners, error) {
+	const query = `
+		SELECT
+			id,
+			description,
+			places,
+			already_registered,
+			location,
+			dinner_date,
+			silver_seats,
+			gold_seats,
+			vip_seats,
+			silver_price,
+			gold_price,
+			vip_price,
+			expired,
+			created_at,
+			updated_at
+		FROM landing_dinners
+		WHERE id = $1
+	`
+	dinners, err := d.fetchDinners(query, id)
+	if err != nil {
+		return Dinners{}, err
+	}
+	if len(dinners) == 0 {
+		return Dinners{}, sql.ErrNoRows
+	}
+	d.attachCombinedRegistrations(dinners)
+	return dinners[0], nil
 }
 
 func (d *dinnersRepo) attachCombinedRegistrations(dinners []Dinners) {

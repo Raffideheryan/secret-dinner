@@ -165,6 +165,21 @@ type DinnerMutation struct {
 	Expired     bool
 }
 
+type DinnerMirrorReconciliationReport struct {
+	DryRun                 bool     `json:"dryRun"`
+	InsertedMirrors        []int64  `json:"insertedMirrors"`
+	UpdatedMirrors         []int64  `json:"updatedMirrors"`
+	AlreadyConsistent      []int64  `json:"alreadyConsistent"`
+	MissingAuthoritative   []int64  `json:"missingAuthoritative"`
+	DeletedOrphanMirrors   []int64  `json:"deletedOrphanMirrors"`
+	BlockedOrphanMirrors   []int64  `json:"blockedOrphanMirrors"`
+	OccupancyRepaired      []int64  `json:"occupancyRepaired"`
+	OccupancyMismatches    []int64  `json:"occupancyMismatches"`
+	FailedOperations       []string `json:"failedOperations"`
+	PendingJobsProcessed   int      `json:"pendingJobsProcessed"`
+	PendingJobsRemaining   int      `json:"pendingJobsRemaining"`
+}
+
 type UserListParams struct {
 	Search string
 	Status string
@@ -303,6 +318,7 @@ type AdminBookingsDB interface {
 	TelegramApplicationsSummary() (TelegramApplicationsSummary, error)
 	GetTelegramApplication(packageInfoID int64) (TelegramApplicationRecord, error)
 	UpdateTelegramApplication(packageInfoID int64, status string, note string, expectedUpdatedAt time.Time) (TelegramApplicationRecord, TelegramApplicationRecord, error)
+	DispatchTelegramApplicationNotifications(packageInfoID int64, deliver func(TelegramBookingStatusNotification) error) error
 	Close() error
 }
 
