@@ -28,6 +28,7 @@ export type JoinSelectionPayload = {
     userId: string;
     dinnerId: number;
     chosenPackage: PackageTier;
+    guestPackages?: PackageTier[];
 }
 
 export type Dinner = {

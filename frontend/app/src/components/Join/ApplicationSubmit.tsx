@@ -41,6 +41,7 @@ export async function submitDinnerSelection(payload: JoinSelectionPayload): Prom
     trackLandingEvent("landing_package_selection_attempt", {
         dinnerId: payload.dinnerId,
         package: payload.chosenPackage,
+        guestPackages: payload.guestPackages ?? [],
     }, {
         userId: payload.userId,
         entityType: "dinner",
@@ -57,6 +58,7 @@ export async function submitDinnerSelection(payload: JoinSelectionPayload): Prom
         trackLandingError("landing_package_selection_failed", err?.message || "Failed to save dinner selection", {
             dinnerId: payload.dinnerId,
             package: payload.chosenPackage,
+            guestPackages: payload.guestPackages ?? [],
             statusCode: res.status,
         }, {
             userId: payload.userId,
@@ -70,6 +72,7 @@ export async function submitDinnerSelection(payload: JoinSelectionPayload): Prom
     trackLandingEvent("landing_package_selected", {
         dinnerId: payload.dinnerId,
         package: payload.chosenPackage,
+        guestPackages: payload.guestPackages ?? [],
     }, {
         userId: payload.userId,
         entityType: "dinner",

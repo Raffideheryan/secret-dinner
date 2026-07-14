@@ -87,6 +87,7 @@ export default function Join() {
             rememberLandingUserId(response.userId);
             sessionStorage.setItem("joinUserId", response.userId);
             sessionStorage.setItem("joinFormCompleted", "true");
+            sessionStorage.setItem("joinGuestCount", String(guestCount));
             trackLandingEvent("landing_form_submitted", {
                 guestCount,
                 fillDurationMs: payload.fillDurationMs,

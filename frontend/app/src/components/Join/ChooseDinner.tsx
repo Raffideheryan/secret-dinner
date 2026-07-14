@@ -13,6 +13,7 @@ import { clearLandingTrackingIdentity, trackLandingError, trackLandingEvent } fr
 import SeoHead from "../SEO/SeoHead";
 
 const TIERS: PackageTier[] = ["silver", "gold", "vip", "custom"];
+const MULTI_GUEST_TIERS: PackageTier[] = ["silver", "gold", "vip"];
 
 export default function JoinDinners() {
     const navigate = useNavigate();
@@ -24,14 +25,30 @@ export default function JoinDinners() {
     const [saving, setSaving] = useState(false);
     const [showSuccessCard, setShowSuccessCard] = useState(false);
     const [selectedDinnerId, setSelectedDinnerId] = useState<number | null>(null);
-    const [selectedPackage, setSelectedPackage] = useState<PackageTier | null>(null);
+    const [guestCount, setGuestCount] = useState(1);
+    const [selectedPackages, setSelectedPackages] = useState<(PackageTier | null)[]>([null]);
 
-    const canContinue = selectedDinnerId !== null && selectedPackage !== null;
+    const canContinue =
+        selectedDinnerId !== null &&
+        selectedPackages.length === guestCount &&
+        selectedPackages.every((pkg) => pkg !== null);
 
     const selectedDinner = useMemo(
         () => dinners.find((dinner) => dinner.id === selectedDinnerId) ?? null,
         [dinners, selectedDinnerId]
     );
+
+    const isMultiGuest = guestCount > 1;
+
+    useEffect(() => {
+        const rawGuestCount = sessionStorage.getItem("joinGuestCount");
+        const parsedGuestCount = Number(rawGuestCount);
+        const normalizedGuestCount = Number.isInteger(parsedGuestCount) && parsedGuestCount > 0
+            ? parsedGuestCount
+            : 1;
+        setGuestCount(normalizedGuestCount);
+        setSelectedPackages(Array.from({ length: normalizedGuestCount }, () => null));
+    }, []);
 
     const fetchDinners = async () => {
         setLoading(true);
@@ -106,12 +123,32 @@ export default function JoinDinners() {
         return null;
     };
 
+    const getAvailableTiers = () => (isMultiGuest ? MULTI_GUEST_TIERS : TIERS);
+
     const getFirstAvailableTier = (dinner: Dinner): PackageTier | null => {
-        const firstAvailable = TIERS.find(
+        const firstAvailable = getAvailableTiers().find(
             (tier) => tier !== "custom" && getPriceForTier(dinner, tier) !== null
         );
-        if (!firstAvailable) return "custom";
+        if (!firstAvailable) return isMultiGuest ? null : "custom";
         return firstAvailable ?? null;
+    };
+
+    const derivePrimaryPackage = (packages: (PackageTier | null)[]): PackageTier => {
+        if (packages.includes("vip")) return "vip";
+        if (packages.includes("gold")) return "gold";
+        if (packages.includes("silver")) return "silver";
+        return "custom";
+    };
+
+    const buildDefaultGuestPackages = (dinner: Dinner) => {
+        const fallback = getFirstAvailableTier(dinner);
+        return Array.from({ length: guestCount }, (_, index) => {
+            const current = selectedPackages[index];
+            if (current && (current === "custom" || getPriceForTier(dinner, current) !== null)) {
+                return current;
+            }
+            return fallback;
+        });
     };
 
     const handleSelectDinner = (dinner: Dinner) => {
@@ -123,16 +160,21 @@ export default function JoinDinners() {
             entityType: "dinner",
             entityId: String(dinner.id),
         });
-        if (!selectedPackage || getPriceForTier(dinner, selectedPackage) === null) {
-            setSelectedPackage(getFirstAvailableTier(dinner));
-        }
+        setSelectedPackages(buildDefaultGuestPackages(dinner));
     };
 
-    const handleChoosePackage = (dinnerId: number, packageTier: PackageTier) => {
+    const handleChoosePackage = (dinnerId: number, packageTier: PackageTier, guestIndex = 0) => {
         setSelectedDinnerId(dinnerId);
-        setSelectedPackage(packageTier);
+        setSelectedPackages((prev) => {
+            const next = prev.length === guestCount
+                ? [...prev]
+                : Array.from({ length: guestCount }, (_, index) => prev[index] ?? null);
+            next[guestIndex] = packageTier;
+            return next;
+        });
         trackLandingEvent("landing_package_clicked", {
             package: packageTier,
+            guestIndex: guestIndex + 1,
         }, {
             entityType: "dinner",
             entityId: String(dinnerId),
@@ -141,8 +183,10 @@ export default function JoinDinners() {
 
     const handleSaveSelection = async () => {
         if (!canContinue || !selectedDinner) return;
-        const chosenPackage = selectedPackage;
-        if (!chosenPackage) return;
+        const guestPackages = selectedPackages.filter((pkg): pkg is PackageTier => pkg !== null);
+        const chosenPackage = derivePrimaryPackage(guestPackages);
+        if (guestPackages.length !== guestCount) return;
+        const payloadGuestPackages = isMultiGuest ? guestPackages : undefined;
         const userId = sessionStorage.getItem("joinUserId");
         if (!userId) {
             setSaveError(t("join.step2.sessionExpired"));
@@ -157,6 +201,7 @@ export default function JoinDinners() {
                 userId,
                 dinnerId: selectedDinner.id,
                 chosenPackage,
+                guestPackages: payloadGuestPackages,
             });
 
             sessionStorage.setItem(
@@ -164,6 +209,8 @@ export default function JoinDinners() {
                 JSON.stringify({
                     dinnerId: selectedDinner.id,
                     package: chosenPackage,
+                    guestPackages: payloadGuestPackages ?? [chosenPackage],
+                    guestCount,
                     location: getVenueLabel(selectedDinner.location),
                     date: selectedDinner.dinnerDate,
                 })
@@ -171,6 +218,8 @@ export default function JoinDinners() {
 
             trackLandingEvent("landing_dinner_selection_saved", {
                 package: chosenPackage,
+                guestPackages: payloadGuestPackages ?? [chosenPackage],
+                guestCount,
             }, {
                 userId,
                 entityType: "dinner",
@@ -181,6 +230,7 @@ export default function JoinDinners() {
             trackLandingError("landing_dinner_selection_save_error", e, {
                 dinnerId: selectedDinner.id,
                 package: chosenPackage,
+                guestPackages: payloadGuestPackages ?? [chosenPackage],
             }, {
                 userId,
                 entityType: "dinner",
@@ -190,6 +240,97 @@ export default function JoinDinners() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const renderGuestSelectionPanel = () => {
+        if (!selectedDinner || !isMultiGuest) return null;
+
+        return (
+            <section className="join__guest-selector" aria-label={t("join.step2.guestPackagesTitle")}>
+                <div className="join__guest-selector-head">
+                    <div>
+                        <h3>{t("join.step2.guestPackagesTitle", { count: guestCount })}</h3>
+                        <p>{t("join.step2.guestPackagesSubtitle")}</p>
+                    </div>
+                    <span className="join__guest-count-pill">{t("join.step2.guestCountBadge", { count: guestCount })}</span>
+                </div>
+                <div className="join__guest-selector-grid">
+                    {Array.from({ length: guestCount }, (_, guestIndex) => (
+                        <div key={guestIndex} className="join__guest-card">
+                            <div className="join__guest-card-head">
+                                <strong>{t("join.step2.guestLabel", { count: guestIndex + 1 })}</strong>
+                                <span>
+                                    {selectedPackages[guestIndex]
+                                        ? t(`join.tier.${selectedPackages[guestIndex] as PackageTier}`)
+                                        : t("join.step2.chooseGuestPackage")}
+                                </span>
+                            </div>
+                            <div className="join__guest-tier-row">
+                                {MULTI_GUEST_TIERS.map((tier) => {
+                                    const price = getPriceForTier(selectedDinner, tier);
+                                    const unavailable = price === null;
+                                    const active = selectedPackages[guestIndex] === tier;
+                                    return (
+                                        <button
+                                            key={`${guestIndex}-${tier}`}
+                                            type="button"
+                                            className={[
+                                                "join__tier-btn",
+                                                `join__tier-btn--${tier}`,
+                                                "join__tier-btn--compact",
+                                                active ? "join__tier-btn--active" : "",
+                                            ].join(" ").trim()}
+                                            onClick={() => handleChoosePackage(selectedDinner.id, tier, guestIndex)}
+                                            disabled={unavailable}
+                                        >
+                                            <span className="join__tier-label">{t(`join.tier.${tier}`)}</span>
+                                            <span className="join__tier-price">{formatPrice(price)}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        );
+    };
+
+    const renderSelectionSummary = () => {
+        if (!selectedDinner || !canContinue) {
+            return <p>{t(isMultiGuest ? "join.step2.chooseGuestsToContinue" : "join.step2.chooseToContinue")}</p>;
+        }
+
+        if (!isMultiGuest) {
+            const selectedPackage = selectedPackages[0] as PackageTier;
+            return (
+                <p>
+                    {t("join.step2.selectionPrefix")} <strong>{getVenueLabel(selectedDinner.location)}</strong> ·{" "}
+                    <strong>{formatDate(selectedDinner.dinnerDate)}</strong> ·{" "}
+                    <strong>{t(`join.tier.${selectedPackage}`)}</strong> (
+                    {selectedPackage === "custom"
+                        ? t("join.step2.tailored")
+                        : formatPrice(getPriceForTier(selectedDinner, selectedPackage))})
+                </p>
+            );
+        }
+
+        return (
+            <div className="join__selection-summary">
+                <p className="join__selection-summary-intro">
+                    {t("join.step2.selectionPrefix")} <strong>{getVenueLabel(selectedDinner.location)}</strong> ·{" "}
+                    <strong>{formatDate(selectedDinner.dinnerDate)}</strong> ·{" "}
+                    <strong>{t("join.step2.guestCountBadge", { count: guestCount })}</strong>
+                </p>
+                <div className="join__selection-summary-tags">
+                    {selectedPackages.map((pkg, index) => (
+                        <span key={`summary-${index}`} className="join__selection-summary-tag">
+                            {t("join.step2.guestLabel", { count: index + 1 })}: {pkg ? t(`join.tier.${pkg}`) : t("join.step2.chooseGuestPackage")}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        );
     };
 
     const handleReturnHome = () => {
@@ -308,12 +449,12 @@ export default function JoinDinners() {
                                         <p className="join__dinner-description">{dinner.description}</p>
                                         {isSelected && <span className="join__picked-badge">{t("join.step2.selectedDinner")}</span>}
 
-                                        <div className="join__package-row">
-                                            {TIERS.map((tier) => {
+                                        <div className={isMultiGuest ? "join__package-row join__package-row--multi" : "join__package-row"}>
+                                            {getAvailableTiers().map((tier) => {
                                                 const price = getPriceForTier(dinner, tier);
                                                 const unavailable = tier !== "custom" && price === null;
                                                 const active =
-                                                    isSelected && selectedPackage === tier;
+                                                    isSelected && !isMultiGuest && selectedPackages[0] === tier;
 
                                                 const tierClasses = [
                                                     "join__tier-btn",
@@ -328,9 +469,9 @@ export default function JoinDinners() {
                                                         className={tierClasses}
                                                         onClick={(event) => {
                                                             event.stopPropagation();
-                                                            handleChoosePackage(dinner.id, tier);
+                                                            handleChoosePackage(dinner.id, tier, 0);
                                                         }}
-                                                        disabled={unavailable}
+                                                        disabled={isMultiGuest || unavailable}
                                                     >
                                                         <span className="join__tier-label">{t(`join.tier.${tier}`)}</span>
                                                         <span className="join__tier-price">
@@ -346,19 +487,10 @@ export default function JoinDinners() {
                         </div>
                     )}
 
+                    {renderGuestSelectionPanel()}
+
                     <div className="join__selection">
-                        {selectedDinner && selectedPackage ? (
-                            <p>
-                                {t("join.step2.selectionPrefix")} <strong>{getVenueLabel(selectedDinner.location)}</strong> ·{" "}
-                                <strong>{formatDate(selectedDinner.dinnerDate)}</strong> ·{" "}
-                                <strong>{t(`join.tier.${selectedPackage}`)}</strong> (
-                                {selectedPackage === "custom"
-                                    ? t("join.step2.tailored")
-                                    : formatPrice(getPriceForTier(selectedDinner, selectedPackage))})
-                            </p>
-                        ) : (
-                            <p>{t("join.step2.chooseToContinue")}</p>
-                        )}
+                        {renderSelectionSummary()}
                     </div>
                     {saveError && <p className="join__state join__state--error">{saveError}</p>}
 
