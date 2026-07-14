@@ -14,7 +14,19 @@ type joinPolicy interface {
 	MinJoinFormFillDurationMs() int64
 }
 
-func HandleJoin(usersDB db.UsersDB, policy joinPolicy) fiber.Handler {
+type LandingJoinCreatedNotification struct {
+	UserID string
+	User   db.Users
+}
+
+type LandingJoinSelectionNotification struct {
+	UserID        string
+	DinnerID      int64
+	ChosenPackage string
+	GuestPackages []string
+}
+
+func HandleJoin(usersDB db.UsersDB, policy joinPolicy, notify func(LandingJoinCreatedNotification)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 
 		var body struct {
@@ -73,13 +85,19 @@ func HandleJoin(usersDB db.UsersDB, policy joinPolicy) fiber.Handler {
 			log.WithError(err).Error("Error inserting user")
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Something went wrong"})
 		}
+		if notify != nil {
+			notify(LandingJoinCreatedNotification{
+				UserID: userID,
+				User:   userInstance,
+			})
+		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"success": true, "userId": userID})
 	}
 
 }
 
-func HandleJoinSelection(usersDB db.UsersDB, dinnersDB db.DinnersDB) fiber.Handler {
+func HandleJoinSelection(usersDB db.UsersDB, dinnersDB db.DinnersDB, notify func(LandingJoinSelectionNotification)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body struct {
 			UserID        string   `json:"userId"`
@@ -116,6 +134,14 @@ func HandleJoinSelection(usersDB db.UsersDB, dinnersDB db.DinnersDB) fiber.Handl
 			if err := dinnersDB.SyncAllDinnerRegistrations(); err != nil {
 				log.WithError(err).Warn("Error syncing dinner registrations after landing selection")
 			}
+		}
+		if notify != nil {
+			notify(LandingJoinSelectionNotification{
+				UserID:        body.UserID,
+				DinnerID:      body.DinnerID,
+				ChosenPackage: storedPackage,
+				GuestPackages: normalizedGuestPackages(body.GuestPackages),
+			})
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"success": true})
@@ -154,4 +180,15 @@ func normalizeLandingSelectionPackage(chosenPackage string, guestPackages []stri
 		return "", errors.New("Invalid chosenPackage")
 	}
 	return normalizedChosen, nil
+}
+
+func normalizedGuestPackages(guestPackages []string) []string {
+	items := make([]string, 0, len(guestPackages))
+	for _, raw := range guestPackages {
+		pkg := strings.ToLower(strings.TrimSpace(raw))
+		if pkg != "" {
+			items = append(items, pkg)
+		}
+	}
+	return items
 }

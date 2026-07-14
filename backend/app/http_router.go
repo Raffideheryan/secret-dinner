@@ -58,8 +58,8 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 		return c.JSON(fiber.Map{"ok": true})
 	})
 	api.Post("/activity/events", l.storeUserActivityEventsHandler())
-	api.Post("/user/join", l.joinApplicationsGuard(), joinFormLimiter.middleware(), routes.HandleJoin(l.connections.Users, l.settings))
-	api.Post("/user/join/selection", l.joinSelectionsGuard(), joinSelectionLimiter.middleware(), routes.HandleJoinSelection(l.connections.Users, l.connections.Dinners))
+	api.Post("/user/join", l.joinApplicationsGuard(), joinFormLimiter.middleware(), routes.HandleJoin(l.connections.Users, l.settings, l.notifyAdminsAboutLandingJoin))
+	api.Post("/user/join/selection", l.joinSelectionsGuard(), joinSelectionLimiter.middleware(), routes.HandleJoinSelection(l.connections.Users, l.connections.Dinners, l.notifyAdminsAboutLandingSelection))
 	api.Get("/dinners/info", routes.GetDinners(l.connections.Dinners))
 
 	telegramMini := api.Group("/telegram-mini", telegramMiniLimiter.middleware(), l.miniAuth.middleware(l.connections.TelegramMini))

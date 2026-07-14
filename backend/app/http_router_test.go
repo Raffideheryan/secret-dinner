@@ -87,8 +87,8 @@ func TestJoinGuards(t *testing.T) {
 		}
 
 		app := fiber.New()
-		app.Post("/api/user/join", l.joinApplicationsGuard(), routes.HandleJoin(usersDB, settings))
-		app.Post("/api/user/join/selection", l.joinSelectionsGuard(), routes.HandleJoinSelection(usersDB, dinnersDB))
+		app.Post("/api/user/join", l.joinApplicationsGuard(), routes.HandleJoin(usersDB, settings, nil))
+		app.Post("/api/user/join/selection", l.joinSelectionsGuard(), routes.HandleJoinSelection(usersDB, dinnersDB, nil))
 		return app, settings, usersDB, dinnersDB
 	}
 
@@ -252,6 +252,95 @@ func TestJoinGuards(t *testing.T) {
 		}
 		if got := usersDB.updatedSelections[0].chosenPackage; got != "guest_1:silver,guest_2:gold,guest_3:vip" {
 			t.Fatalf("chosenPackage = %q, want guest_1:silver,guest_2:gold,guest_3:vip", got)
+		}
+	})
+}
+
+func TestJoinHandlersTriggerNotifications(t *testing.T) {
+	t.Run("join notifies after successful registration", func(t *testing.T) {
+		usersDB := &stubLandingUsersDB{insertResponseID: "landing-user-77"}
+		settings := newRuntimeAdminSettings(config.Config{})
+		app := fiber.New()
+
+		var got routes.LandingJoinCreatedNotification
+		var calls int
+		app.Post("/api/user/join", routes.HandleJoin(usersDB, settings, func(event routes.LandingJoinCreatedNotification) {
+			calls++
+			got = event
+		}))
+
+		body := map[string]any{
+			"fullName":       "Test Guest",
+			"email":          "guest@example.com",
+			"phone":          "+37412345678",
+			"hobbies":        []string{"food", "art"},
+			"allergies":      []string{"nuts"},
+			"guestCount":     2,
+			"fillDurationMs": int64(3500),
+		}
+		payload, _ := json.Marshal(body)
+
+		req := httptest.NewRequest("POST", "/api/user/join", bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("join request failed: %v", err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(raw))
+		}
+		if calls != 1 {
+			t.Fatalf("expected one notification call, got %d", calls)
+		}
+		if got.UserID != "landing-user-77" {
+			t.Fatalf("notification user id = %q, want landing-user-77", got.UserID)
+		}
+		if got.User.FullName != "Test Guest" {
+			t.Fatalf("notification full name = %q, want Test Guest", got.User.FullName)
+		}
+	})
+
+	t.Run("selection notifies after successful finalization", func(t *testing.T) {
+		usersDB := &stubLandingUsersDB{}
+		dinnersDB := &stubLandingDinnersDB{}
+		app := fiber.New()
+
+		var got routes.LandingJoinSelectionNotification
+		var calls int
+		app.Post("/api/user/join/selection", routes.HandleJoinSelection(usersDB, dinnersDB, func(event routes.LandingJoinSelectionNotification) {
+			calls++
+			got = event
+		}))
+
+		body := map[string]any{
+			"userId":        "landing-user-55",
+			"dinnerId":      11,
+			"guestPackages": []string{"silver", "gold"},
+		}
+		payload, _ := json.Marshal(body)
+
+		req := httptest.NewRequest("POST", "/api/user/join/selection", bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("selection request failed: %v", err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(raw))
+		}
+		if calls != 1 {
+			t.Fatalf("expected one notification call, got %d", calls)
+		}
+		if got.UserID != "landing-user-55" || got.DinnerID != 11 {
+			t.Fatalf("unexpected notification payload: %+v", got)
+		}
+		if got.ChosenPackage != "guest_1:silver,guest_2:gold" {
+			t.Fatalf("notification chosen package = %q", got.ChosenPackage)
+		}
+		if len(got.GuestPackages) != 2 || got.GuestPackages[0] != "silver" || got.GuestPackages[1] != "gold" {
+			t.Fatalf("notification guest packages = %#v", got.GuestPackages)
 		}
 	})
 }
