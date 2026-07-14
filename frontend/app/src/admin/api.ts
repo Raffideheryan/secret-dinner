@@ -1430,6 +1430,19 @@ export async function updateAdminLandingUserStatus(
   return data.user;
 }
 
+export async function deleteAdminLandingUser(userId: string): Promise<AdminLandingUser> {
+  const response = await adminFetch(`/users/landing/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const data = (await response.json()) as { user: AdminLandingUser };
+  return data.user;
+}
+
 export async function updateAdminSettings(payload: AdminSettingsPayload): Promise<AdminPanelResponse["settings"]> {
   const response = await adminFetch("/settings", {
     method: "PUT",

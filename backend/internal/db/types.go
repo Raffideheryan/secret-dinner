@@ -166,18 +166,18 @@ type DinnerMutation struct {
 }
 
 type DinnerMirrorReconciliationReport struct {
-	DryRun                 bool     `json:"dryRun"`
-	InsertedMirrors        []int64  `json:"insertedMirrors"`
-	UpdatedMirrors         []int64  `json:"updatedMirrors"`
-	AlreadyConsistent      []int64  `json:"alreadyConsistent"`
-	MissingAuthoritative   []int64  `json:"missingAuthoritative"`
-	DeletedOrphanMirrors   []int64  `json:"deletedOrphanMirrors"`
-	BlockedOrphanMirrors   []int64  `json:"blockedOrphanMirrors"`
-	OccupancyRepaired      []int64  `json:"occupancyRepaired"`
-	OccupancyMismatches    []int64  `json:"occupancyMismatches"`
-	FailedOperations       []string `json:"failedOperations"`
-	PendingJobsProcessed   int      `json:"pendingJobsProcessed"`
-	PendingJobsRemaining   int      `json:"pendingJobsRemaining"`
+	DryRun               bool     `json:"dryRun"`
+	InsertedMirrors      []int64  `json:"insertedMirrors"`
+	UpdatedMirrors       []int64  `json:"updatedMirrors"`
+	AlreadyConsistent    []int64  `json:"alreadyConsistent"`
+	MissingAuthoritative []int64  `json:"missingAuthoritative"`
+	DeletedOrphanMirrors []int64  `json:"deletedOrphanMirrors"`
+	BlockedOrphanMirrors []int64  `json:"blockedOrphanMirrors"`
+	OccupancyRepaired    []int64  `json:"occupancyRepaired"`
+	OccupancyMismatches  []int64  `json:"occupancyMismatches"`
+	FailedOperations     []string `json:"failedOperations"`
+	PendingJobsProcessed int      `json:"pendingJobsProcessed"`
+	PendingJobsRemaining int      `json:"pendingJobsRemaining"`
 }
 
 type UserListParams struct {
@@ -250,6 +250,7 @@ type AdminUsersDB interface {
 	ListLandingUsers(params UserListParams) ([]LandingUserRecord, error)
 	LandingUsersSummary() (LandingUsersSummary, error)
 	UpdateLandingUserStatus(userID string, selectionStatus *string, adminStatus *string) (LandingUserRecord, error)
+	DeleteLandingUser(userID string) (LandingUserRecord, error)
 	ListTelegramUsers(params UserListParams) ([]TelegramUserRecord, error)
 	TelegramUsersSummary() (TelegramUsersSummary, error)
 	ListEngagementUsers(params EngagementUsersListParams) (EngagementUsersPage, error)

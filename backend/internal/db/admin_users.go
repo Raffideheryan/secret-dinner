@@ -2,12 +2,9 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 )
-
-var ErrLandingCompletedRequiresDinnerAndPackage = errors.New("selection_status cannot be set to completed without a dinner and package selection")
 
 type adminUsersRepo struct {
 	landingDB  *sql.DB
@@ -154,25 +151,6 @@ func (r *adminUsersRepo) UpdateLandingUserStatus(userID string, selectionStatus 
 		return LandingUserRecord{}, sql.ErrNoRows
 	}
 
-	// Prevent setting selection_status = completed when the user has no dinner
-	// or package selection — completed without these fields is an impossible state.
-	if selectionStatus != nil && *selectionStatus == "completed" {
-		var dinnerID sql.NullInt64
-		var chosenPackage sql.NullString
-		if err := r.landingDB.QueryRow(
-			`SELECT dinner_id, chosen_package FROM users_landing WHERE id::text = $1`,
-			userID,
-		).Scan(&dinnerID, &chosenPackage); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return LandingUserRecord{}, sql.ErrNoRows
-			}
-			return LandingUserRecord{}, err
-		}
-		if !dinnerID.Valid || !chosenPackage.Valid || strings.TrimSpace(chosenPackage.String) == "" {
-			return LandingUserRecord{}, ErrLandingCompletedRequiresDinnerAndPackage
-		}
-	}
-
 	query := `
 		UPDATE users_landing
 		SET selection_status = COALESCE($2, selection_status),
@@ -245,6 +223,92 @@ func (r *adminUsersRepo) UpdateLandingUserStatus(userID string, selectionStatus 
 		item.ChosenPackage = &cp
 	}
 
+	return item, nil
+}
+
+func (r *adminUsersRepo) DeleteLandingUser(userID string) (LandingUserRecord, error) {
+	if r.landingDB == nil {
+		return LandingUserRecord{}, sql.ErrConnDone
+	}
+
+	tx, err := r.landingDB.Begin()
+	if err != nil {
+		return LandingUserRecord{}, err
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	const fetchQuery = `
+		SELECT
+			ul.id::text,
+			ul.full_name,
+			ul.email,
+			ul.phone,
+			ul.guest_count,
+			COALESCE(ul.hobbies, ''),
+			COALESCE(ul.allergies, ''),
+			ul.dinner_id,
+			ul.chosen_package,
+			COALESCE(ul.selection_status, CASE WHEN ul.dinner_id IS NOT NULL AND ul.chosen_package IS NOT NULL THEN 'completed' ELSE 'open' END),
+			COALESCE(ul.admin_status, 'new'),
+			COALESCE(ld.description, ''),
+			ul.created_at,
+			ul.updated_at
+		FROM users_landing ul
+		LEFT JOIN landing_dinners ld ON ld.id = ul.dinner_id
+		WHERE ul.id::text = $1
+		FOR UPDATE OF ul
+	`
+
+	var item LandingUserRecord
+	var dinnerID sql.NullInt64
+	var chosenPackage sql.NullString
+	if err := tx.QueryRow(fetchQuery, userID).Scan(
+		&item.ID,
+		&item.FullName,
+		&item.Email,
+		&item.Phone,
+		&item.GuestCount,
+		&item.Hobbies,
+		&item.Allergies,
+		&dinnerID,
+		&chosenPackage,
+		&item.SelectionStatus,
+		&item.AdminStatus,
+		&item.DinnerTitle,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	); err != nil {
+		return LandingUserRecord{}, err
+	}
+	if dinnerID.Valid {
+		id := dinnerID.Int64
+		item.DinnerID = &id
+	}
+	if chosenPackage.Valid && chosenPackage.String != "" {
+		cp := chosenPackage.String
+		item.ChosenPackage = &cp
+	}
+
+	result, err := tx.Exec(`DELETE FROM users_landing WHERE id::text = $1`, userID)
+	if err != nil {
+		return LandingUserRecord{}, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return LandingUserRecord{}, err
+	}
+	if rowsAffected == 0 {
+		return LandingUserRecord{}, sql.ErrNoRows
+	}
+
+	if err := tx.Commit(); err != nil {
+		return LandingUserRecord{}, err
+	}
+	tx = nil
 	return item, nil
 }
 

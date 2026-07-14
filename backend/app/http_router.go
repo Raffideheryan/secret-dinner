@@ -88,6 +88,7 @@ func (l *landingApp) registerAPIRoutes(app *fiber.App) {
 	admin.Put("/settings", l.requireAdmin(), l.updateSettingsHandler())
 	admin.Get("/users/landing", l.requireAdmin(), l.listAdminLandingUsersHandler())
 	admin.Put("/users/landing/:id/status", l.requireAdmin(), l.updateAdminLandingUserStatusHandler())
+	admin.Delete("/users/landing/:id", l.requireAdmin(), l.deleteAdminLandingUserHandler())
 	admin.Get("/users/telegram", l.requireAdmin(), l.listAdminTelegramUsersHandler())
 	admin.Get("/applications/telegram", l.requireAdmin(), l.listAdminTelegramApplicationsHandler())
 	admin.Put("/applications/telegram/:id", l.requireAdmin(), l.updateAdminTelegramApplicationHandler())

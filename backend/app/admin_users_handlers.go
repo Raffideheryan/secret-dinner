@@ -208,11 +208,6 @@ func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 					"error": "user not found",
 				})
 			}
-			if errors.Is(err, db.ErrLandingCompletedRequiresDinnerAndPackage) {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": db.ErrLandingCompletedRequiresDinnerAndPackage.Error(),
-				})
-			}
 			log.WithError(err).Error("failed to update landing user status")
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "failed to update user status",
@@ -233,6 +228,65 @@ func (l *landingApp) updateAdminLandingUserStatusHandler() fiber.Handler {
 		return c.JSON(fiber.Map{
 			"ok":   true,
 			"user": updated,
+		})
+	}
+}
+
+func (l *landingApp) deleteAdminLandingUserHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if l.connections.AdminUsers == nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error": "admin users storage is not configured",
+			})
+		}
+		if !l.settings.AllowAdminUserStatusEdits() {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "user status edits are disabled by runtime settings",
+			})
+		}
+
+		userID := strings.TrimSpace(c.Params("id"))
+		if userID == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid user id",
+			})
+		}
+
+		deleted, err := l.connections.AdminUsers.DeleteLandingUser(userID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "user not found",
+				})
+			}
+			log.WithError(err).Error("failed to delete landing user")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "failed to delete user",
+			})
+		}
+
+		if l.connections.Dinners != nil {
+			if err := l.connections.Dinners.SyncAllDinnerRegistrations(); err != nil {
+				log.WithError(err).WithField("landing_user_id", userID).Warn("failed to sync dinners after landing user deletion")
+			}
+		}
+
+		l.writeAdminAuditLog(c, db.AdminAuditLogEntry{
+			ActionType: "landing_user_deleted",
+			EntityType: "landing_user",
+			EntityID:   userID,
+			PreviousValue: string(mustJSONMap(map[string]string{
+				"selectionStatus": deleted.SelectionStatus,
+				"adminStatus":     deleted.AdminStatus,
+			})),
+			NewValue: string(mustJSONMap(map[string]string{
+				"deleted": "true",
+			})),
+		})
+
+		return c.JSON(fiber.Map{
+			"ok":   true,
+			"user": deleted,
 		})
 	}
 }

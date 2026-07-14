@@ -10,6 +10,7 @@ import {
   createEngagementCampaign,
   deleteAdminDish,
   deleteAdminDinner,
+  deleteAdminLandingUser,
   cancelEngagementCampaign,
   getAdminDishesByType,
   getAdminDishTypes,
@@ -3017,6 +3018,7 @@ export default function AdminPanel() {
   const [auditHasMore, setAuditHasMore] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [selectionStatusSaving, setSelectionStatusSaving] = useState<Record<string, boolean>>({});
+  const [landingBookingDeleting, setLandingBookingDeleting] = useState<Record<string, boolean>>({});
   const [applicationSaving, setApplicationSaving] = useState<Record<number, boolean>>({});
   const [bookingManageTarget, setBookingManageTarget] = useState<AdminTelegramApplication | null>(null);
   const [bookingManageStatus, setBookingManageStatus] = useState<AdminTelegramApplication["status"] | "">("");
@@ -4295,7 +4297,7 @@ export default function AdminPanel() {
   };
 
   const closeLandingBookingManager = (force = false) => {
-    if (!force && landingBookingManageTarget && selectionStatusSaving[landingBookingManageTarget.id]) {
+    if (!force && landingBookingManageTarget && (selectionStatusSaving[landingBookingManageTarget.id] || landingBookingDeleting[landingBookingManageTarget.id])) {
       return;
     }
     setLandingBookingManageTarget(null);
@@ -4318,6 +4320,50 @@ export default function AdminPanel() {
     });
     if (saved) {
       closeLandingBookingManager(true);
+    }
+  };
+
+  const handleDeleteLandingBooking = async () => {
+    if (!landingBookingManageTarget) {
+      return;
+    }
+    const target = landingBookingManageTarget;
+    if (!window.confirm(`Delete booking for ${target.fullName || target.id}? This cannot be undone.`)) {
+      return;
+    }
+
+    setLandingBookingDeleting((prev) => ({ ...prev, [target.id]: true }));
+    setLandingBookingManageError("");
+    setUsersError("");
+    try {
+      const deleted = await deleteAdminLandingUser(target.id);
+      setLandingUsers((prev) =>
+        prev.filter((user) => user.id !== deleted.id)
+      );
+      setLandingUsersSummary((prev) => ({
+        total: Math.max(0, prev.total - 1),
+        completed: Math.max(0, prev.completed - ((deleted.selectionStatus ?? "").trim().toLowerCase() === "completed" ? 1 : 0)),
+        open: Math.max(0, prev.open - ((deleted.selectionStatus ?? "").trim().toLowerCase() === "open" ? 1 : 0)),
+      }));
+      if (expandedLandingBookingId === deleted.id) {
+        setExpandedLandingBookingId(null);
+      }
+      setInfoMessage("Booking deleted");
+      window.setTimeout(() => setInfoMessage(""), 1500);
+      closeLandingBookingManager(true);
+      if (activeSection === "bookings") {
+        const logs = await getAdminAuditLogs({ limit: 12, offset: 0 });
+        setAuditLogs(logs);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "failed to delete booking";
+      setLandingBookingManageError(message);
+    } finally {
+      setLandingBookingDeleting((prev) => {
+        const next = { ...prev };
+        delete next[target.id];
+        return next;
+      });
     }
   };
 
@@ -5195,7 +5241,7 @@ export default function AdminPanel() {
     }, 0);
 
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape" && !selectionStatusSaving[landingBookingManageTarget.id]) {
+      if (event.key === "Escape" && !selectionStatusSaving[landingBookingManageTarget.id] && !landingBookingDeleting[landingBookingManageTarget.id]) {
         event.preventDefault();
         closeLandingBookingManager();
         return;
@@ -5237,7 +5283,7 @@ export default function AdminPanel() {
       window.removeEventListener("keydown", onKeyDown);
       landingBookingManagerLastFocusRef.current?.focus();
     };
-  }, [landingBookingManageTarget, selectionStatusSaving]);
+  }, [landingBookingDeleting, landingBookingManageTarget, selectionStatusSaving]);
 
   const completionDonutStyle = {
     background: `conic-gradient(#d4af37 0 ${completionPercent}%, #1f7a5c ${completionPercent}% 100%)`,
@@ -5838,7 +5884,7 @@ export default function AdminPanel() {
                   className="admin-modal__close"
                   type="button"
                   onClick={() => closeLandingBookingManager()}
-                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id] || landingBookingDeleting[landingBookingManageTarget.id])}
                   aria-label="Close booking manager"
                 >
                   x
@@ -5877,7 +5923,7 @@ export default function AdminPanel() {
                             type="button"
                             className={`admin-booking-manager__option admin-booking-manager__option--${tone} ${isActive ? "admin-booking-manager__option--active" : ""}`}
                             onClick={() => setLandingBookingManageAdminStatus(option.value)}
-                            disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                            disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id] || landingBookingDeleting[landingBookingManageTarget.id])}
                           >
                             <span className="admin-booking-manager__option-icon" aria-hidden="true">
                               {getApplicationStatusIcon(option.value)}
@@ -5901,7 +5947,7 @@ export default function AdminPanel() {
                             type="button"
                             className={`admin-booking-manager__option admin-booking-manager__option--${tone} ${isActive ? "admin-booking-manager__option--active" : ""}`}
                             onClick={() => setLandingBookingManageSelectionStatus(option.value)}
-                            disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                            disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id] || landingBookingDeleting[landingBookingManageTarget.id])}
                           >
                             <span className="admin-booking-manager__option-icon" aria-hidden="true">
                               {getLandingSelectionStatusIcon(option.value)}
@@ -5943,9 +5989,17 @@ export default function AdminPanel() {
                   className="admin-toolbar__btn"
                   type="button"
                   onClick={() => closeLandingBookingManager()}
-                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id])}
+                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id] || landingBookingDeleting[landingBookingManageTarget.id])}
                 >
                   Close
+                </button>
+                <button
+                  className="admin-toolbar__btn admin-toolbar__btn--danger"
+                  type="button"
+                  onClick={() => void handleDeleteLandingBooking()}
+                  disabled={Boolean(selectionStatusSaving[landingBookingManageTarget.id] || landingBookingDeleting[landingBookingManageTarget.id])}
+                >
+                  {landingBookingDeleting[landingBookingManageTarget.id] ? "Deleting..." : "Delete Booking"}
                 </button>
                 <button
                   className="admin-toolbar__btn"
@@ -5953,6 +6007,7 @@ export default function AdminPanel() {
                   onClick={() => void handleSaveLandingBookingManager()}
                   disabled={
                     Boolean(selectionStatusSaving[landingBookingManageTarget.id]) ||
+                    Boolean(landingBookingDeleting[landingBookingManageTarget.id]) ||
                     !landingBookingManageSelectionStatus ||
                     !landingBookingManageAdminStatus
                   }
