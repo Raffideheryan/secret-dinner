@@ -362,7 +362,7 @@ type CampaignComposerState = {
   text: string;
   caption: string;
   parseMode: string;
-  mediaKind: "url" | "file_id" | "data_url";
+  mediaKind: "url" | "file_id" | "data_url" | "upload";
   mediaValue: string;
   mediaFileName: string;
   pollQuestion: string;
@@ -450,6 +450,51 @@ function validateCampaignMediaInput(form: CampaignComposerState): string {
     default:
       return "";
   }
+}
+
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string" || !reader.result) {
+        reject(new Error("failed to read selected file"));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("failed to read selected file"));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function getCampaignMediaAccept(messageType: CampaignComposerState["messageType"]): string {
+  switch (messageType) {
+    case "photo":
+    case "image":
+      return "image/*";
+    case "video":
+      return "video/*";
+    case "audio":
+      return "audio/*";
+    case "voice":
+      return ".ogg,.oga,.opus,audio/ogg,audio/opus";
+    case "document":
+      return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.csv,image/*,application/*,text/*";
+    default:
+      return "*/*";
+  }
+}
+
+function isCampaignImagePreviewable(form: CampaignComposerState): boolean {
+  if (!["photo", "image"].includes(form.messageType) || !form.mediaValue) {
+    return false;
+  }
+  if (form.mediaKind === "url") {
+    return true;
+  }
+  return form.mediaValue.startsWith("data:image/");
 }
 
 const sectionLabels: Record<AdminSection, string> = {
@@ -2950,6 +2995,7 @@ export default function AdminPanel() {
   const [campaignComposerSaving, setCampaignComposerSaving] = useState(false);
   const [campaignComposerError, setCampaignComposerError] = useState("");
   const [campaignComposer, setCampaignComposer] = useState<CampaignComposerState>(emptyCampaignComposerState);
+  const campaignMediaUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [campaignComposerAdvancedOpen, setCampaignComposerAdvancedOpen] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
   const [campaignLogs, setCampaignLogs] = useState<EngagementCampaignLog[]>([]);
@@ -4135,6 +4181,28 @@ export default function AdminPanel() {
       setCampaignComposerError(err instanceof Error ? err.message : "failed to save campaign");
     } finally {
       setCampaignComposerSaving(false);
+    }
+  };
+
+  const handleCampaignMediaUpload = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+    if (file.size > 10*1024*1024) {
+      setCampaignComposerError("Uploaded media must be 10 MB or smaller.");
+      return;
+    }
+    setCampaignComposerError("");
+    try {
+      const dataURL = await readFileAsDataURL(file);
+      setCampaignComposer((prev) => ({
+        ...prev,
+        mediaKind: "upload",
+        mediaValue: dataURL,
+        mediaFileName: file.name.trim() || prev.mediaFileName,
+      }));
+    } catch (err) {
+      setCampaignComposerError(err instanceof Error ? err.message : "failed to read uploaded file");
     }
   };
 
@@ -8730,9 +8798,41 @@ export default function AdminPanel() {
                                             <MenuItem value="url">URL</MenuItem>
                                             <MenuItem value="file_id">Telegram file_id</MenuItem>
                                             <MenuItem value="data_url">Base64</MenuItem>
+                                            <MenuItem value="upload">Upload file</MenuItem>
                                           </Select>
                                         </FormControl>
-                                        <TextField label="Media value" value={campaignComposer.mediaValue} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaValue: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                        {campaignComposer.mediaKind === "upload" ? (
+                                          <>
+                                            <input
+                                              ref={campaignMediaUploadInputRef}
+                                              type="file"
+                                              accept={getCampaignMediaAccept(campaignComposer.messageType)}
+                                              style={{ display: "none" }}
+                                              onChange={(event) => {
+                                                const file = event.target.files?.[0] ?? null;
+                                                void handleCampaignMediaUpload(file);
+                                                event.currentTarget.value = "";
+                                              }}
+                                            />
+                                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                              <button
+                                                type="button"
+                                                className="admin-toolbar__btn"
+                                                onClick={() => campaignMediaUploadInputRef.current?.click()}
+                                              >
+                                                Choose File
+                                              </button>
+                                              <span style={{ fontSize: 12, color: "rgba(245,241,232,0.62)" }}>
+                                                {campaignComposer.mediaFileName || "No file selected"}
+                                              </span>
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: 11, color: "rgba(245,241,232,0.5)" }}>
+                                              Uploads are embedded directly into the campaign payload. Recommended max size: 10 MB.
+                                            </p>
+                                          </>
+                                        ) : (
+                                          <TextField label="Media value" value={campaignComposer.mediaValue} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaValue: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
+                                        )}
                                         <TextField label="Filename" value={campaignComposer.mediaFileName} onChange={(event) => setCampaignComposer((prev) => ({ ...prev, mediaFileName: event.target.value }))} className="admin-engagement__field" sx={engagementFieldSx} />
                                       </>
                                     ) : null}
@@ -9040,7 +9140,7 @@ export default function AdminPanel() {
                                       {/* Media preview */}
                                       {campaignComposer.mediaValue && !["poll", "quiz", "rating", "text"].includes(campaignComposer.messageType) ? (
                                         <div style={{ marginBottom: 8, borderRadius: 8, overflow: "hidden" }}>
-                                          {["photo", "image"].includes(campaignComposer.messageType) && campaignComposer.mediaKind === "url" ? (
+                                          {isCampaignImagePreviewable(campaignComposer) ? (
                                             <img src={campaignComposer.mediaValue} alt="preview" style={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                                           ) : (
                                             <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: "rgba(255,255,255,0.06)", borderRadius: 8 }}>
